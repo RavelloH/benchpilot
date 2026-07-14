@@ -18,7 +18,7 @@
     "benchpilot": "./dist/cli/index.js"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.13"
   },
   "repository": {
     "type": "git",
