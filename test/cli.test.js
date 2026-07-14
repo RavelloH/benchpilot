@@ -24,6 +24,11 @@ test("installed CLI surface initializes and runs the demo", async () => {
     const result = JSON.parse(deployed.stdout);
     assert.equal(result.ok, true);
     assert.ok(result.runId);
+    const built = await run(dir, "device", "demo", "build", "--json");
+    assert.match(
+      JSON.parse(built.stdout).artifacts[0].sha256,
+      /^[a-f0-9]{64}$/,
+    );
     const jsonl = await run(dir, "device", "demo", "deploy", "--jsonl");
     for (const line of jsonl.stdout.trim().split("\n"))
       assert.doesNotThrow(() => JSON.parse(line));

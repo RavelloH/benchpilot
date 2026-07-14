@@ -249,7 +249,7 @@ async function init() {
   }
   await fs.writeFile(
     file,
-    `version = 1\n\n[project]\nid = "benchpilot-demo"\nname = "BenchPilot Demo"\n\n[devices.demo]\nadapter = "demo"\n\n[systems.demo]\ndevices = ["demo"]\n\n[adapters.demo]\nconnected = true\ndeviceId = "demo-device-01"\noperationDelayMs = 50\n`,
+    `version = 1\n\n[project]\nid = "benchpilot-demo"\nname = "BenchPilot Demo"\n\n[devices.demo]\nadapter = "demo"\n\n[systems.demo]\ndevices = ["demo"]\n\n[adapters.demo]\nconnected = true\ndevice_id = "demo-device-01"\noperation_delay_ms = 50\n`,
   );
   await fs.mkdir(path.join(process.cwd(), ".benchpilot"), { recursive: true });
   await fs.writeFile(
@@ -279,9 +279,10 @@ async function editConfig(
         : paths.globalConfig();
   if (!file)
     fail("PROJECT_NOT_FOUND", 3, "--project requires a BenchPilot project.");
+  const targetFile = file!;
   let config: Json = {};
   try {
-    config = TOML.parse(await fs.readFile(file, "utf8")) as Json;
+    config = TOML.parse(await fs.readFile(targetFile, "utf8")) as Json;
   } catch (e: unknown) {
     if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
   }
@@ -297,13 +298,13 @@ async function editConfig(
     setKey(config, key, v);
   }
   validateConfig(config);
-  await fs.mkdir(path.dirname(file), { recursive: true });
-  const temp = `${file}.${process.pid}.tmp`;
+  await fs.mkdir(path.dirname(targetFile), { recursive: true });
+  const temp = `${targetFile}.${process.pid}.tmp`;
   await fs.writeFile(temp, TOML.stringify(config as never));
-  await fs.rename(temp, file);
+  await fs.rename(temp, targetFile);
   return {
     scope,
-    path: file,
+    path: targetFile,
     key,
     value: value === undefined ? undefined : getKey(config, key),
   };
@@ -531,25 +532,25 @@ async function main() {
       );
       return;
     }
-    if (parts[0] === "adapter" && parts[1] === "demo") {
+    if (parts[0] === "adapter" && parts[1]) {
+      const adapter = registry.get(parts[1]);
       if (parts.length === 2) {
         stdout.write(
-          "benchpilot adapter demo — Simulated adapter\n\nCommands: info, doctor\n",
+          `benchpilot adapter ${adapter.id} — ${adapter.summary}\n\nCommands: info, doctor\n`,
         );
         return;
       }
       if (parts[2] === "info")
         write(
           {
-            id: "demo",
-            version: demoAdapter.version,
-            summary: demoAdapter.summary,
-            simulated: true,
+            id: adapter.id,
+            version: adapter.version,
+            summary: adapter.summary,
           },
           flags,
         );
       else if (parts[2] === "doctor")
-        write({ checks: await demoAdapter.doctor(config.value) }, flags);
+        write({ checks: await adapter.doctor(config.value) }, flags);
       else fail("USAGE_ERROR", 2, "Unknown adapter command.");
       return;
     }
@@ -570,21 +571,58 @@ async function main() {
         return;
       }
       if (parts[1] === "scan") {
-        write({ devices: await demoAdapter.discover(config.value) }, flags);
+        const adapters = flags.adapter
+          ? [registry.get(String(flags.adapter))]
+          : registry.list();
+        const scans = await Promise.all(
+          adapters.map(async (adapter) => {
+            try {
+              return {
+                adapter: adapter.id,
+                devices: await adapter.discover(config.value),
+              };
+            } catch (error: unknown) {
+              return {
+                adapter: adapter.id,
+                devices: [],
+                error: (error as Error).message,
+              };
+            }
+          }),
+        );
+        write(
+          {
+            devices: scans.flatMap((scan) => scan.devices),
+            adapters: scans.map(({ adapter, error }) => ({ adapter, error })),
+          },
+          flags,
+        );
         return;
       }
     }
-    if (parts[0] === "device" && parts[1] === "demo") {
+    if (parts[0] === "device" && parts[1]) {
+      const rawDevice = (config.value.devices as Json | undefined)?.[parts[1]];
+      if (!rawDevice || typeof rawDevice !== "object")
+        fail("DEVICE_NOT_FOUND", 3, `Device not found: ${parts[1]}`);
+      const adapter = registry.get(String((rawDevice as Json).adapter));
+      const runtime = await adapter.createDevice(parts[1], rawDevice as Json);
       if (parts.length === 2) {
         stdout.write(
-          `benchpilot device demo — Simulated demo device\n\nCommands:\n${deviceCapabilities.map((x) => `  ${x}`).join("\n")}\n`,
+          `benchpilot device ${parts[1]} — ${adapter.summary}\n\nCommands:\n${runtime
+            .capabilities()
+            .map((x) => `  ${x.id.padEnd(17)} ${x.summary}`)
+            .join("\n")}\n`,
         );
         return;
       }
       const capability = parts[2];
-      if (!deviceCapabilities.includes(capability))
-        fail("USAGE_ERROR", 2, `Unknown demo capability: ${capability}`);
-      const result = await runner.execute("demo", capability, {
+      if (!runtime.capabilities().some((item) => item.id === capability))
+        fail(
+          "UNSUPPORTED_CAPABILITY",
+          3,
+          `Device ${parts[1]} does not support ${capability}.`,
+        );
+      const result = await runner.execute(parts[1], capability, {
         duration: flags.duration,
       });
       const r = result as Json;
@@ -608,15 +646,18 @@ async function main() {
       );
       return;
     }
-    if (parts[0] === "system" && parts[1] === "demo") {
+    if (parts[0] === "system" && parts[1]) {
+      const system = (config.value.systems as Json | undefined)?.[parts[1]];
+      if (!system || typeof system !== "object")
+        fail("SYSTEM_NOT_FOUND", 3, `System not found: ${parts[1]}`);
       if (parts.length === 2) {
         stdout.write(
-          `benchpilot system demo — Configured system\n\nCommands:\n${systemCapabilities.map((x) => `  ${x}`).join("\n")}\n`,
+          `benchpilot system ${parts[1]} — Configured system\n\nCommands:\n${systemCapabilities.map((x) => `  ${x}`).join("\n")}\n`,
         );
         return;
       }
       write(
-        await systemOperation("demo", parts[2], runner, config.value),
+        await systemOperation(parts[1], parts[2], runner, config.value),
         flags,
       );
       return;
@@ -817,7 +858,11 @@ async function main() {
       recovery: err.recovery,
       details: err.details,
     };
-    if (flags.json || flags.jsonl) stdout.write(`${JSON.stringify(result)}\n`);
+    if (flags.json) stdout.write(`${JSON.stringify(result)}\n`);
+    else if (flags.jsonl)
+      stdout.write(
+        `${JSON.stringify({ event: { type: "operation.failed" }, error: result })}\n`,
+      );
     else process.stderr.write(`${err.kind}: ${err.message}\n`);
     process.exitCode = err.exitCode;
   }

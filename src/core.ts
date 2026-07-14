@@ -61,6 +61,36 @@ export const stable = (input: unknown): string =>
         )
       : v,
   );
+const unsafeKey = (key: string) =>
+  ["__proto__", "prototype", "constructor"].includes(key);
+export function assertSafeKeyPath(key: string) {
+  if (!key || key.split(".").some((part) => !part || unsafeKey(part)))
+    fail("INVALID_CONFIG", 3, `Unsafe configuration key: ${key}`);
+}
+function safeObject(value: unknown): Json {
+  if (!object(value)) return value as Json;
+  const out: Json = Object.create(null) as Json;
+  for (const [key, child] of Object.entries(value)) {
+    if (unsafeKey(key))
+      fail("INVALID_CONFIG", 3, `Unsafe configuration key: ${key}`);
+    out[key] = object(child) ? safeObject(child) : child;
+  }
+  return out;
+}
+export function redactResolvedConfig(value: Json): Json {
+  const sensitive =
+    /(?:password|passwd|secret|token|api_?key|private_?key|credential|authorization)/i;
+  const redact = (input: unknown, key = ""): unknown => {
+    if (sensitive.test(key)) return "[REDACTED]";
+    if (Array.isArray(input)) return input.map((item) => redact(item));
+    if (object(input))
+      return Object.fromEntries(
+        Object.entries(input).map(([k, v]) => [k, redact(v, k)]),
+      );
+    return input;
+  };
+  return redact(value) as Json;
+}
 export const duration = (value: unknown, fallback?: number): number => {
   if (value === undefined && fallback !== undefined) return fallback;
   if (typeof value === "number" && Number.isFinite(value)) return value;
@@ -78,8 +108,13 @@ export const duration = (value: unknown, fallback?: number): number => {
 export async function atomicJson(file: string, data: unknown) {
   await fs.mkdir(path.dirname(file), { recursive: true });
   const temp = `${file}.${process.pid}.${randomBytes(3).toString("hex")}.tmp`;
-  await fs.writeFile(temp, JSON.stringify(data, null, 2));
-  await fs.rename(temp, file);
+  try {
+    await fs.writeFile(temp, JSON.stringify(data, null, 2));
+    await fs.rename(temp, file);
+  } catch (error) {
+    await fs.unlink(temp).catch(() => {});
+    throw error;
+  }
 }
 export async function readJson<T>(file: string): Promise<T | undefined> {
   try {
@@ -104,7 +139,7 @@ export class PathService {
     if (this.portable) return path.join(this.portable, "config.toml");
     if (this.platform === "win32")
       return path.join(
-        this.env.APPDATA || this.home,
+        this.env.LOCALAPPDATA || this.home,
         "BenchPilot",
         "config.toml",
       );
@@ -179,9 +214,12 @@ export class PathService {
 const object = (x: unknown): x is Json =>
   !!x && typeof x === "object" && !Array.isArray(x);
 export const merge = (low: Json, high: Json): Json => {
-  const out: Json = { ...low };
-  for (const [k, v] of Object.entries(high))
+  const out: Json = safeObject(low);
+  for (const [k, v] of Object.entries(high)) {
+    if (unsafeKey(k))
+      fail("INVALID_CONFIG", 3, `Unsafe configuration key: ${k}`);
     out[k] = object(v) && object(out[k]) ? merge(out[k] as Json, v) : v;
+  }
   return out;
 };
 function leaves(value: unknown, prefix = ""): string[] {
@@ -199,6 +237,12 @@ function envConfig(env: NodeJS.ProcessEnv): {
   for (const [name, raw] of Object.entries(env))
     if (name.startsWith("BENCHPILOT_") && !["BENCHPILOT_HOME"].includes(name)) {
       const parts = name.slice(12).toLowerCase().split("__");
+      if (parts.some(unsafeKey))
+        fail(
+          "INVALID_CONFIG",
+          3,
+          `Unsafe configuration environment variable: ${name}`,
+        );
       let cur = value;
       for (const p of parts.slice(0, -1)) cur = (cur[p] ||= {}) as Json;
       let parsed: unknown = raw;
@@ -218,7 +262,7 @@ async function toml(file: string): Promise<Json | undefined> {
     const x = TOML.parse(await fs.readFile(file, "utf8"));
     if (!object(x))
       fail("INVALID_CONFIG", 3, `${file} must contain a TOML object.`);
-    return x;
+    return safeObject(x);
   } catch (e: unknown) {
     if ((e as NodeJS.ErrnoException).code === "ENOENT") return undefined;
     if (e instanceof BenchPilotError) throw e;
@@ -263,26 +307,30 @@ export async function loadConfig(
   return { value, origins, layers };
 }
 export function getKey(obj: Json, key: string): unknown {
+  assertSafeKeyPath(key);
   return key
     .split(".")
     .reduce<unknown>((x, p) => (object(x) ? x[p] : undefined), obj);
 }
 export function setKey(obj: Json, key: string, value: unknown) {
+  assertSafeKeyPath(key);
   const parts = key.split(".");
   let cur = obj;
   for (const p of parts.slice(0, -1)) cur = (cur[p] ||= {}) as Json;
   cur[parts.at(-1)!] = value;
 }
 export function deleteKey(obj: Json, key: string) {
+  assertSafeKeyPath(key);
   const ps = key.split(".");
   let cur: Json | undefined = obj;
   for (const p of ps.slice(0, -1)) {
-    const next = cur?.[p];
+    const next: unknown = cur?.[p];
     cur = object(next) ? next : undefined;
   }
   if (cur) delete cur[ps.at(-1)!];
 }
 export function validateConfig(c: Json) {
+  safeObject(c);
   if (c.version !== undefined && c.version !== 1)
     fail(
       "UNSUPPORTED_CONFIG_VERSION",
@@ -349,10 +397,10 @@ export class AdapterRegistry {
       fail("DUPLICATE_ADAPTER", 8, `Adapter already registered: ${a.id}`);
     this.adapters.set(a.id, a);
   }
-  get(id: string) {
+  get(id: string): Adapter {
     const a = this.adapters.get(id);
     if (!a) fail("UNKNOWN_ADAPTER", 3, `Unknown adapter: ${id}`);
-    return a;
+    return a!;
   }
   list() {
     return [...this.adapters.values()];
@@ -437,6 +485,17 @@ export interface LockRecord {
   heartbeatAt: string;
   expiresAt: string;
 }
+export interface PhysicalResourceIdentity {
+  adapter: string;
+  kind: string;
+  physicalId: string;
+}
+export type LockLiveness = "active" | "stale" | "unknown";
+export function lockIdentity(identity: PhysicalResourceIdentity): string {
+  const safe = (value: string) =>
+    value.replace(/[^a-zA-Z0-9_-]/g, "-").slice(0, 32) || "resource";
+  return `${safe(identity.adapter)}-${safe(identity.kind)}-${sha(identity).slice(0, 32)}`;
+}
 export class LockManager {
   constructor(private paths: PathService) {}
   file(id: string) {
@@ -475,6 +534,49 @@ export class LockManager {
       throw e;
     }
   }
+  async heartbeat(lock: LockRecord, leaseMs = 30_000): Promise<LockRecord> {
+    const existing = await readJson<LockRecord>(this.file(lock.lockId));
+    if (!existing || existing.ownerToken !== lock.ownerToken)
+      fail("LOCK_OWNERSHIP_LOST", 4, `Lock ownership lost: ${lock.lockId}`);
+    const now = new Date();
+    const updated: LockRecord = {
+      ...existing!,
+      heartbeatAt: now.toISOString(),
+      expiresAt: new Date(now.getTime() + leaseMs).toISOString(),
+    };
+    await atomicJson(this.file(lock.lockId), updated);
+    return updated;
+  }
+  startHeartbeat(lock: LockRecord, intervalMs = 5_000, leaseMs = 30_000) {
+    let stopped = false;
+    const timer = setInterval(() => {
+      void this.heartbeat(lock, leaseMs).catch(() => {
+        stopped = true;
+        clearInterval(timer);
+      });
+    }, intervalMs);
+    timer.unref();
+    return () => {
+      if (!stopped) clearInterval(timer);
+      stopped = true;
+    };
+  }
+  async liveness(lock: LockRecord, now = Date.now()): Promise<LockLiveness> {
+    const heartbeat = Date.parse(lock.heartbeatAt);
+    const expiry = Date.parse(lock.expiresAt);
+    const severelyExpired = now > expiry + 10_000;
+    if (lock.hostname !== os.hostname())
+      return severelyExpired ? "stale" : "unknown";
+    if (now > expiry + 10_000) return "stale";
+    try {
+      process.kill(lock.pid, 0);
+      return Number.isFinite(heartbeat) ? "active" : "unknown";
+    } catch (error: unknown) {
+      return (error as NodeJS.ErrnoException).code === "ESRCH"
+        ? "stale"
+        : "unknown";
+    }
+  }
   async release(lock: LockRecord) {
     const existing = await readJson<LockRecord>(this.file(lock.lockId));
     if (existing?.ownerToken === lock.ownerToken)
@@ -497,13 +599,16 @@ export class LockManager {
   async clear(id: string, dangerous: boolean) {
     const l = await readJson<LockRecord>(this.file(id));
     if (!l) fail("LOCK_NOT_FOUND", 3, `Lock not found: ${id}`);
-    const stale = Date.parse(l.expiresAt) < Date.now();
-    if (!stale && !dangerous)
+    const status = await this.liveness(l!);
+    if (status !== "stale" && !dangerous)
       fail(
         "DANGEROUS_CONFIRMATION_REQUIRED",
         7,
         "Active lock requires --dangerously-clear-active-lock.",
       );
+    const current = await readJson<LockRecord>(this.file(id));
+    if (current?.ownerToken !== l!.ownerToken)
+      fail("LOCK_OWNERSHIP_LOST", 4, `Lock changed while clearing: ${id}`);
     await fs.unlink(this.file(id));
     return l;
   }
@@ -543,38 +648,107 @@ export class ApprovalManager {
       throw e;
     }
   }
-  async get(id: string) {
+  async get(id: string): Promise<Json> {
     const x = await readJson<Json>(
       path.join(this.paths.approvalsRoot(), `${id}.json`),
     );
     if (!x) fail("APPROVAL_NOT_FOUND", 3, `Approval not found: ${id}`);
-    return x;
+    return x!;
   }
   async change(id: string, status: "approved" | "rejected") {
     const x = await this.get(id);
+    if (x.status !== "pending")
+      fail("APPROVAL_STATE_INVALID", 7, `Approval ${id} is not pending.`);
+    if (Date.parse(String(x.expiresAt)) <= Date.now())
+      fail("APPROVAL_EXPIRED", 7, `Approval ${id} has expired.`);
     await atomicJson(path.join(this.paths.approvalsRoot(), `${id}.json`), {
       ...x,
       status,
       changedAt: new Date().toISOString(),
     });
   }
-  async consume(binding: Json) {
+  private claimFile(id: string) {
+    return path.join(this.paths.approvalsRoot(), `${id}.claim`);
+  }
+  async claim(binding: Json) {
     const digest = sha(binding);
-    for (const p of await this.list()) {
-      const x = (await p) as Json;
-      if (
-        x.status === "approved" &&
-        x.digest === digest &&
-        Date.parse(String(x.expiresAt)) > Date.now()
-      ) {
+    for (const candidate of await Promise.all(await this.list())) {
+      const record = candidate as Json;
+      if (record.status !== "approved" || record.digest !== digest) continue;
+      if (Date.parse(String(record.expiresAt)) <= Date.now()) continue;
+      const claimToken = randomBytes(16).toString("hex");
+      try {
+        const handle = await fs.open(this.claimFile(String(record.id)), "wx");
+        await handle.writeFile(claimToken);
+        await handle.close();
+      } catch (error: unknown) {
+        if ((error as NodeJS.ErrnoException).code === "EEXIST") continue;
+        throw error;
+      }
+      try {
+        const current = await this.get(String(record.id));
+        if (current.status !== "approved" || current.digest !== digest)
+          continue;
+        const claimed = {
+          ...current,
+          status: "claimed",
+          claimedBy: `${os.hostname()}:${process.pid}`,
+          claimedAt: new Date().toISOString(),
+          claimToken,
+        };
         await atomicJson(
-          path.join(this.paths.approvalsRoot(), `${x.id}.json`),
-          { ...x, status: "consumed", consumedAt: new Date().toISOString() },
+          path.join(this.paths.approvalsRoot(), `${record.id}.json`),
+          claimed,
         );
-        return true;
+        return claimed;
+      } finally {
+        await fs.unlink(this.claimFile(String(record.id))).catch(() => {});
       }
     }
-    return false;
+    return undefined;
+  }
+  async consumeClaim(record: Json) {
+    const current = await this.get(String(record.id));
+    if (
+      current.status !== "claimed" ||
+      current.claimToken !== record.claimToken
+    )
+      fail(
+        "APPROVAL_ALREADY_CLAIMED",
+        7,
+        `Approval ${record.id} is no longer claimed by this operation.`,
+      );
+    await atomicJson(
+      path.join(this.paths.approvalsRoot(), `${record.id}.json`),
+      {
+        ...current,
+        status: "consumed",
+        consumedAt: new Date().toISOString(),
+      },
+    );
+  }
+  async releaseClaim(record: Json) {
+    const current = await this.get(String(record.id));
+    if (
+      current.status === "claimed" &&
+      current.claimToken === record.claimToken
+    )
+      await atomicJson(
+        path.join(this.paths.approvalsRoot(), `${record.id}.json`),
+        {
+          ...current,
+          status: "approved",
+          claimedBy: undefined,
+          claimedAt: undefined,
+          claimToken: undefined,
+        },
+      );
+  }
+  async consume(binding: Json) {
+    const claim = await this.claim(binding);
+    if (!claim) return false;
+    await this.consumeClaim(claim);
+    return true;
   }
 }
 
@@ -584,6 +758,7 @@ export interface OperationContext {
   run?: Run;
   config: Json;
   device: DeviceRuntime;
+  registerCleanup(cleanup: () => Promise<void> | void): void;
 }
 export interface OperationServices {
   paths: PathService;
@@ -613,9 +788,14 @@ export class OperationRunner {
         3,
         `Device ${instance} does not support ${capabilityId}.`,
       );
+    const capability = cap!;
     const command = `device.${capabilityId}`,
-      lockId = `${runtime.identity.adapter}-${runtime.identity.physicalId}`;
-    const safety = cap.safety;
+      lockId = lockIdentity({
+        adapter: runtime.identity.adapter,
+        kind: "device",
+        physicalId: runtime.identity.physicalId,
+      });
+    const safety = capability.safety;
     if (safety.mode !== "normal" && !this.s.flags[safety.flag!])
       fail(
         "DANGEROUS_CONFIRMATION_REQUIRED",
@@ -631,33 +811,36 @@ export class OperationRunner {
         "outside-project",
       configDigest: sha(this.s.config.value),
     };
-    if (
-      safety.mode === "human-approval" &&
-      !(await new ApprovalManager(this.s.paths).consume(binding))
-    ) {
-      const req = await new ApprovalManager(this.s.paths).request(
-        binding,
-        safety.approvalTtlMs,
-      );
-      fail(
-        "HUMAN_APPROVAL_REQUIRED",
-        7,
-        "Human approval is required before this operation can run.",
-        { approvalId: req.id },
-      );
-    }
-    const timeout = duration(this.s.flags.timeout, cap.defaultTimeoutMs);
+    const timeout = duration(this.s.flags.timeout, capability.defaultTimeoutMs);
     if (this.s.flags["dry-run"])
       return {
         dryRun: true,
         device: runtime.identity,
-        capability: cap.id,
+        capability: capability.id,
         lockId,
-        lockMode: cap.lockMode,
+        lockMode: capability.lockMode,
         timeoutMs: timeout,
         safety,
+        approvalRequired: safety.mode === "human-approval",
       };
-    const run = cap.createsRun
+    if (safety.mode === "human-approval") {
+      const existing = await new ApprovalManager(this.s.paths).claim(binding);
+      if (existing)
+        await new ApprovalManager(this.s.paths).releaseClaim(existing);
+      else {
+        const req = await new ApprovalManager(this.s.paths).request(
+          binding,
+          safety.approvalTtlMs,
+        );
+        fail(
+          "HUMAN_APPROVAL_REQUIRED",
+          7,
+          "Human approval is required before this operation can run.",
+          { approvalId: req.id },
+        );
+      }
+    }
+    const run = capability.createsRun
       ? await new RunManager(
           this.s.paths,
           String(
@@ -673,7 +856,7 @@ export class OperationRunner {
     if (run)
       await atomicJson(
         path.join(run.dir, "resolved-config.json"),
-        this.s.config.value,
+        redactResolvedConfig(this.s.config.value),
       );
     const logger = new Rlog({
       logFilePath: run && path.join(run.dir, "benchpilot.log"),
@@ -691,36 +874,89 @@ export class OperationRunner {
       fileErrorPolicy: "throw",
     });
     let lock: LockRecord | undefined;
-    const controller = new AbortController(),
-      timer = setTimeout(() => controller.abort(), timeout);
-    const onSignal = () => controller.abort();
+    let stopHeartbeat: (() => void) | undefined;
+    let claimedApproval: Json | undefined;
+    const cleanups: Array<() => Promise<void> | void> = [];
+    const controller = new AbortController();
+    let abortReason: "timeout" | "signal" | undefined;
+    const timer = setTimeout(() => {
+      abortReason = "timeout";
+      controller.abort();
+    }, timeout);
+    const onSignal = () => {
+      abortReason = "signal";
+      controller.abort();
+    };
     process.once("SIGINT", onSignal);
     process.once("SIGTERM", onSignal);
     const started = Date.now();
     try {
       logger.event("operation.started", { command });
-      if (cap.lockMode === "exclusive") {
+      if (capability.lockMode === "exclusive") {
         logger.event("lock.acquiring", { lockId });
         lock = await new LockManager(this.s.paths).acquire(
           lockId,
           command,
           run?.id,
         );
+        stopHeartbeat = new LockManager(this.s.paths).startHeartbeat(lock);
         logger.event("lock.acquired", { lockId });
       }
-      logger.event("stage.started", { stage: cap.id });
-      const data = await cap.execute(
+      if (safety.mode === "human-approval") {
+        claimedApproval = await new ApprovalManager(this.s.paths).claim(
+          binding,
+        );
+        if (!claimedApproval)
+          fail(
+            "APPROVAL_ALREADY_CLAIMED",
+            7,
+            "Matching approval is no longer available.",
+          );
+      }
+      logger.event("stage.started", { stage: capability.id });
+      const execution = capability.execute(
         {
           signal: controller.signal,
           logger,
           run,
           config: this.s.config.value,
           device: runtime,
+          registerCleanup(cleanup) {
+            cleanups.push(cleanup);
+          },
         },
         input,
       );
+      const data = await Promise.race([
+        execution,
+        new Promise<never>((_, reject) =>
+          controller.signal.addEventListener(
+            "abort",
+            () =>
+              reject(
+                new BenchPilotError(
+                  abortReason === "signal"
+                    ? "OPERATION_ABORTED"
+                    : "OPERATION_TIMEOUT",
+                  6,
+                  abortReason === "signal"
+                    ? "Operation aborted by signal."
+                    : `Operation timed out after ${timeout}ms.`,
+                ),
+              ),
+            { once: true },
+          ),
+        ),
+      ]);
       if (controller.signal.aborted)
-        fail("OPERATION_TIMEOUT", 6, `Operation timed out after ${timeout}ms.`);
+        fail(
+          abortReason === "signal" ? "OPERATION_ABORTED" : "OPERATION_TIMEOUT",
+          6,
+          "Operation aborted.",
+        );
+      if (claimedApproval)
+        await new ApprovalManager(this.s.paths).consumeClaim(claimedApproval);
+      const artifacts = object(data) && data.artifact ? [data.artifact] : [];
       const result = {
         schema: "benchpilot.result",
         version: 1,
@@ -729,9 +965,9 @@ export class OperationRunner {
         runId: run?.id,
         durationMs: Date.now() - started,
         data,
-        artifacts: [],
+        artifacts,
       };
-      logger.event("stage.completed", { stage: cap.id });
+      logger.event("stage.completed", { stage: capability.id });
       logger.event("operation.completed", { runId: run?.id });
       if (run)
         await new RunManager(this.s.paths, "").finish(run, "succeeded", result);
@@ -742,11 +978,15 @@ export class OperationRunner {
           ? e
           : new BenchPilotError(
               controller.signal.aborted
-                ? "OPERATION_TIMEOUT"
+                ? abortReason === "signal"
+                  ? "OPERATION_ABORTED"
+                  : "OPERATION_TIMEOUT"
                 : "INTERNAL_ERROR",
               controller.signal.aborted ? 6 : 8,
               controller.signal.aborted
-                ? "Operation timed out."
+                ? abortReason === "signal"
+                  ? "Operation aborted."
+                  : "Operation timed out."
                 : (e as Error).message,
             );
       logger.event(
@@ -780,9 +1020,13 @@ export class OperationRunner {
       process.removeListener("SIGINT", onSignal);
       process.removeListener("SIGTERM", onSignal);
       if (lock) {
+        stopHeartbeat?.();
         await new LockManager(this.s.paths).release(lock);
         logger.event("lock.released", { lockId: lock.lockId });
       }
+      for (const cleanup of cleanups.reverse()) await cleanup();
+      if (claimedApproval && controller.signal.aborted)
+        await new ApprovalManager(this.s.paths).releaseClaim(claimedApproval);
       await logger.close();
     }
   }

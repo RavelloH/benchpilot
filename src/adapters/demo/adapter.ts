@@ -1,4 +1,6 @@
 import { Readable } from "node:stream";
+import { createHash } from "node:crypto";
+import { promises as fs } from "node:fs";
 import path from "node:path";
 import type {
   Adapter,
@@ -33,7 +35,7 @@ function settings(ctx: OperationContext) {
 function basic(
   id: string,
   summary: string,
-  fn: (ctx: OperationContext) => Promise<Json>,
+  fn: (ctx: OperationContext, input: Json) => Promise<Json>,
   opts: Partial<Capability> = {},
 ): Capability {
   return {
@@ -43,7 +45,7 @@ function basic(
     lockMode: "exclusive",
     createsRun: true,
     safety: { mode: "normal" },
-    execute: (ctx) => fn(ctx),
+    execute: (ctx, input) => fn(ctx, input),
     ...opts,
   };
 }
@@ -55,7 +57,9 @@ class DemoDevice implements DeviceRuntime {
   ) {
     this.identity = {
       instance,
-      physicalId: String(config.deviceId || "demo-device-01"),
+      physicalId: String(
+        config.device_id || config.deviceId || "demo-device-01",
+      ),
       adapter: "demo",
     };
   }
@@ -94,12 +98,25 @@ class DemoDevice implements DeviceRuntime {
         }),
         { lockMode: "none", createsRun: false },
       ),
-      basic("build", "Simulate a software build", async (ctx) =>
-        this.delayed(ctx, "build", {
-          artifact: "demo-firmware.bin",
+      basic("build", "Simulate a software build", async (ctx) => {
+        await this.delayed(ctx, "build", {});
+        if (!ctx.run) return { simulated: true };
+        const file = path.join(ctx.run.dir, "artifacts", "demo-firmware.bin");
+        const contents = `benchpilot demo firmware\ninstance=${this.identity.instance}\n`;
+        await fs.writeFile(file, contents);
+        const bytes = Buffer.byteLength(contents);
+        return {
+          artifact: {
+            name: "demo-firmware.bin",
+            kind: "firmware",
+            path: file,
+            size: bytes,
+            sha256: createHash("sha256").update(contents).digest("hex"),
+            createdAt: new Date().toISOString(),
+          },
           simulated: true,
-        }),
-      ),
+        };
+      }),
       basic("flash", "Simulate firmware flashing", async (ctx) =>
         this.delayed(ctx, "flash", { flashed: true, simulated: true }),
       ),
@@ -116,16 +133,17 @@ class DemoDevice implements DeviceRuntime {
       basic("stop", "Stop the simulated device", async (ctx) =>
         this.delayed(ctx, "stop", { running: false, simulated: true }),
       ),
-      basic("logs", "Collect a bounded simulated log stream", async (ctx) => {
-        const ms = duration(
-          (ctx as unknown as { input?: Json }).input?.duration,
-          5000,
-        );
-        await wait(Math.min(ms, 100), ctx.signal);
-        ctx.logger.info("demo: boot complete");
-        ctx.logger.info("demo: heartbeat");
-        return { durationMs: ms, lines: 2, simulated: true };
-      }),
+      basic(
+        "logs",
+        "Collect a bounded simulated log stream",
+        async (ctx, input) => {
+          const ms = duration(input.duration, 5000);
+          await wait(Math.min(ms, 100), ctx.signal);
+          ctx.logger.info("demo: boot complete");
+          ctx.logger.info("demo: heartbeat");
+          return { durationMs: ms, lines: 2, simulated: true };
+        },
+      ),
       basic("capture", "Capture a simulated device stream", async (ctx) => {
         if (!ctx.run) return { simulated: true };
         const file = path.join(ctx.run.dir, "captures", "demo.log");
@@ -190,7 +208,11 @@ class DemoDevice implements DeviceRuntime {
   }
   private async delayed(ctx: OperationContext, stage: string, value: Json) {
     const ms = Number(
-      settings(ctx).operationDelayMs || this.config.operationDelayMs || 50,
+      settings(ctx).operation_delay_ms ||
+        settings(ctx).operationDelayMs ||
+        this.config.operation_delay_ms ||
+        this.config.operationDelayMs ||
+        50,
     );
     ctx.logger.event("stage.started", { stage, simulated: true });
     await wait(ms, ctx.signal);
@@ -217,7 +239,7 @@ export const demoAdapter: Adapter = {
       : [
           {
             adapter: "demo",
-            deviceId: String(d?.deviceId || "demo-device-01"),
+            deviceId: String(d?.device_id || d?.deviceId || "demo-device-01"),
             simulated: true,
           },
         ];
