@@ -1,6 +1,6 @@
 # BenchPilot
 
-BenchPilot is an agent-friendly, local-first device lifecycle CLI. Version `0.0.0` is the first usable framework release and deliberately supports only the **software-simulated Demo Adapter**. It does not communicate with hardware, serial ports, probes, SSH, or vendor tools. BenchPilot requires Node.js 22.13 or newer and pnpm 11.
+BenchPilot is an agent-friendly, local-first device lifecycle CLI. Version `0.0.0` is the first usable framework release and deliberately supports only the **software-simulated Demo Adapter**. It does not communicate with hardware, serial ports, probes, SSH, or vendor tools. Running the installed package requires Node.js 22.13 or newer. The repository uses pnpm 11 for development and CI; npm package users do not need pnpm.
 
 ## Quick start
 

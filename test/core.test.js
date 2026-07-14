@@ -1,17 +1,27 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { execFile, spawn } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { promisify } from "node:util";
 import {
   AdapterRegistry,
   ApprovalManager,
+  atomicJson,
+  durationSchema,
+  enumSchema,
   BenchPilotError,
   PathService,
   lockIdentity,
+  LockManager,
+  OperationRunner,
   redactResolvedConfig,
+  runProcess,
   setKey,
 } from "../dist/index.js";
+
+const exec = promisify(execFile);
 
 test("core hardening uses safe lock names and redacts config", () => {
   const id = lockIdentity({
@@ -31,6 +41,29 @@ test("core hardening uses safe lock names and redacts config", () => {
   );
 });
 
+test("runtime schemas validate values with stable errors", () => {
+  assert.equal(durationSchema().parse("2s"), 2000);
+  assert.throws(
+    () => durationSchema().parse("soon"),
+    (error) =>
+      error instanceof BenchPilotError &&
+      error.kind === "INVALID_CAPABILITY_INPUT",
+  );
+  assert.equal(enumSchema(["debug", "info"]).parse("debug"), "debug");
+});
+
+test("process runner aborts without invoking a shell", async () => {
+  const controller = new AbortController();
+  const pending = runProcess({
+    command: process.execPath,
+    args: ["-e", "setTimeout(() => {}, 10000)"],
+    signal: controller.signal,
+    forceKillMs: 100,
+  });
+  setTimeout(() => controller.abort(new Error("test abort")), 25);
+  await assert.rejects(pending, /test abort/);
+});
+
 test("approval claims are exclusive", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "benchpilot-approval-"));
   try {
@@ -46,6 +79,60 @@ test("approval claims are exclusive", async () => {
     ]);
     assert.equal(Boolean(first) !== Boolean(second), true);
     await manager.releaseClaim(first || second);
+    await assert.rejects(
+      manager.get("../../escape"),
+      (error) =>
+        error instanceof BenchPilotError &&
+        error.kind === "INVALID_APPROVAL_ID",
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("approval claim is exclusive across processes", async () => {
+  const root = await mkdtemp(
+    path.join(os.tmpdir(), "benchpilot-approval-process-"),
+  );
+  try {
+    const manager = new ApprovalManager(
+      new PathService({ BENCHPILOT_HOME: root }),
+    );
+    const binding = { command: "device.burn", device: "demo" };
+    const request = await manager.request(binding);
+    await manager.change(request.id, "approved");
+    const claimer = path.resolve("test/fixtures/approval-claimer.mjs");
+    const [first, second] = await Promise.all([
+      exec(process.execPath, [claimer, root, JSON.stringify(binding)]),
+      exec(process.execPath, [claimer, root, JSON.stringify(binding)]),
+    ]);
+    assert.deepEqual([first.stdout.trim(), second.stdout.trim()].sort(), [
+      "claimed",
+      "unavailable",
+    ]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("expired approval claim is recovered before a new claim", async () => {
+  const root = await mkdtemp(
+    path.join(os.tmpdir(), "benchpilot-approval-stale-"),
+  );
+  try {
+    const paths = new PathService({ BENCHPILOT_HOME: root });
+    const manager = new ApprovalManager(paths);
+    const binding = { command: "device.burn", device: "demo" };
+    const request = await manager.request(binding);
+    await manager.change(request.id, "approved");
+    const first = await manager.claim(binding);
+    await atomicJson(path.join(paths.approvalsRoot(), `${request.id}.json`), {
+      ...first,
+      claimExpiresAt: new Date(0).toISOString(),
+    });
+    const recovered = await manager.claim(binding);
+    assert.ok(recovered);
+    assert.notEqual(recovered.claimToken, first.claimToken);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -65,4 +152,274 @@ test("registry supports adapters without CLI routing changes", () => {
     }),
   });
   assert.equal(registry.get("test").id, "test");
+});
+
+test("lock lease stops before release and rejects unsafe IDs", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "benchpilot-lock-"));
+  try {
+    const paths = new PathService({ BENCHPILOT_HOME: root });
+    const locks = new LockManager(paths);
+    const lock = await locks.acquire("demo-device-safe", "test");
+    const lease = locks.startHeartbeat(lock, 1, 100);
+    await lease.stop();
+    await locks.release(lock);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    assert.equal((await locks.list()).length, 0);
+    assert.throws(() => locks.file("../escape"), /Invalid lock ID/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("heartbeat reports lock ownership loss without deleting a replacement", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "benchpilot-lock-lost-"));
+  try {
+    const paths = new PathService({ BENCHPILOT_HOME: root });
+    const locks = new LockManager(paths);
+    const lock = await locks.acquire("demo-device-lost", "test");
+    await atomicJson(locks.file(lock.lockId), {
+      ...lock,
+      ownerToken: "replacement",
+    });
+    await assert.rejects(
+      locks.heartbeat(lock),
+      (error) =>
+        error instanceof BenchPilotError &&
+        error.kind === "LOCK_OWNERSHIP_LOST",
+    );
+    await assert.rejects(
+      locks.release(lock),
+      (error) =>
+        error instanceof BenchPilotError &&
+        error.kind === "LOCK_OWNERSHIP_LOST",
+    );
+    assert.equal((await locks.list())[0].ownerToken, "replacement");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("separate processes cannot acquire the same physical lock", async () => {
+  const root = await mkdtemp(
+    path.join(os.tmpdir(), "benchpilot-lock-process-"),
+  );
+  const id = "demo-device-process";
+  const holder = spawn(
+    process.execPath,
+    [path.resolve("test/fixtures/lock-holder.mjs"), root, id],
+    { stdio: ["ignore", "pipe", "pipe"] },
+  );
+  try {
+    await new Promise((resolve, reject) => {
+      holder.stdout.once("data", resolve);
+      holder.once("error", reject);
+    });
+    const moduleUrl = new URL("../dist/index.js", import.meta.url).href;
+    const script = `import { LockManager, PathService } from ${JSON.stringify(moduleUrl)}; const manager = new LockManager(new PathService({ BENCHPILOT_HOME: process.argv[1] })); await manager.acquire(process.argv[2], "contender");`;
+    const contender = await exec(process.execPath, [
+      "--input-type=module",
+      "-e",
+      script,
+      root,
+      id,
+    ]).catch((error) => error);
+    assert.notEqual(contender.code, 0);
+    assert.match(contender.stderr, /DEVICE_BUSY/);
+  } finally {
+    holder.kill();
+    await new Promise((resolve) => holder.once("exit", resolve));
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("critical cleanup failure finalizes a failed run after releasing its lock", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "benchpilot-cleanup-"));
+  try {
+    const paths = new PathService({ BENCHPILOT_HOME: root });
+    const registry = new AdapterRegistry();
+    registry.register({
+      id: "test",
+      version: "1",
+      summary: "cleanup test",
+      discover: async () => [],
+      doctor: async () => [],
+      createDevice: async (instance) => ({
+        identity: { instance, physicalId: "cleanup-device", adapter: "test" },
+        capabilities: () => [
+          {
+            id: "cleanup",
+            summary: "cleanup",
+            defaultTimeoutMs: 1000,
+            lockMode: "exclusive",
+            createsRun: true,
+            safety: { mode: "normal" },
+            execute: async (context) => {
+              context.registerCleanup("failing-cleanup", async () => {
+                throw new Error("cleanup failed");
+              });
+              return { ok: true };
+            },
+          },
+        ],
+      }),
+    });
+    const runner = new OperationRunner({
+      paths,
+      registry,
+      project: undefined,
+      flags: { quiet: true },
+      config: {
+        value: { devices: { device: { adapter: "test" } } },
+        origins: new Map(),
+        layers: [],
+      },
+    });
+    const error = await runner
+      .execute("device", "cleanup", {})
+      .catch((cause) => cause);
+    assert.equal(error.kind, "CLEANUP_FAILED");
+    assert.equal((await new LockManager(paths).list()).length, 0);
+    assert.equal(error.result.ok, false);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("timeout returns even when a capability ignores AbortSignal and runs cleanup", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "benchpilot-timeout-"));
+  let cleaned = false;
+  try {
+    const paths = new PathService({ BENCHPILOT_HOME: root });
+    const registry = new AdapterRegistry();
+    registry.register({
+      id: "timeout",
+      version: "1",
+      summary: "timeout test",
+      discover: async () => [],
+      doctor: async () => [],
+      createDevice: async (instance) => ({
+        identity: {
+          instance,
+          physicalId: "timeout-device",
+          adapter: "timeout",
+        },
+        capabilities: () => [
+          {
+            id: "hang",
+            summary: "hang",
+            defaultTimeoutMs: 1000,
+            lockMode: "exclusive",
+            createsRun: true,
+            safety: { mode: "normal" },
+            execute: async (context) => {
+              context.registerCleanup("cleanup", () => {
+                cleaned = true;
+              });
+              return new Promise(() => {});
+            },
+          },
+        ],
+      }),
+    });
+    const runner = new OperationRunner({
+      paths,
+      registry,
+      project: undefined,
+      flags: { quiet: true, timeout: "10ms" },
+      config: {
+        value: { devices: { device: { adapter: "timeout" } } },
+        origins: new Map(),
+        layers: [],
+      },
+    });
+    const error = await runner
+      .execute("device", "hang", {})
+      .catch((cause) => cause);
+    assert.equal(error.kind, "OPERATION_TIMEOUT");
+    assert.equal(cleaned, true);
+    assert.equal((await new LockManager(paths).list()).length, 0);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+async function runDangerousFailure(root, markEffect) {
+  const paths = new PathService({ BENCHPILOT_HOME: root });
+  const registry = new AdapterRegistry();
+  registry.register({
+    id: "danger",
+    version: "1",
+    summary: "danger test",
+    discover: async () => [],
+    doctor: async () => [],
+    createDevice: async (instance) => ({
+      identity: { instance, physicalId: "danger-device", adapter: "danger" },
+      capabilities: () => [
+        {
+          id: "effect",
+          summary: "effect",
+          defaultTimeoutMs: 1000,
+          lockMode: "exclusive",
+          createsRun: true,
+          safety: { mode: "human-approval", flag: "danger" },
+          execute: async (context) => {
+            if (markEffect) context.markDangerousEffectStarted();
+            throw new BenchPilotError("OPERATION_FAILED", 5, "planned failure");
+          },
+        },
+      ],
+    }),
+  });
+  const config = {
+    value: { devices: { device: { adapter: "danger" } } },
+    origins: new Map(),
+    layers: [],
+  };
+  const binding = {
+    command: "device.effect",
+    device: {
+      instance: "device",
+      physicalId: "danger-device",
+      adapter: "danger",
+    },
+    input: {},
+    project: "outside-project",
+    configDigest: "placeholder",
+  };
+  // OperationRunner derives the actual digest from the resolved config.
+  binding.configDigest = (await import("../dist/index.js")).sha(config.value);
+  const approvals = new ApprovalManager(paths);
+  const approval = await approvals.request(binding);
+  await approvals.change(approval.id, "approved");
+  const runner = new OperationRunner({
+    paths,
+    registry,
+    project: undefined,
+    flags: { quiet: true, danger: true },
+    config,
+  });
+  await runner.execute("device", "effect", {}).catch(() => {});
+  return approvals.get(approval.id);
+}
+
+test("ordinary dangerous-operation failure releases the approval claim", async () => {
+  const root = await mkdtemp(
+    path.join(os.tmpdir(), "benchpilot-approval-release-"),
+  );
+  try {
+    assert.equal((await runDangerousFailure(root, false)).status, "approved");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("post-effect dangerous-operation failure consumes the approval claim", async () => {
+  const root = await mkdtemp(
+    path.join(os.tmpdir(), "benchpilot-approval-consume-"),
+  );
+  try {
+    assert.equal((await runDangerousFailure(root, true)).status, "consumed");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });

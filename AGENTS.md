@@ -9,6 +9,10 @@
 - Each capability declares its timeout, lock mode and safety policy.
 - Changes to configuration, locks, runs, approvals or shutdown lifecycle require regression tests.
 - Tests must use injected/temporary paths, never real user directories.
+- Runtime support is Node.js >= 22.13. pnpm 11 is a repository development and CI tool;
+  do not document it as a requirement for npm package users.
+- Preserve the operation cleanup order: capability cleanup, lock lease stop, approval
+  finalization, lock release, log close, then Run finalization.
 
 ## Commit messages
 

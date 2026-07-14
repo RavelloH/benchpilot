@@ -4,7 +4,7 @@ import path from "node:path";
 import { stdin, stdout } from "node:process";
 import TOML from "@iarna/toml";
 import {
-  AdapterRegistry,
+  Adapter,
   ApprovalManager,
   BenchPilotError,
   deleteKey,
@@ -16,24 +16,18 @@ import {
   LockManager,
   OperationRunner,
   PathService,
+  projectStorageKey,
   readJson,
   RunManager,
   setKey,
   validateConfig,
 } from "../core.js";
 import { demoAdapter } from "../adapters/demo/adapter.js";
+import { createBenchPilotApplication } from "./application.js";
+import { type Flags, parse } from "./parser.js";
+import { write } from "./output-renderer.js";
 
 const version = "0.0.0";
-type Flags = Json & {
-  json?: boolean;
-  jsonl?: boolean;
-  help?: boolean;
-  config?: string;
-  quiet?: boolean;
-  verbose?: boolean;
-  timeout?: string;
-  [key: string]: unknown;
-};
 const globalOptions = [
   "--config <path>",
   "--json",
@@ -49,7 +43,7 @@ const globalOptions = [
 ];
 const groups: Record<string, { summary: string; children: string[] }> = {
   root: {
-    summary: "Agent-first device lifecycle CLI (currently demo adapter only).",
+    summary: "Agent-first device lifecycle CLI.",
     children: [
       "init",
       "doctor",
@@ -77,17 +71,20 @@ const groups: Record<string, { summary: string; children: string[] }> = {
     summary: "List installed adapter definitions.",
     children: ["list"],
   },
-  adapter: { summary: "Inspect an adapter.", children: ["demo"] },
+  adapter: { summary: "Inspect an adapter.", children: ["<adapter-id>"] },
   devices: {
     summary: "List configured or discovered devices.",
     children: ["list", "scan"],
   },
   device: {
     summary: "Operate a configured device through its capabilities.",
-    children: ["demo"],
+    children: ["<device-instance>"],
   },
   systems: { summary: "List configured systems.", children: ["list"] },
-  system: { summary: "Orchestrate a configured system.", children: ["demo"] },
+  system: {
+    summary: "Orchestrate a configured system.",
+    children: ["<system-instance>"],
+  },
   runs: {
     summary: "List and prune immutable operation records.",
     children: ["list", "prune"],
@@ -104,22 +101,6 @@ const groups: Record<string, { summary: string; children: string[] }> = {
     children: ["<approval-id>"],
   },
 };
-const deviceCapabilities = [
-  "info",
-  "status",
-  "capabilities",
-  "build",
-  "flash",
-  "deploy",
-  "reset",
-  "run",
-  "stop",
-  "logs",
-  "capture",
-  "selftest",
-  "factory-reset",
-  "burn-fuse",
-];
 const systemCapabilities = [
   "info",
   "status",
@@ -128,64 +109,11 @@ const systemCapabilities = [
   "collect",
   "emergency-stop",
 ];
-function parse(argv: string[]): { path: string[]; flags: Flags } {
-  const flags: Flags = {};
-  const pos: string[] = [];
-  for (let i = 0; i < argv.length; i++) {
-    const x = argv[i];
-    if (!x.startsWith("--")) {
-      pos.push(x);
-      continue;
-    }
-    const [key, inline] = x.slice(2).split("=", 2);
-    if (
-      [
-        "json",
-        "jsonl",
-        "quiet",
-        "verbose",
-        "dry-run",
-        "no-color",
-        "help",
-        "version",
-        "all",
-        "local",
-        "project",
-        "global",
-        "show-origin",
-        "save",
-        "dangerously-reset-demo-state",
-        "dangerously-burn-demo-fuse",
-        "dangerously-clear-active-lock",
-        "dangerously-remove-all-runs",
-      ].includes(key)
-    )
-      flags[key] = true;
-    else {
-      const v = inline ?? argv[++i];
-      if (!v || v.startsWith("--"))
-        fail("USAGE_ERROR", 2, `Option --${key} requires a value.`);
-      flags[key] = v;
-    }
-  }
-  if (flags.json && flags.jsonl)
-    fail("USAGE_ERROR", 2, "--json and --jsonl cannot be used together.");
-  return { path: pos, flags };
-}
-function write(value: unknown, flags: Flags, plain?: string) {
-  stdout.write(
-    flags.json || flags.jsonl
-      ? `${JSON.stringify(value)}\n`
-      : (plain ?? `${JSON.stringify(value, null, 2)}\n`),
-  );
-}
 function brief(name: string) {
   const g = groups[name] || groups.root;
   return `${name === "root" ? "benchpilot" : `benchpilot ${name}`} — ${g.summary}\n\nUsage: benchpilot${name === "root" ? "" : ` ${name}`} <command>\n\nCommands:\n${g.children.map((c) => `  ${c.padEnd(17)} ${summary(name, c)}`).join("\n")}\n\nGlobal options: ${globalOptions.slice(0, 5).join("  ")}\nRun 'benchpilot${name === "root" ? "" : ` ${name}`} --help' for complete help.\n`;
 }
 function summary(group: string, child: string) {
-  if (group === "device" && child === "demo") return "Simulated demo device";
-  if (group === "system" && child === "demo") return "Configured demo system";
   return (
     (
       {
@@ -196,8 +124,7 @@ function summary(group: string, child: string) {
         explain: "Explain value provenance",
         validate: "Validate configuration",
         list: "List resources",
-        scan: "Discover simulated devices",
-        demo: "Demo adapter",
+        scan: "Discover registered adapter devices",
         init: "Create a demo project",
         doctor: "Check local environment",
         prune: "Remove old run records",
@@ -208,25 +135,16 @@ function summary(group: string, child: string) {
 }
 function fullHelp(parts: string[]) {
   const pathName = parts.join(" ") || "benchpilot";
-  const isDevice = parts[0] === "device" && parts[1] === "demo" && parts[2];
-  const isSystem = parts[0] === "system" && parts[1] === "demo" && parts[2];
   return {
     schema: "benchpilot.help",
     version: 1,
     path: parts,
-    summary: isDevice
-      ? `Demo capability: ${parts[2]}`
-      : isSystem
-        ? `Demo system operation: ${parts[2]}`
-        : groups[parts.at(-1) || "root"]?.summary || "BenchPilot command",
+    summary: groups[parts.at(-1) || "root"]?.summary || "BenchPilot command",
     description:
       "Command definitions drive parsing, help, validation, safety and execution.",
     arguments: [],
     options: globalOptions,
-    safety:
-      isDevice && ["factory-reset", "burn-fuse"].includes(parts[2])
-        ? { mode: parts[2] === "burn-fuse" ? "human-approval" : "danger-flag" }
-        : { mode: "normal" },
+    safety: { mode: "normal" },
     errors: ["USAGE_ERROR", "CONFIG_ERROR", "DEVICE_BUSY", "OPERATION_TIMEOUT"],
     examples: [`benchpilot ${pathName} --json`],
   };
@@ -354,7 +272,7 @@ async function systemOperation(
     });
   return { system: name, operation: op, results };
 }
-async function main() {
+export async function main(adapters: Adapter[] = [demoAdapter]) {
   let parsed;
   try {
     parsed = parse(process.argv.slice(2));
@@ -379,7 +297,7 @@ async function main() {
       return;
     }
     const target = parts.length ? parts : [];
-    if (flags.help) {
+    if (flags.help && parts[0] !== "device") {
       const h = fullHelp(target);
       write(h, flags, humanFull(target));
       return;
@@ -406,8 +324,7 @@ async function main() {
       project,
       flags.config as string | undefined,
     );
-    const registry = new AdapterRegistry();
-    registry.register(demoAdapter);
+    const { registry } = createBenchPilotApplication(adapters);
     const runner = new OperationRunner({
       paths,
       registry,
@@ -622,9 +539,46 @@ async function main() {
           3,
           `Device ${parts[1]} does not support ${capability}.`,
         );
-      const result = await runner.execute(parts[1], capability, {
-        duration: flags.duration,
-      });
+      if (flags.help) {
+        const definition = runtime
+          .capabilities()
+          .find((item) => item.id === capability)!;
+        const help = {
+          schema: "benchpilot.help",
+          version: 1,
+          path: parts,
+          summary: definition.summary,
+          description: definition.description || definition.summary,
+          options: definition.options || [],
+          inputSchema: definition.inputSchema?.describe() || { type: "object" },
+          outputSchema: definition.outputSchema?.describe() || {
+            type: "object",
+          },
+          safety: definition.safety,
+        };
+        write(help, flags, `${definition.id} — ${definition.summary}\n`);
+        return;
+      }
+      const globalFlagNames = new Set([
+        "json",
+        "jsonl",
+        "quiet",
+        "verbose",
+        "timeout",
+        "dry-run",
+        "no-color",
+        "session",
+        "help",
+        "version",
+        "config",
+      ]);
+      const input = Object.fromEntries(
+        Object.entries(flags).filter(
+          ([name]) =>
+            !globalFlagNames.has(name) && !name.startsWith("dangerously-"),
+        ),
+      );
+      const result = await runner.execute(parts[1], capability, input);
       const r = result as Json;
       write(
         result,
@@ -669,9 +623,10 @@ async function main() {
       }
       const manager = new RunManager(
         paths,
-        String(
-          (config.value.project as Json | undefined)?.id || "outside-project",
-        ),
+        projectStorageKey({
+          id: String((config.value.project as Json | undefined)?.id || ""),
+          root: project?.root,
+        }),
       );
       if (parts[1] === "list") {
         let runs = await manager.list();
@@ -705,10 +660,12 @@ async function main() {
           await fs.rm(
             path.join(
               paths.runsRoot(
-                String(
-                  (config.value.project as Json | undefined)?.id ||
-                    "outside-project",
-                ),
+                projectStorageKey({
+                  id: String(
+                    (config.value.project as Json | undefined)?.id || "",
+                  ),
+                  root: project?.root,
+                }),
               ),
               r.id,
             ),
@@ -725,20 +682,17 @@ async function main() {
         );
         return;
       }
-      const root = paths.runsRoot(
-          String(
-            (config.value.project as Json | undefined)?.id || "outside-project",
-          ),
-        ),
-        dir = path.join(root, parts[1]);
+      const manager = new RunManager(
+        paths,
+        projectStorageKey({
+          id: String((config.value.project as Json | undefined)?.id || ""),
+          root: project?.root,
+        }),
+      );
+      const record = await manager.get(parts[1]);
+      const dir = record.dir;
       if (parts[2] === "show")
-        write(
-          {
-            manifest: await readJson(path.join(dir, "manifest.json")),
-            result: await readJson(path.join(dir, "result.json")),
-          },
-          flags,
-        );
+        write({ manifest: record.manifest, result: record.result }, flags);
       else if (parts[2] === "logs")
         write(
           { log: await fs.readFile(path.join(dir, "benchpilot.log"), "utf8") },
@@ -768,7 +722,7 @@ async function main() {
         const ls = await locks.list();
         const cleared = [];
         for (const l of ls)
-          if (l && Date.parse(l.expiresAt) < Date.now()) {
+          if (l && (await locks.liveness(l)) === "stale") {
             await locks.clear(l.lockId, false);
             cleared.push(l.lockId);
           }
@@ -820,7 +774,13 @@ async function main() {
         await a.change(parts[1], "rejected");
         write({ id: parts[1], status: "rejected" }, flags);
       } else if (parts[2] === "approve") {
-        if (!stdin.isTTY || !stdout.isTTY || flags.json || flags.jsonl)
+        if (
+          !stdin.isTTY ||
+          !stdout.isTTY ||
+          process.env.CI ||
+          flags.json ||
+          flags.jsonl
+        )
           fail(
             "INTERACTIVE_APPROVAL_REQUIRED",
             7,
@@ -861,10 +821,10 @@ async function main() {
     if (flags.json) stdout.write(`${JSON.stringify(result)}\n`);
     else if (flags.jsonl)
       stdout.write(
-        `${JSON.stringify({ event: { type: "operation.failed" }, error: result })}\n`,
+        `${JSON.stringify({ schema: "benchpilot.event", version: 1, event: { type: "operation.failed", timestamp: new Date().toISOString() }, error: result })}\n`,
       );
     else process.stderr.write(`${err.kind}: ${err.message}\n`);
     process.exitCode = err.exitCode;
   }
 }
-void main();
+if (process.env.BENCHPILOT_NO_AUTORUN !== "1") void main();

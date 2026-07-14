@@ -1,9 +1,18 @@
-import { createHash, randomBytes } from "node:crypto";
-import { promises as fs, constants as fsConstants } from "node:fs";
+import { randomBytes } from "node:crypto";
+import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import TOML from "@iarna/toml";
 import RlogModule from "rlog-js";
+import { BenchPilotError, fail } from "./core/errors/benchpilot-error.js";
+import type { RuntimeSchema } from "./core/adapters/schemas.js";
+import { lockIdentity } from "./core/locks/lock-identity.js";
+import { PathService } from "./core/paths/path-service.js";
+import { atomicJson, readJson } from "./core/utilities/atomic-json.js";
+import { sha, stable } from "./core/utilities/stable-json.js";
+import { resolveInside } from "./core/utilities/resolve-inside.js";
+import { RunManager } from "./core/runs/run-manager.js";
+import type { ArtifactRecord, Run } from "./core/runs/run-manager.js";
 const Rlog = RlogModule.default;
 
 export type Json = Record<string, unknown>;
@@ -26,41 +35,44 @@ export interface ResolvedConfig {
   layers: Array<{ scope: Scope; path?: string; value: Json }>;
 }
 
-export class BenchPilotError extends Error {
-  constructor(
-    public kind: string,
-    public exitCode: number,
-    message: string,
-    public retryable = false,
-    public stage?: string,
-    public recovery: string[] = [],
-    public details: Json = {},
-  ) {
-    super(message);
-  }
+export { BenchPilotError, fail } from "./core/errors/benchpilot-error.js";
+export {
+  arraySchema,
+  booleanSchema,
+  durationSchema,
+  enumSchema,
+  numberSchema,
+  objectSchema,
+  optional,
+  stringSchema,
+} from "./core/adapters/schemas.js";
+export type { RuntimeSchema } from "./core/adapters/schemas.js";
+export {
+  lockIdentity,
+  type PhysicalResourceIdentity,
+} from "./core/locks/lock-identity.js";
+export { PathService } from "./core/paths/path-service.js";
+export { atomicJson, readJson } from "./core/utilities/atomic-json.js";
+export { sha, stable } from "./core/utilities/stable-json.js";
+export { resolveInside } from "./core/utilities/resolve-inside.js";
+export {
+  RunManager,
+  RUN_ID_PATTERN,
+  type ArtifactRecord,
+  type Run,
+} from "./core/runs/run-manager.js";
+const LOCK_ID_PATTERN = /^[a-zA-Z0-9_-]+$/;
+const APPROVAL_ID_PATTERN = /^approval-[a-f0-9]+$/;
+export function projectStorageKey(project: {
+  id?: string;
+  root?: string;
+}): string {
+  const prefix =
+    String(project.id || "outside-project")
+      .replace(/[^a-zA-Z0-9_-]/g, "-")
+      .slice(0, 24) || "project";
+  return `${prefix}-${sha({ id: project.id || "", root: project.root || "" }).slice(0, 24)}`;
 }
-export const fail = (
-  kind: string,
-  code: number,
-  message: string,
-  details: Json = {},
-): never => {
-  throw new BenchPilotError(kind, code, message, false, undefined, [], details);
-};
-export const sha = (input: unknown) =>
-  createHash("sha256")
-    .update(typeof input === "string" ? input : stable(input))
-    .digest("hex");
-export const stable = (input: unknown): string =>
-  JSON.stringify(input, (_k, v) =>
-    v && typeof v === "object" && !Array.isArray(v)
-      ? Object.fromEntries(
-          Object.keys(v)
-            .sort()
-            .map((k) => [k, v[k]]),
-        )
-      : v,
-  );
 const unsafeKey = (key: string) =>
   ["__proto__", "prototype", "constructor"].includes(key);
 export function assertSafeKeyPath(key: string) {
@@ -105,111 +117,6 @@ export const duration = (value: unknown, fallback?: number): number => {
     ]
   );
 };
-export async function atomicJson(file: string, data: unknown) {
-  await fs.mkdir(path.dirname(file), { recursive: true });
-  const temp = `${file}.${process.pid}.${randomBytes(3).toString("hex")}.tmp`;
-  try {
-    await fs.writeFile(temp, JSON.stringify(data, null, 2));
-    await fs.rename(temp, file);
-  } catch (error) {
-    await fs.unlink(temp).catch(() => {});
-    throw error;
-  }
-}
-export async function readJson<T>(file: string): Promise<T | undefined> {
-  try {
-    return JSON.parse(await fs.readFile(file, "utf8")) as T;
-  } catch (e: unknown) {
-    if ((e as NodeJS.ErrnoException).code === "ENOENT") return undefined;
-    throw e;
-  }
-}
-
-export class PathService {
-  constructor(
-    readonly env: NodeJS.ProcessEnv = process.env,
-    readonly platform = process.platform,
-    readonly home = os.homedir(),
-    readonly temp = os.tmpdir(),
-  ) {}
-  get portable() {
-    return this.env.BENCHPILOT_HOME;
-  }
-  globalConfig() {
-    if (this.portable) return path.join(this.portable, "config.toml");
-    if (this.platform === "win32")
-      return path.join(
-        this.env.LOCALAPPDATA || this.home,
-        "BenchPilot",
-        "config.toml",
-      );
-    if (this.platform === "darwin")
-      return path.join(
-        this.home,
-        "Library",
-        "Application Support",
-        "BenchPilot",
-        "config.toml",
-      );
-    return path.join(
-      this.env.XDG_CONFIG_HOME || path.join(this.home, ".config"),
-      "benchpilot",
-      "config.toml",
-    );
-  }
-  stateRoot() {
-    if (this.portable) return path.join(this.portable, "state");
-    if (this.platform === "win32")
-      return path.join(this.env.LOCALAPPDATA || this.temp, "BenchPilot");
-    if (this.platform === "darwin")
-      return path.join(
-        this.home,
-        "Library",
-        "Application Support",
-        "BenchPilot",
-      );
-    return path.join(
-      this.env.XDG_STATE_HOME || path.join(this.home, ".local", "state"),
-      "benchpilot",
-    );
-  }
-  runtimeRoot() {
-    if (this.portable) return path.join(this.portable, "runtime");
-    return path.join(
-      this.platform === "win32"
-        ? this.env.TEMP || this.temp
-        : this.env.XDG_RUNTIME_DIR || this.temp,
-      "benchpilot",
-      "locks",
-    );
-  }
-  runsRoot(projectKey: string) {
-    return this.portable
-      ? path.join(this.portable!, "runs")
-      : path.join(this.stateRoot(), "projects", projectKey, "runs");
-  }
-  approvalsRoot() {
-    return path.join(this.stateRoot(), "approvals");
-  }
-  async project(start = process.cwd(), explicit?: string) {
-    if (explicit)
-      return {
-        root: path.dirname(path.resolve(explicit)),
-        config: path.resolve(explicit),
-      };
-    let dir = path.resolve(start);
-    while (true) {
-      const file = path.join(dir, "benchpilot.toml");
-      try {
-        await fs.access(file);
-        return { root: dir, config: file };
-      } catch {}
-      const up = path.dirname(dir);
-      if (up === dir) return undefined;
-      dir = up;
-    }
-  }
-}
 
 const object = (x: unknown): x is Json =>
   !!x && typeof x === "object" && !Array.isArray(x);
@@ -369,9 +276,19 @@ export interface Safety {
   effects?: string[];
   approvalTtlMs?: number;
 }
+export interface OptionDefinition {
+  name: string;
+  summary: string;
+  required?: boolean;
+  schema?: RuntimeSchema<unknown>;
+}
 export interface Capability {
   id: string;
   summary: string;
+  description?: string;
+  options?: OptionDefinition[];
+  inputSchema?: RuntimeSchema<Json>;
+  outputSchema?: RuntimeSchema<Json>;
   defaultTimeoutMs: number;
   lockMode: "none" | "exclusive";
   createsRun: boolean;
@@ -384,8 +301,11 @@ export interface DeviceRuntime {
 }
 export interface Adapter {
   id: string;
+  apiVersion?: 1;
   version: string;
   summary: string;
+  description?: string;
+  configSchema?: RuntimeSchema<unknown>;
   discover(config: Json): Promise<Json[]>;
   doctor(config: Json): Promise<Json[]>;
   createDevice(instance: string, config: Json): Promise<DeviceRuntime>;
@@ -407,70 +327,6 @@ export class AdapterRegistry {
   }
 }
 
-export interface Run {
-  id: string;
-  dir: string;
-  started: number;
-  command: string;
-}
-export class RunManager {
-  constructor(
-    private paths: PathService,
-    private projectId: string,
-  ) {}
-  async create(command: string, context: Json): Promise<Run> {
-    const id = `${new Date()
-      .toISOString()
-      .replace(/[-:]/g, "")
-      .replace(
-        /\.\d{3}Z/,
-        "Z",
-      )}-${command.replace(/\./g, "-")}-${randomBytes(3).toString("hex")}`;
-    const dir = path.join(this.paths.runsRoot(this.projectId), id);
-    await fs.mkdir(path.join(dir, "captures"), { recursive: true });
-    await fs.mkdir(path.join(dir, "artifacts"), { recursive: true });
-    const started = Date.now();
-    await atomicJson(path.join(dir, "manifest.json"), {
-      schema: "benchpilot.run",
-      version: 1,
-      runId: id,
-      status: "running",
-      command,
-      startedAt: new Date(started).toISOString(),
-      pid: process.pid,
-      hostname: os.hostname(),
-      platform: process.platform,
-      ...context,
-    });
-    return { id, dir, started, command };
-  }
-  async finish(run: Run, status: string, result: Json) {
-    const durationMs = Date.now() - run.started;
-    await atomicJson(path.join(run.dir, "result.json"), result);
-    const m = (await readJson<Json>(path.join(run.dir, "manifest.json"))) || {};
-    await atomicJson(path.join(run.dir, "manifest.json"), {
-      ...m,
-      status,
-      endedAt: new Date().toISOString(),
-      durationMs,
-    });
-  }
-  async list() {
-    const root = this.paths.runsRoot(this.projectId);
-    try {
-      return await Promise.all(
-        (await fs.readdir(root)).map(async (id) => ({
-          id,
-          manifest: await readJson<Json>(path.join(root, id, "manifest.json")),
-        })),
-      );
-    } catch (e: unknown) {
-      if ((e as NodeJS.ErrnoException).code === "ENOENT") return [];
-      throw e;
-    }
-  }
-}
-
 export interface LockRecord {
   schema: string;
   version: number;
@@ -485,21 +341,18 @@ export interface LockRecord {
   heartbeatAt: string;
   expiresAt: string;
 }
-export interface PhysicalResourceIdentity {
-  adapter: string;
-  kind: string;
-  physicalId: string;
-}
 export type LockLiveness = "active" | "stale" | "unknown";
-export function lockIdentity(identity: PhysicalResourceIdentity): string {
-  const safe = (value: string) =>
-    value.replace(/[^a-zA-Z0-9_-]/g, "-").slice(0, 32) || "resource";
-  return `${safe(identity.adapter)}-${safe(identity.kind)}-${sha(identity).slice(0, 32)}`;
+export interface LockLease {
+  readonly lock: LockRecord;
+  readonly lost: Promise<never>;
+  stop(): Promise<void>;
 }
 export class LockManager {
   constructor(private paths: PathService) {}
   file(id: string) {
-    return path.join(this.paths.runtimeRoot(), `${id}.json`);
+    if (!LOCK_ID_PATTERN.test(id))
+      fail("INVALID_LOCK_ID", 2, `Invalid lock ID: ${id}`);
+    return resolveInside(this.paths.runtimeRoot(), `${id}.json`);
   }
   async acquire(
     id: string,
@@ -547,18 +400,54 @@ export class LockManager {
     await atomicJson(this.file(lock.lockId), updated);
     return updated;
   }
-  startHeartbeat(lock: LockRecord, intervalMs = 5_000, leaseMs = 30_000) {
+  startHeartbeat(
+    lock: LockRecord,
+    intervalMs = 5_000,
+    leaseMs = 30_000,
+  ): LockLease {
     let stopped = false;
-    const timer = setInterval(() => {
-      void this.heartbeat(lock, leaseMs).catch(() => {
-        stopped = true;
-        clearInterval(timer);
+    let wake: (() => void) | undefined;
+    let rejectLost!: (error: BenchPilotError) => void;
+    const lost = new Promise<never>((_, reject) => {
+      rejectLost = reject;
+    });
+    // The runner consumes this promise; avoid an unhandled rejection if it stops first.
+    void lost.catch(() => {});
+    const sleep = () =>
+      new Promise<void>((resolve) => {
+        wake = resolve;
+        const timer = setTimeout(resolve, intervalMs);
+        timer.unref();
       });
-    }, intervalMs);
-    timer.unref();
-    return () => {
-      if (!stopped) clearInterval(timer);
-      stopped = true;
+    const loop = (async () => {
+      while (!stopped) {
+        await sleep();
+        wake = undefined;
+        if (stopped) break;
+        try {
+          await this.heartbeat(lock, leaseMs);
+        } catch (error) {
+          stopped = true;
+          rejectLost(
+            error instanceof BenchPilotError
+              ? error
+              : new BenchPilotError(
+                  "LOCK_OWNERSHIP_LOST",
+                  4,
+                  "Lock heartbeat failed.",
+                ),
+          );
+        }
+      }
+    })();
+    return {
+      lock,
+      lost,
+      async stop() {
+        stopped = true;
+        wake?.();
+        await loop;
+      },
     };
   }
   async liveness(lock: LockRecord, now = Date.now()): Promise<LockLiveness> {
@@ -579,8 +468,10 @@ export class LockManager {
   }
   async release(lock: LockRecord) {
     const existing = await readJson<LockRecord>(this.file(lock.lockId));
-    if (existing?.ownerToken === lock.ownerToken)
-      await fs.unlink(this.file(lock.lockId)).catch(() => {});
+    if (!existing) return;
+    if (existing.ownerToken !== lock.ownerToken)
+      fail("LOCK_OWNERSHIP_LOST", 4, `Lock ownership lost: ${lock.lockId}`);
+    await fs.unlink(this.file(lock.lockId));
   }
   async list() {
     try {
@@ -616,6 +507,14 @@ export class LockManager {
 
 export class ApprovalManager {
   constructor(private paths: PathService) {}
+  private assertId(id: string) {
+    if (!APPROVAL_ID_PATTERN.test(id))
+      fail("INVALID_APPROVAL_ID", 2, `Invalid approval ID: ${id}`);
+  }
+  private file(id: string) {
+    this.assertId(id);
+    return resolveInside(this.paths.approvalsRoot(), `${id}.json`);
+  }
   async request(binding: Json, ttl = 3600000) {
     await fs.mkdir(this.paths.approvalsRoot(), { recursive: true });
     const id = `approval-${randomBytes(5).toString("hex")}`,
@@ -630,10 +529,7 @@ export class ApprovalManager {
         expiresAt: new Date(Date.now() + ttl).toISOString(),
         status: "pending",
       };
-    await atomicJson(
-      path.join(this.paths.approvalsRoot(), `${id}.json`),
-      record,
-    );
+    await atomicJson(this.file(id), record);
     return record;
   }
   async list() {
@@ -649,37 +545,107 @@ export class ApprovalManager {
     }
   }
   async get(id: string): Promise<Json> {
-    const x = await readJson<Json>(
-      path.join(this.paths.approvalsRoot(), `${id}.json`),
-    );
+    const x = await readJson<Json>(this.file(id));
     if (!x) fail("APPROVAL_NOT_FOUND", 3, `Approval not found: ${id}`);
     return x!;
   }
   async change(id: string, status: "approved" | "rejected") {
-    const x = await this.get(id);
-    if (x.status !== "pending")
-      fail("APPROVAL_STATE_INVALID", 7, `Approval ${id} is not pending.`);
-    if (Date.parse(String(x.expiresAt)) <= Date.now())
-      fail("APPROVAL_EXPIRED", 7, `Approval ${id} has expired.`);
-    await atomicJson(path.join(this.paths.approvalsRoot(), `${id}.json`), {
-      ...x,
-      status,
-      changedAt: new Date().toISOString(),
-    });
+    this.assertId(id);
+    const guard = resolveInside(this.paths.approvalsRoot(), `${id}.change`);
+    await fs.mkdir(this.paths.approvalsRoot(), { recursive: true });
+    let handle;
+    try {
+      handle = await fs.open(guard, "wx");
+    } catch (error: unknown) {
+      if ((error as NodeJS.ErrnoException).code === "EEXIST")
+        fail("APPROVAL_STATE_INVALID", 7, `Approval ${id} is being changed.`);
+      throw error;
+    }
+    try {
+      const x = await this.get(id);
+      if (x.status !== "pending")
+        fail("APPROVAL_STATE_INVALID", 7, `Approval ${id} is not pending.`);
+      if (Date.parse(String(x.expiresAt)) <= Date.now())
+        fail("APPROVAL_EXPIRED", 7, `Approval ${id} has expired.`);
+      await atomicJson(this.file(id), {
+        ...x,
+        status,
+        changedAt: new Date().toISOString(),
+      });
+    } finally {
+      await handle.close().catch(() => {});
+      await fs.unlink(guard).catch(() => {});
+    }
   }
   private claimFile(id: string) {
-    return path.join(this.paths.approvalsRoot(), `${id}.claim`);
+    this.assertId(id);
+    return resolveInside(this.paths.approvalsRoot(), `${id}.claim`);
+  }
+  async findMatchingApproval(binding: Json): Promise<Json | undefined> {
+    const digest = sha(binding);
+    for (const record of await Promise.all(await this.list()))
+      if (
+        record?.status === "approved" &&
+        record.digest === digest &&
+        Date.parse(String(record.expiresAt)) > Date.now()
+      )
+        return record;
+    return undefined;
+  }
+  approvalLiveness(record: Json): "active" | "stale" | "unknown" {
+    if (record.status !== "claimed") return "unknown";
+    const expiresAt = Date.parse(String(record.claimExpiresAt || ""));
+    if (Number.isFinite(expiresAt) && expiresAt <= Date.now()) return "stale";
+    const owner = String(record.claimedBy || "");
+    const [hostname, pidText] = owner.split(":");
+    if (hostname !== os.hostname() || !/^\d+$/.test(pidText || ""))
+      return "unknown";
+    try {
+      process.kill(Number(pidText), 0);
+      return "active";
+    } catch (error: unknown) {
+      return (error as NodeJS.ErrnoException).code === "ESRCH"
+        ? "stale"
+        : "unknown";
+    }
   }
   async claim(binding: Json) {
     const digest = sha(binding);
     for (const candidate of await Promise.all(await this.list())) {
       const record = candidate as Json;
-      if (record.status !== "approved" || record.digest !== digest) continue;
-      if (Date.parse(String(record.expiresAt)) <= Date.now()) continue;
+      if (
+        record.status === "claimed" &&
+        this.approvalLiveness(record) === "stale"
+      ) {
+        await atomicJson(this.file(String(record.id)), {
+          ...record,
+          status: "approved",
+          releasedAt: new Date().toISOString(),
+          claimedBy: undefined,
+          claimedAt: undefined,
+          claimExpiresAt: undefined,
+          claimToken: undefined,
+        });
+        await fs.unlink(this.claimFile(String(record.id))).catch(() => {});
+      }
+      const refreshed =
+        record.status === "claimed"
+          ? await this.get(String(record.id))
+          : record;
+      if (refreshed.status !== "approved" || refreshed.digest !== digest)
+        continue;
+      if (Date.parse(String(refreshed.expiresAt)) <= Date.now()) continue;
       const claimToken = randomBytes(16).toString("hex");
+      let keepGuard = false;
       try {
         const handle = await fs.open(this.claimFile(String(record.id)), "wx");
-        await handle.writeFile(claimToken);
+        await handle.writeFile(
+          JSON.stringify({
+            claimToken,
+            pid: process.pid,
+            claimedAt: new Date().toISOString(),
+          }),
+        );
         await handle.close();
       } catch (error: unknown) {
         if ((error as NodeJS.ErrnoException).code === "EEXIST") continue;
@@ -694,15 +660,15 @@ export class ApprovalManager {
           status: "claimed",
           claimedBy: `${os.hostname()}:${process.pid}`,
           claimedAt: new Date().toISOString(),
+          claimExpiresAt: new Date(Date.now() + 300_000).toISOString(),
           claimToken,
         };
-        await atomicJson(
-          path.join(this.paths.approvalsRoot(), `${record.id}.json`),
-          claimed,
-        );
+        await atomicJson(this.file(String(record.id)), claimed);
+        keepGuard = true;
         return claimed;
       } finally {
-        await fs.unlink(this.claimFile(String(record.id))).catch(() => {});
+        if (!keepGuard)
+          await fs.unlink(this.claimFile(String(record.id))).catch(() => {});
       }
     }
     return undefined;
@@ -718,14 +684,12 @@ export class ApprovalManager {
         7,
         `Approval ${record.id} is no longer claimed by this operation.`,
       );
-    await atomicJson(
-      path.join(this.paths.approvalsRoot(), `${record.id}.json`),
-      {
-        ...current,
-        status: "consumed",
-        consumedAt: new Date().toISOString(),
-      },
-    );
+    await atomicJson(this.file(String(record.id)), {
+      ...current,
+      status: "consumed",
+      consumedAt: new Date().toISOString(),
+    });
+    await fs.unlink(this.claimFile(String(record.id))).catch(() => {});
   }
   async releaseClaim(record: Json) {
     const current = await this.get(String(record.id));
@@ -733,16 +697,15 @@ export class ApprovalManager {
       current.status === "claimed" &&
       current.claimToken === record.claimToken
     )
-      await atomicJson(
-        path.join(this.paths.approvalsRoot(), `${record.id}.json`),
-        {
-          ...current,
-          status: "approved",
-          claimedBy: undefined,
-          claimedAt: undefined,
-          claimToken: undefined,
-        },
-      );
+      await atomicJson(this.file(String(record.id)), {
+        ...current,
+        status: "approved",
+        claimedBy: undefined,
+        claimedAt: undefined,
+        claimToken: undefined,
+        claimExpiresAt: undefined,
+      });
+    await fs.unlink(this.claimFile(String(record.id))).catch(() => {});
   }
   async consume(binding: Json) {
     const claim = await this.claim(binding);
@@ -756,9 +719,16 @@ export interface OperationContext {
   signal: AbortSignal;
   logger: InstanceType<typeof Rlog>;
   run?: Run;
+  stateRoot: string;
   config: Json;
   device: DeviceRuntime;
-  registerCleanup(cleanup: () => Promise<void> | void): void;
+  registerCleanup(
+    name: string,
+    handler: () => Promise<void> | void,
+    options?: { critical?: boolean },
+  ): void;
+  markDangerousEffectStarted(): void;
+  registerArtifact(record: ArtifactRecord): void;
 }
 export interface OperationServices {
   paths: PathService;
@@ -789,6 +759,31 @@ export class OperationRunner {
         `Device ${instance} does not support ${capabilityId}.`,
       );
     const capability = cap!;
+    const definedOptions = capability.options || [];
+    const allowedOptions = new Set(definedOptions.map((option) => option.name));
+    for (const name of Object.keys(input))
+      if (!allowedOptions.has(name))
+        fail(
+          "INVALID_CAPABILITY_INPUT",
+          2,
+          `Unknown option for ${capability.id}: ${name}.`,
+        );
+    for (const option of definedOptions) {
+      if (option.required && input[option.name] === undefined)
+        fail(
+          "INVALID_CAPABILITY_INPUT",
+          2,
+          `Missing required option: ${option.name}.`,
+        );
+      if (input[option.name] !== undefined && option.schema)
+        input[option.name] = option.schema.parse(input[option.name]);
+    }
+    try {
+      input = capability.inputSchema?.parse(input) ?? input;
+    } catch (error) {
+      if (error instanceof BenchPilotError) throw error;
+      fail("INVALID_CAPABILITY_INPUT", 2, (error as Error).message);
+    }
     const command = `device.${capabilityId}`,
       lockId = lockIdentity({
         adapter: runtime.identity.adapter,
@@ -824,10 +819,10 @@ export class OperationRunner {
         approvalRequired: safety.mode === "human-approval",
       };
     if (safety.mode === "human-approval") {
-      const existing = await new ApprovalManager(this.s.paths).claim(binding);
-      if (existing)
-        await new ApprovalManager(this.s.paths).releaseClaim(existing);
-      else {
+      const existing = await new ApprovalManager(
+        this.s.paths,
+      ).findMatchingApproval(binding);
+      if (!existing) {
         const req = await new ApprovalManager(this.s.paths).request(
           binding,
           safety.approvalTtlMs,
@@ -840,17 +835,25 @@ export class OperationRunner {
         );
       }
     }
+    const projectKey = projectStorageKey({
+      id: String((this.s.config.value.project as Json | undefined)?.id || ""),
+      root: this.s.project?.root,
+    });
+    const runManager = new RunManager(this.s.paths, projectKey);
     const run = capability.createsRun
-      ? await new RunManager(
-          this.s.paths,
-          String(
-            (this.s.config.value.project as Json | undefined)?.id ||
-              sha(this.s.project?.root || process.cwd()).slice(0, 12),
-          ),
-        ).create(command, {
+      ? await new RunManager(this.s.paths, projectKey).create(command, {
           device: runtime.identity,
           adapter: d.adapter,
+          adapterVersion: this.s.registry.get(String(d.adapter)).version,
+          capability: capability.id,
+          physicalIdentity: runtime.identity,
           configDigest: sha(this.s.config.value),
+          configSources: this.s.config.layers.map((layer) => ({
+            scope: layer.scope,
+            path: layer.path,
+          })),
+          benchpilotVersion: "0.0.0",
+          nodeVersion: process.version,
         })
       : undefined;
     if (run)
@@ -861,7 +864,7 @@ export class OperationRunner {
     const logger = new Rlog({
       logFilePath: run && path.join(run.dir, "benchpilot.log"),
       jsonlFilePath: run && path.join(run.dir, "events.jsonl"),
-      jsonlOutput: this.s.flags.jsonl ? process.stdout : "none",
+      jsonlOutput: "none",
       screenOutput: this.s.flags.quiet ? "none" : "stderr",
       enableColorfulOutput: !this.s.flags["no-color"],
       screenLogLevel: this.s.flags.verbose ? "debug" : "info",
@@ -874,22 +877,31 @@ export class OperationRunner {
       fileErrorPolicy: "throw",
     });
     let lock: LockRecord | undefined;
-    let stopHeartbeat: (() => void) | undefined;
+    let lease: LockLease | undefined;
     let claimedApproval: Json | undefined;
-    const cleanups: Array<() => Promise<void> | void> = [];
+    const cleanups: Array<{
+      name: string;
+      critical: boolean;
+      handler: () => Promise<void> | void;
+    }> = [];
+    const cleanupErrors: Json[] = [];
+    const artifacts: Json[] = [];
+    let dangerousEffectStarted = false;
     const controller = new AbortController();
     let abortReason: "timeout" | "signal" | undefined;
     const timer = setTimeout(() => {
       abortReason = "timeout";
-      controller.abort();
+      controller.abort({ kind: "timeout", timeoutMs: timeout });
     }, timeout);
     const onSignal = () => {
       abortReason = "signal";
-      controller.abort();
+      controller.abort({ kind: "signal" });
     };
     process.once("SIGINT", onSignal);
     process.once("SIGTERM", onSignal);
     const started = Date.now();
+    let data: Json | undefined;
+    let primaryError: BenchPilotError | undefined;
     try {
       logger.event("operation.started", { command });
       if (capability.lockMode === "exclusive") {
@@ -899,7 +911,7 @@ export class OperationRunner {
           command,
           run?.id,
         );
-        stopHeartbeat = new LockManager(this.s.paths).startHeartbeat(lock);
+        lease = new LockManager(this.s.paths).startHeartbeat(lock);
         logger.event("lock.acquired", { lockId });
       }
       if (safety.mode === "human-approval") {
@@ -919,15 +931,38 @@ export class OperationRunner {
           signal: controller.signal,
           logger,
           run,
+          stateRoot: this.s.paths.stateRoot(),
           config: this.s.config.value,
           device: runtime,
-          registerCleanup(cleanup) {
-            cleanups.push(cleanup);
+          registerCleanup(name, handler, options) {
+            cleanups.push({
+              name,
+              handler,
+              critical: options?.critical ?? true,
+            });
+          },
+          markDangerousEffectStarted() {
+            dangerousEffectStarted = true;
+          },
+          registerArtifact(record) {
+            if (!run) fail("INVALID_ARTIFACT", 5, "Artifacts require a Run.");
+            const artifactRoot = path.join(run!.dir, "artifacts");
+            const absolute = resolveInside(artifactRoot, record.path);
+            if (absolute !== path.resolve(record.path))
+              fail(
+                "INVALID_ARTIFACT",
+                5,
+                "Artifact path must be inside the Run artifacts directory.",
+              );
+            artifacts.push({
+              ...record,
+              path: path.relative(run!.dir, absolute),
+            });
           },
         },
         input,
       );
-      const data = await Promise.race([
+      data = await Promise.race([
         execution,
         new Promise<never>((_, reject) =>
           controller.signal.addEventListener(
@@ -947,6 +982,7 @@ export class OperationRunner {
             { once: true },
           ),
         ),
+        lease?.lost ?? new Promise<never>(() => {}),
       ]);
       if (controller.signal.aborted)
         fail(
@@ -954,26 +990,15 @@ export class OperationRunner {
           6,
           "Operation aborted.",
         );
-      if (claimedApproval)
-        await new ApprovalManager(this.s.paths).consumeClaim(claimedApproval);
-      const artifacts = object(data) && data.artifact ? [data.artifact] : [];
-      const result = {
-        schema: "benchpilot.result",
-        version: 1,
-        ok: true,
-        command,
-        runId: run?.id,
-        durationMs: Date.now() - started,
-        data,
-        artifacts,
-      };
+      try {
+        data = capability.outputSchema?.parse(data) ?? data;
+      } catch (error) {
+        if (error instanceof BenchPilotError) throw error;
+        fail("INVALID_CAPABILITY_OUTPUT", 5, (error as Error).message);
+      }
       logger.event("stage.completed", { stage: capability.id });
-      logger.event("operation.completed", { runId: run?.id });
-      if (run)
-        await new RunManager(this.s.paths, "").finish(run, "succeeded", result);
-      return result;
     } catch (e: unknown) {
-      const err =
+      primaryError =
         e instanceof BenchPilotError
           ? e
           : new BenchPilotError(
@@ -989,45 +1014,159 @@ export class OperationRunner {
                   : "Operation timed out."
                 : (e as Error).message,
             );
-      logger.event(
-        "operation.failed",
-        { kind: err.kind, message: err.message },
-        { level: "error" },
-      );
-      const result = {
-        schema: "benchpilot.result",
-        version: 1,
-        ok: false,
-        command,
-        runId: run?.id,
-        durationMs: Date.now() - started,
-        kind: err.kind,
-        message: err.message,
-        retryable: err.retryable,
-        stage: err.stage,
-        recovery: err.recovery,
-        details: err.details,
-      };
-      if (run)
-        await new RunManager(this.s.paths, "").finish(
-          run,
-          controller.signal.aborted ? "aborted" : "failed",
-          result,
-        );
-      throw Object.assign(err, { result });
-    } finally {
-      clearTimeout(timer);
-      process.removeListener("SIGINT", onSignal);
-      process.removeListener("SIGTERM", onSignal);
-      if (lock) {
-        stopHeartbeat?.();
+    }
+    clearTimeout(timer);
+    process.removeListener("SIGINT", onSignal);
+    process.removeListener("SIGTERM", onSignal);
+    const cleanupWithGrace = async (
+      cleanup: () => Promise<void> | void,
+      name: string,
+    ) => {
+      let timer: NodeJS.Timeout | undefined;
+      try {
+        await Promise.race([
+          Promise.resolve(cleanup()),
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(
+              () =>
+                reject(
+                  new BenchPilotError(
+                    "CLEANUP_TIMEOUT",
+                    5,
+                    `Cleanup timed out: ${name}`,
+                  ),
+                ),
+              5_000,
+            );
+            timer.unref();
+          }),
+        ]);
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
+    };
+    for (const cleanup of cleanups.reverse()) {
+      try {
+        await cleanupWithGrace(cleanup.handler, cleanup.name);
+      } catch (error: unknown) {
+        cleanupErrors.push({
+          name: cleanup.name,
+          critical: cleanup.critical,
+          message: (error as Error).message,
+        });
+      }
+    }
+    if (lease) {
+      try {
+        await lease.stop();
+      } catch (error: unknown) {
+        cleanupErrors.push({
+          name: "lock-heartbeat",
+          critical: true,
+          message: (error as Error).message,
+        });
+      }
+    }
+    if (claimedApproval) {
+      try {
+        if (dangerousEffectStarted && (data || primaryError))
+          await new ApprovalManager(this.s.paths).consumeClaim(claimedApproval);
+        else
+          await new ApprovalManager(this.s.paths).releaseClaim(claimedApproval);
+      } catch (error: unknown) {
+        cleanupErrors.push({
+          name: "approval",
+          critical: true,
+          message: (error as Error).message,
+        });
+      }
+    }
+    if (lock) {
+      try {
         await new LockManager(this.s.paths).release(lock);
         logger.event("lock.released", { lockId: lock.lockId });
+      } catch (error: unknown) {
+        cleanupErrors.push({
+          name: "lock-release",
+          critical: true,
+          message: (error as Error).message,
+        });
       }
-      for (const cleanup of cleanups.reverse()) await cleanup();
-      if (claimedApproval && controller.signal.aborted)
-        await new ApprovalManager(this.s.paths).releaseClaim(claimedApproval);
-      await logger.close();
     }
+    if (primaryError)
+      logger.event(
+        "operation.failed",
+        {
+          kind: primaryError.kind,
+          message: primaryError.message,
+          cleanupErrors,
+        },
+        { level: "error" },
+      );
+    else logger.event("operation.completed", { runId: run?.id, cleanupErrors });
+    try {
+      await logger.close();
+    } catch (error: unknown) {
+      cleanupErrors.push({
+        name: "logger-close",
+        critical: true,
+        message: (error as Error).message,
+      });
+    }
+    const criticalCleanupFailed = cleanupErrors.some(
+      (error) => error.critical === true,
+    );
+    if (!artifacts.length && data && object(data) && object(data.artifact))
+      artifacts.push(data.artifact);
+    if (!primaryError && criticalCleanupFailed)
+      primaryError = new BenchPilotError(
+        "CLEANUP_FAILED",
+        5,
+        "Critical operation cleanup failed.",
+        false,
+        undefined,
+        [],
+        { cleanupErrors },
+      );
+    const ok = !primaryError;
+    const result: Json = ok
+      ? {
+          schema: "benchpilot.result",
+          version: 1,
+          ok: true,
+          command,
+          runId: run?.id,
+          durationMs: Date.now() - started,
+          data,
+          artifacts,
+          cleanupErrors,
+        }
+      : {
+          schema: "benchpilot.result",
+          version: 1,
+          ok: false,
+          command,
+          runId: run?.id,
+          durationMs: Date.now() - started,
+          kind: primaryError!.kind,
+          message: primaryError!.message,
+          retryable: primaryError!.retryable,
+          stage: primaryError!.stage,
+          recovery: primaryError!.recovery,
+          details: { ...primaryError!.details, cleanupErrors },
+        };
+    if (run)
+      await runManager.finalize(
+        run,
+        primaryError?.kind === "OPERATION_TIMEOUT" ||
+          primaryError?.kind === "OPERATION_ABORTED"
+          ? "aborted"
+          : ok
+            ? "succeeded"
+            : "failed",
+        result,
+      );
+    if (primaryError) throw Object.assign(primaryError, { result });
+    return result;
   }
 }

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -29,9 +29,26 @@ test("installed CLI surface initializes and runs the demo", async () => {
       JSON.parse(built.stdout).artifacts[0].sha256,
       /^[a-f0-9]{64}$/,
     );
+    const logs = JSON.parse(
+      (await run(dir, "device", "demo", "logs", "--duration", "2s", "--json"))
+        .stdout,
+    );
+    assert.equal(logs.data.durationMs, 2000);
     const jsonl = await run(dir, "device", "demo", "deploy", "--jsonl");
-    for (const line of jsonl.stdout.trim().split("\n"))
-      assert.doesNotThrow(() => JSON.parse(line));
+    const events = jsonl.stdout
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    assert.ok(
+      events.every(
+        (event) => event.schema === "benchpilot.event" && event.version === 1,
+      ),
+    );
+    assert.equal(events.at(-1).event.type, "operation.completed");
+    const commandJsonl = await run(dir, "config", "validate", "--jsonl");
+    const commandEvent = JSON.parse(commandJsonl.stdout);
+    assert.equal(commandEvent.schema, "benchpilot.event");
+    assert.equal(commandEvent.event.type, "command.result");
     const safe = await run(
       dir,
       "device",
@@ -43,6 +60,117 @@ test("installed CLI surface initializes and runs the demo", async () => {
       JSON.parse(safe.stdout).kind,
       "DANGEROUS_CONFIRMATION_REQUIRED",
     );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("injected adapter executes through the dynamic CLI route", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "benchpilot-injected-"));
+  try {
+    await (
+      await import("node:fs/promises")
+    ).writeFile(
+      path.join(dir, "benchpilot.toml"),
+      'version = 1\n[devices.test-device]\nadapter = "test"\n',
+    );
+    const module = path.resolve("dist/cli/index.js").replaceAll("\\", "/");
+    const script = `import { main } from ${JSON.stringify(`file:///${module}`)}; const adapter = { id: "test", version: "1", summary: "test adapter", discover: async () => [{ adapter: "test", id: "candidate" }], doctor: async () => [], createDevice: async (instance) => ({ identity: { instance, physicalId: "test-physical", adapter: "test" }, capabilities: () => [{ id: "echo", summary: "echo", defaultTimeoutMs: 1000, lockMode: "none", createsRun: false, safety: { mode: "normal" }, execute: async (_ctx, input) => ({ echoed: input.duration ?? "ok" }) }] }) }; process.argv = [process.execPath, "benchpilot", "device", "test-device", "echo", "--json"]; await main([adapter]);`;
+    const result = await exec(
+      process.execPath,
+      ["--input-type=module", "-e", script],
+      {
+        cwd: dir,
+        env: {
+          ...process.env,
+          BENCHPILOT_HOME: path.join(dir, "home"),
+          BENCHPILOT_NO_AUTORUN: "1",
+        },
+        encoding: "utf8",
+      },
+    );
+    assert.equal(JSON.parse(result.stdout).data.echoed, "ok");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("demo state persists and disconnected devices reject hardware operations", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "benchpilot-demo-state-"));
+  try {
+    await run(dir, "init");
+    await run(dir, "device", "demo", "run", "--json");
+    const status = JSON.parse(
+      (await run(dir, "device", "demo", "status", "--json")).stdout,
+    );
+    assert.equal(status.data.running, true);
+    const configFile = path.join(dir, "benchpilot.toml");
+    await writeFile(
+      configFile,
+      (await readFile(configFile, "utf8")).replace(
+        "connected = true",
+        "connected = false",
+      ),
+    );
+    const built = JSON.parse(
+      (await run(dir, "device", "demo", "build", "--json")).stdout,
+    );
+    assert.equal(built.ok, true);
+    const flash = await run(dir, "device", "demo", "flash", "--json").catch(
+      (error) => error,
+    );
+    assert.equal(JSON.parse(flash.stdout).kind, "DEVICE_NOT_CONNECTED");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("dry-run creates no run, lock, approval, or artifact state", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "benchpilot-dry-run-"));
+  try {
+    await run(dir, "init");
+    const plan = JSON.parse(
+      (await run(dir, "device", "demo", "build", "--dry-run", "--json")).stdout,
+    );
+    assert.equal(plan.dryRun, true);
+    assert.deepEqual(
+      JSON.parse((await run(dir, "runs", "list", "--json")).stdout).runs,
+      [],
+    );
+    assert.deepEqual(
+      JSON.parse((await run(dir, "locks", "list", "--json")).stdout).locks,
+      [],
+    );
+    assert.deepEqual(
+      JSON.parse((await run(dir, "approvals", "list", "--json")).stdout)
+        .approvals,
+      [],
+    );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("demo factory reset clears persistent state", async () => {
+  const dir = await mkdtemp(
+    path.join(os.tmpdir(), "benchpilot-factory-reset-"),
+  );
+  try {
+    await run(dir, "init");
+    await run(dir, "device", "demo", "run", "--json");
+    await run(
+      dir,
+      "device",
+      "demo",
+      "factory-reset",
+      "--dangerously-reset-demo-state",
+      "--json",
+    );
+    const status = JSON.parse(
+      (await run(dir, "device", "demo", "status", "--json")).stdout,
+    );
+    assert.equal(status.data.running, false);
+    assert.equal(status.data.resetCount, 0);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
