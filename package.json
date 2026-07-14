@@ -1,0 +1,36 @@
+{
+  "name": "benchpilot",
+  "version": "0.0.0",
+  "description": "Agent-first embedded device lifecycle toolkit.",
+  "license": "MIT",
+  "author": "RavelloH",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RavelloH/benchpilot.git"
+  },
+  "bugs": {
+    "url": "https://github.com/RavelloH/benchpilot/issues"
+  },
+  "homepage": "https://github.com/RavelloH/benchpilot#readme",
+  "keywords": [
+    "embedded",
+    "firmware",
+    "automation",
+    "device-management",
+    "agent",
+    "cli",
+    "hardware",
+    "microcontroller"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "README.md",
+    "LICENSE"
+  ]
+}
