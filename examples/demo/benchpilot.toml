@@ -1,0 +1,12 @@
+version = 1
+[project]
+id = "benchpilot-demo"
+name = "BenchPilot Demo"
+[devices.demo]
+adapter = "demo"
+[systems.demo]
+devices = ["demo"]
+[adapters.demo]
+connected = true
+deviceId = "demo-device-01"
+operationDelayMs = 50

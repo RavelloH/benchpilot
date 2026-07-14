@@ -5,6 +5,18 @@
   "license": "MIT",
   "author": "RavelloH",
   "type": "module",
+  "packageManager": "pnpm@11.1.3",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "benchpilot": "./dist/cli/index.js"
+  },
   "engines": {
     "node": ">=20"
   },
@@ -30,7 +42,34 @@
     "access": "public"
   },
   "files": [
+    "dist",
     "README.md",
-    "LICENSE"
-  ]
+    "LICENSE",
+    "docs"
+  ],
+  "scripts": {
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "pnpm run build && node --test test/**/*.test.js",
+    "test:coverage": "pnpm run build && node --test --experimental-test-coverage test/**/*.test.js",
+    "pack:check": "pnpm pack --dry-run",
+    "format": "prettier --write . --log-level warn",
+    "format:check": "prettier --check . --log-level warn",
+    "prepare": "husky"
+  },
+  "dependencies": {
+    "@iarna/toml": "^2.2.5",
+    "rlog-js": "^3.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
+    "prettier": "^3.8.3",
+    "typescript": "^5.6.0"
+  },
+  "lint-staged": {
+    "*.{js,mjs,cjs,ts,tsx,json,yml,yaml,md}": "prettier --write --ignore-unknown"
+  }
 }
