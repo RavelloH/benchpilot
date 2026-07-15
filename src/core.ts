@@ -24,6 +24,10 @@ import type {
   CleanupError,
   OperationOutcome,
 } from "./core/operations/operation-outcome.js";
+import type {
+  OperationContext,
+  OperationServices,
+} from "./core/operations/types.js";
 import { PathService } from "./core/paths/path-service.js";
 import { atomicJson } from "./core/utilities/atomic-json.js";
 import { sha, stable } from "./core/utilities/stable-json.js";
@@ -97,6 +101,10 @@ export type {
   CleanupError,
   OperationOutcome,
 } from "./core/operations/operation-outcome.js";
+export type {
+  OperationContext,
+  OperationServices,
+} from "./core/operations/types.js";
 export {
   abortPromise,
   abortReasonToError,
@@ -357,39 +365,6 @@ export interface Capability {
 export interface DeviceRuntime {
   identity: { instance: string; physicalId: string; adapter: string };
   capabilities(): Capability[];
-}
-export interface OperationContext {
-  signal: AbortSignal;
-  logger: InstanceType<typeof Rlog>;
-  run?: Run;
-  stateRoot: string;
-  config: Json;
-  device: DeviceRuntime;
-  registerCleanup(
-    name: string,
-    handler: () => Promise<void> | void,
-    options?: { critical?: boolean },
-  ): void;
-  readonly dangerousEffect: {
-    readonly started: boolean;
-    readonly startedAt?: string;
-    readonly details?: Json;
-  };
-  markDangerousEffectStarted(details?: Json): void;
-  emitEvent(type: string, data?: Json): void;
-  registerArtifact(
-    record: ArtifactRegistration,
-  ): Promise<RegisteredArtifactRecord>;
-}
-export interface OperationServices {
-  paths: PathService;
-  registry: AdapterRegistry;
-  config: ResolvedConfig;
-  project: { root: string; config: string } | undefined;
-  flags: Json;
-  lockHeartbeatIntervalMs?: number;
-  lockLeaseMs?: number;
-  eventWriter?: BenchPilotEventWriter;
 }
 export class OperationRunner {
   constructor(private s: OperationServices) {}
