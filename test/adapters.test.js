@@ -188,3 +188,27 @@ test("platform overlays cannot override capability definitions", async () => {
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("embedded adapter schemas must compile", async () => {
+  const root = await temporaryAdapter();
+  try {
+    await writeFile(
+      join(root, "schemas", "inputs.schema.json"),
+      JSON.stringify({
+        $schema: "https://json-schema.org/draft/2020-12/schema",
+        type: "object",
+        $defs: { bad: { $ref: "#/missing" } },
+      }),
+    );
+    const result = await validateAdapter(root);
+    assert.ok(
+      result.diagnostics.some(
+        (item) =>
+          item.code === "ADAPTER_SCHEMA_INVALID" &&
+          item.file === "schemas/inputs.schema.json",
+      ),
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
