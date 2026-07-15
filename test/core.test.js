@@ -667,7 +667,7 @@ test("lock ownership loss aborts the capability and preserves the replacement", 
       registry,
       project: undefined,
       flags: { quiet: true },
-      lockHeartbeatIntervalMs: 10,
+      lockHeartbeatIntervalMs: 1_000,
       lockLeaseMs: 100,
       config: {
         value: { devices: { device: { adapter: "lock-loss" } } },

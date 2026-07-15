@@ -1,4 +1,5 @@
-import type { DeviceRuntime, Json } from "../../core.js";
+import type { DeviceRuntime } from "../capabilities/types.js";
+import type { Json } from "../config/config.js";
 import type { RuntimeSchema } from "./schemas.js";
 
 export interface Adapter {

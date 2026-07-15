@@ -1,5 +1,6 @@
 import RlogModule from "rlog-js";
-import type { Json, DeviceRuntime, ResolvedConfig } from "../../core.js";
+import type { DeviceRuntime } from "../capabilities/types.js";
+import type { Json, ResolvedConfig } from "../config/config.js";
 import type { AdapterRegistry } from "../adapters/registry.js";
 import type {
   ArtifactRegistration,

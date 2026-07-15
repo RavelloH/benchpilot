@@ -11,3 +11,8 @@ contains no real hardware adapter.
 `runProcess` is a shell-free future-adapter helper. It binds a child process to an
 operation AbortSignal and waits for it to exit before cleanup can release the
 physical lock.
+
+`src/core.ts` is a compatibility export surface only. Implementations live in
+`core/config`, `core/capabilities`, `core/operations`, `core/process`, and their
+resource-specific modules. CLI startup remains in `cli/index.ts`; project setup,
+configuration mutation, and system workflows live under `cli/commands`.
