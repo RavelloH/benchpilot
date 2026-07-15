@@ -8,8 +8,198 @@
     "schema_version": { "const": 1 },
     "actions": {
       "type": "object",
-      "propertyNames": { "pattern": "^[a-z][a-z0-9-]*$" },
-      "additionalProperties": { "type": "object" }
+      "propertyNames": { "$ref": "#/$defs/id" },
+      "additionalProperties": { "$ref": "#/$defs/action" }
+    }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+    "template": { "type": "string", "minLength": 1 },
+    "duration": { "type": "string", "pattern": "^[1-9][0-9]*(ms|s|m|h)$" },
+    "condition": {
+      "type": "object",
+      "required": ["path", "operator"],
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^(?!.*(__proto__|prototype|constructor|\\$\\{))[a-z][a-z0-9_]*(\\.[a-zA-Z][a-zA-Z0-9_]*)*$"
+        },
+        "operator": {
+          "enum": [
+            "exists",
+            "not-exists",
+            "equals",
+            "not-equals",
+            "in",
+            "not-in",
+            "truthy",
+            "falsy"
+          ]
+        },
+        "value": {}
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "operator": { "enum": ["equals", "not-equals"] } }
+          },
+          "then": { "required": ["value"] }
+        },
+        {
+          "if": { "properties": { "operator": { "enum": ["in", "not-in"] } } },
+          "then": {
+            "required": ["value"],
+            "properties": { "value": { "type": "array" } }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operator": {
+                "enum": ["exists", "not-exists", "truthy", "falsy"]
+              }
+            }
+          },
+          "then": { "not": { "required": ["value"] } }
+        }
+      ]
+    },
+    "argument": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["kind", "value"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "const": "literal" },
+            "value": { "$ref": "#/$defs/template" },
+            "when": { "$ref": "#/$defs/condition" }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["kind", "value"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "const": "value" },
+            "value": { "$ref": "#/$defs/template" },
+            "when": { "$ref": "#/$defs/condition" }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["kind", "flag", "value"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "const": "option" },
+            "flag": { "type": "string", "minLength": 1 },
+            "value": { "$ref": "#/$defs/template" },
+            "when": { "$ref": "#/$defs/condition" }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["kind", "flag"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "const": "flag" },
+            "flag": { "type": "string", "minLength": 1 },
+            "when": { "$ref": "#/$defs/condition" }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["kind", "values"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "const": "repeat" },
+            "values": { "$ref": "#/$defs/template" },
+            "prefix": { "type": "string" },
+            "when": { "$ref": "#/$defs/condition" }
+          }
+        }
+      ]
+    },
+    "shared": {
+      "timeout": { "$ref": "#/$defs/duration" },
+      "parser": { "$ref": "#/$defs/id" },
+      "artifact_set": { "$ref": "#/$defs/id" }
+    },
+    "process": {
+      "type": "object",
+      "required": ["type", "tool", "cwd", "arguments"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "process" },
+        "tool": { "$ref": "#/$defs/id" },
+        "cwd": { "$ref": "#/$defs/template" },
+        "arguments": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/argument" }
+        },
+        "env": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/template" }
+        },
+        "timeout": { "$ref": "#/$defs/duration" },
+        "parser": { "$ref": "#/$defs/id" },
+        "artifact_set": { "$ref": "#/$defs/id" }
+      }
+    },
+    "serialRead": {
+      "type": "object",
+      "required": ["type", "port", "baud", "duration", "encoding", "line_mode"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "serial-read" },
+        "port": { "$ref": "#/$defs/template" },
+        "baud": { "$ref": "#/$defs/template" },
+        "duration": { "$ref": "#/$defs/template" },
+        "encoding": { "type": "string" },
+        "line_mode": { "type": "boolean" },
+        "timeout": { "$ref": "#/$defs/duration" },
+        "parser": { "$ref": "#/$defs/id" },
+        "artifact_set": { "$ref": "#/$defs/id" }
+      }
+    },
+    "serialWrite": {
+      "type": "object",
+      "required": ["type", "port", "baud", "data", "encoding"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "serial-write" },
+        "port": { "$ref": "#/$defs/template" },
+        "baud": { "$ref": "#/$defs/template" },
+        "data": { "$ref": "#/$defs/template" },
+        "encoding": { "type": "string" },
+        "timeout": { "$ref": "#/$defs/duration" },
+        "parser": { "$ref": "#/$defs/id" },
+        "artifact_set": { "$ref": "#/$defs/id" }
+      }
+    },
+    "copy": {
+      "type": "object",
+      "required": ["type", "from", "to", "recursive", "overwrite"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "copy" },
+        "from": { "$ref": "#/$defs/template" },
+        "to": { "$ref": "#/$defs/template" },
+        "recursive": { "type": "boolean" },
+        "overwrite": { "type": "boolean" },
+        "timeout": { "$ref": "#/$defs/duration" },
+        "parser": { "$ref": "#/$defs/id" },
+        "artifact_set": { "$ref": "#/$defs/id" }
+      }
+    },
+    "action": {
+      "oneOf": [
+        { "$ref": "#/$defs/process" },
+        { "$ref": "#/$defs/serialRead" },
+        { "$ref": "#/$defs/serialWrite" },
+        { "$ref": "#/$defs/copy" }
+      ]
     }
   }
 }

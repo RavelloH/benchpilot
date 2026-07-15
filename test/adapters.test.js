@@ -266,3 +266,23 @@ test("tool launch modes reject command and tool together", async () => {
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("action schemas reject unknown fields", async () => {
+  const root = await temporaryAdapter();
+  try {
+    await writeFile(
+      join(root, "actions.toml"),
+      `schema = "benchpilot.adapter.actions"\nschema_version = 1\n[actions.bad]\ntype = "copy"\nfrom = "a"\nto = "b"\nrecursive = true\noverwrite = true\nshell = true\n`,
+    );
+    const result = await validateAdapter(root);
+    assert.ok(
+      result.diagnostics.some(
+        (item) =>
+          item.code === "ADAPTER_SCHEMA_INVALID" &&
+          item.file === "actions.toml",
+      ),
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
