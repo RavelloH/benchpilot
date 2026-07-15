@@ -6,6 +6,52 @@
   "properties": {
     "schema": { "const": "benchpilot.adapter.tools" },
     "schema_version": { "const": 1 },
-    "tools": { "type": "object" }
+    "tools": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/id" },
+      "additionalProperties": { "$ref": "#/$defs/tool" }
+    }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+    "arguments": { "type": "array", "items": { "type": "string" } },
+    "directLaunch": {
+      "type": "object",
+      "required": ["mode", "command", "prefix_args", "environment"],
+      "additionalProperties": false,
+      "properties": {
+        "mode": { "const": "direct" },
+        "command": { "type": "string", "minLength": 1 },
+        "prefix_args": { "$ref": "#/$defs/arguments" },
+        "environment": { "$ref": "#/$defs/id" }
+      }
+    },
+    "viaToolLaunch": {
+      "type": "object",
+      "required": ["mode", "tool", "prefix_args", "environment"],
+      "additionalProperties": false,
+      "properties": {
+        "mode": { "const": "via-tool" },
+        "tool": { "$ref": "#/$defs/id" },
+        "prefix_args": { "$ref": "#/$defs/arguments" },
+        "environment": { "$ref": "#/$defs/id" }
+      }
+    },
+    "tool": {
+      "type": "object",
+      "required": ["description", "required", "discovery", "launch"],
+      "additionalProperties": false,
+      "properties": {
+        "description": { "type": "string", "minLength": 1 },
+        "required": { "type": "boolean" },
+        "discovery": { "$ref": "#/$defs/id" },
+        "launch": {
+          "oneOf": [
+            { "$ref": "#/$defs/directLaunch" },
+            { "$ref": "#/$defs/viaToolLaunch" }
+          ]
+        }
+      }
+    }
   }
 }

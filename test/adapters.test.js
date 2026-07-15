@@ -247,3 +247,22 @@ test("platform filenames and platform declarations must agree", async () => {
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("tool launch modes reject command and tool together", async () => {
+  const root = await temporaryAdapter();
+  try {
+    await writeFile(
+      join(root, "tools.toml"),
+      `schema = "benchpilot.adapter.tools"\nschema_version = 1\n[tools.bad]\ndescription = "Bad"\nrequired = true\ndiscovery = "missing"\n[tools.bad.launch]\nmode = "direct"\ncommand = "tool"\ntool = "other"\nprefix_args = []\nenvironment = "inherit"\n`,
+    );
+    const result = await validateAdapter(root);
+    assert.ok(
+      result.diagnostics.some(
+        (item) =>
+          item.code === "ADAPTER_SCHEMA_INVALID" && item.file === "tools.toml",
+      ),
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
