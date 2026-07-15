@@ -2,7 +2,6 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { stdin, stdout } from "node:process";
-import TOML from "@iarna/toml";
 import {
   Adapter,
   ApprovalManager,
@@ -34,7 +33,10 @@ import {
   isCommandGroup,
   systemCapabilities,
 } from "./help-renderer.js";
-import { type Flags, parse } from "./parser.js";
+import { parse } from "./parser.js";
+import { editConfig } from "./commands/config-editor.js";
+import { initProject } from "./commands/init.js";
+import { systemOperation } from "./commands/system.js";
 import {
   capabilityInput,
   commandOptionFlags,
@@ -43,125 +45,6 @@ import {
 import { write } from "./output-renderer.js";
 
 const version = "0.0.0";
-async function init() {
-  const file = path.join(process.cwd(), "benchpilot.toml");
-  try {
-    await fs.access(file);
-    fail(
-      "CONFIG_EXISTS",
-      3,
-      `${file} already exists; refusing to overwrite it.`,
-    );
-  } catch (e) {
-    if (e instanceof BenchPilotError) throw e;
-  }
-  await fs.writeFile(
-    file,
-    `version = 1\n\n[project]\nid = "benchpilot-demo"\nname = "BenchPilot Demo"\n\n[devices.demo]\nadapter = "demo"\n\n[systems.demo]\ndevices = ["demo"]\n\n[adapters.demo]\nconnected = true\ndevice_id = "demo-device-01"\noperation_delay_ms = 50\n`,
-  );
-  await fs.mkdir(path.join(process.cwd(), ".benchpilot"), { recursive: true });
-  await fs.writeFile(
-    path.join(process.cwd(), ".benchpilot", ".gitignore"),
-    "*\n!.gitignore\n",
-  );
-  return { created: file, adapter: "demo", simulated: true };
-}
-async function editConfig(
-  paths: PathService,
-  project: Awaited<ReturnType<PathService["project"]>>,
-  flags: Flags,
-  key: string,
-  value?: string,
-) {
-  const scopes = ["local", "project", "global"].filter(
-    (x) => flags[x],
-  ) as string[];
-  if (scopes.length > 1)
-    fail("USAGE_ERROR", 2, "Choose only one configuration scope.");
-  const scope = scopes[0] || (project ? "local" : "global");
-  const file =
-    scope === "local"
-      ? project && path.join(project.root, ".benchpilot", "config.local.toml")
-      : scope === "project"
-        ? project?.config
-        : paths.globalConfig();
-  if (!file)
-    fail("PROJECT_NOT_FOUND", 3, "--project requires a BenchPilot project.");
-  const targetFile = file!;
-  let config: Json = {};
-  try {
-    config = TOML.parse(await fs.readFile(targetFile, "utf8")) as Json;
-  } catch (e: unknown) {
-    if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
-  }
-  if (value === undefined) deleteKey(config, key);
-  else {
-    let v: unknown = value;
-    if (value === "true" || value === "false") v = value === "true";
-    else if (/^-?\d+(\.\d+)?$/.test(value)) v = Number(value);
-    else
-      try {
-        v = JSON.parse(value);
-      } catch {}
-    setKey(config, key, v);
-  }
-  validateConfig(config);
-  await fs.mkdir(path.dirname(targetFile), { recursive: true });
-  const temp = `${targetFile}.${process.pid}.tmp`;
-  await fs.writeFile(temp, TOML.stringify(config as never));
-  await fs.rename(temp, targetFile);
-  return {
-    scope,
-    path: targetFile,
-    key,
-    value: value === undefined ? undefined : getKey(config, key),
-  };
-}
-async function systemOperation(
-  name: string,
-  op: string,
-  runner: OperationRunner,
-  config: Json,
-) {
-  const sys = (config.systems as Json | undefined)?.[name];
-  if (!sys || typeof sys !== "object" || !Array.isArray((sys as Json).devices))
-    fail("SYSTEM_NOT_FOUND", 3, `System not found: ${name}`);
-  const devices = (sys as Json).devices as string[];
-  if (op === "info")
-    return { system: name, devices, operations: systemCapabilities };
-  if (op === "status")
-    return {
-      system: name,
-      results: await Promise.all(
-        devices.map(async (d) => ({
-          device: d,
-          result: await runner.execute(d, "status", {}),
-        })),
-      ),
-    };
-  if (op === "emergency-stop") {
-    const results = [];
-    for (const d of devices)
-      try {
-        results.push({
-          device: d,
-          result: await runner.execute(d, "stop", {}),
-        });
-      } catch (e) {
-        results.push({ device: d, error: (e as Error).message });
-      }
-    return { system: name, results };
-  }
-  const capability =
-    op === "smoke" ? "selftest" : op === "collect" ? "capture" : "deploy";
-  const results = [];
-  for (const d of [...devices].sort())
-    results.push({
-      device: d,
-      result: await runner.execute(d, capability, {}),
-    });
-  return { system: name, operation: op, results };
-}
 export async function main(adapters: Adapter[] = [demoAdapter]) {
   let parsed;
   try {
@@ -203,7 +86,7 @@ export async function main(adapters: Adapter[] = [demoAdapter]) {
     }
     const paths = new PathService();
     if (parts[0] === "init") {
-      write(await init(), flags, "Initialized BenchPilot demo project.");
+      write(await initProject(), flags, "Initialized BenchPilot demo project.");
       return;
     }
     const project = await paths.project(
