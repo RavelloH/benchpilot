@@ -28,6 +28,7 @@ import type {
   OperationContext,
   OperationServices,
 } from "./core/operations/types.js";
+import { runCleanupWithGrace } from "./core/operations/cleanup.js";
 import { PathService } from "./core/paths/path-service.js";
 import { atomicJson } from "./core/utilities/atomic-json.js";
 import { sha, stable } from "./core/utilities/stable-json.js";
@@ -105,6 +106,7 @@ export type {
   OperationContext,
   OperationServices,
 } from "./core/operations/types.js";
+export { runCleanupWithGrace } from "./core/operations/cleanup.js";
 export {
   abortPromise,
   abortReasonToError,
@@ -710,36 +712,9 @@ export class OperationRunner {
     clearTimeout(timer);
     process.removeListener("SIGINT", onSigint);
     process.removeListener("SIGTERM", onSigterm);
-    const cleanupWithGrace = async (
-      cleanup: () => Promise<void> | void,
-      name: string,
-    ) => {
-      let timer: NodeJS.Timeout | undefined;
-      try {
-        await Promise.race([
-          Promise.resolve(cleanup()),
-          new Promise<never>((_, reject) => {
-            timer = setTimeout(
-              () =>
-                reject(
-                  new BenchPilotError(
-                    "CLEANUP_TIMEOUT",
-                    5,
-                    `Cleanup timed out: ${name}`,
-                  ),
-                ),
-              5_000,
-            );
-            timer.unref();
-          }),
-        ]);
-      } finally {
-        if (timer) clearTimeout(timer);
-      }
-    };
     for (const cleanup of cleanups.reverse()) {
       try {
-        await cleanupWithGrace(cleanup.handler, cleanup.name);
+        await runCleanupWithGrace(cleanup.handler, cleanup.name);
       } catch (error: unknown) {
         cleanupErrors.push({
           name: cleanup.name,
