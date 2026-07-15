@@ -12,6 +12,7 @@ import {
 import { mergePlatform } from "../dist/adapters/compiler/platform-merger.js";
 import { runCases } from "../dist/adapters/compiler/case-runner.js";
 import { loadAdapter } from "../dist/adapters/compiler/loader.js";
+import { validateSemantics } from "../dist/adapters/compiler/semantic-validator.js";
 
 const template = join(process.cwd(), "src", "adapters", "_template");
 const complete = join(
@@ -166,6 +167,84 @@ test("tool discovery probes reference declared parsers", async () => {
   }
 });
 
+test("semantic discovery and device references are validated exactly once", async () => {
+  const root = await mkdtemp(join(tmpdir(), "benchpilot-semantic-references-"));
+  const adapterRoot = join(root, "complete");
+  const deviceRules = ({
+    source = "serial",
+    action = "run",
+    parser = "text",
+  } = {}) =>
+    `schema = "benchpilot.adapter.devices"\nschema_version = 1\n[discovery]\nenabled = true\n[[discovery.sources]]\nid = "serial"\ntype = "serial"\n[[discovery.matchers]]\nid = "serial-present"\nsource = "${source}"\nfield = "serial"\noperator = "exists"\nscore = 1\n[identity]\nfields = ["device.id"]\nallow_port_fallback = false\n[probe]\nenabled = true\naction = "${action}"\nparser = "${parser}"\nmay_reset_device = false\ndestructive = false\n`;
+  const toolDiscoveries = (count, probe = "text") =>
+    `schema = "benchpilot.adapter.tool-discovery"\nschema_version = 1\n${Array.from(
+      { length: count },
+      (_, index) =>
+        `[discoveries.discovery-${index}]\nstrategy = "first-valid"\n[[discoveries.discovery-${index}.candidates]]\nid = "first"\ntype = "fixed"\npriority = 2\n[[discoveries.discovery-${index}.candidates]]\nid = "second"\ntype = "fixed"\npriority = 1\n[discoveries.discovery-${index}.validation]\npath_type = "file"\nexecutable = false\n[discoveries.discovery-${index}.probe]\nargs = []\nparser = "${probe}"\ntimeout = "1s"\n`,
+    ).join("\n")}`;
+  const messages = async () =>
+    (await validateSemantics(await loadAdapter(adapterRoot), catalog)).map(
+      (item) => item.message,
+    );
+  const assertOne = (items, message) =>
+    assert.equal(items.filter((item) => item === message).length, 1, message);
+  try {
+    await cp(complete, adapterRoot, { recursive: true });
+
+    await writeFile(
+      join(adapterRoot, "tool-discovery.toml"),
+      'schema = "benchpilot.adapter.tool-discovery"\nschema_version = 1\n[discoveries]\n',
+    );
+    await writeFile(
+      join(adapterRoot, "devices.toml"),
+      deviceRules({ source: "missing" }),
+    );
+    assertOne(
+      await messages(),
+      "Matcher serial-present source reference does not exist: missing",
+    );
+
+    await writeFile(
+      join(adapterRoot, "tool-discovery.toml"),
+      toolDiscoveries(1, "missing"),
+    );
+    await writeFile(join(adapterRoot, "devices.toml"), deviceRules());
+    assertOne(
+      await messages(),
+      "Discovery discovery-0 probe parser reference does not exist: missing",
+    );
+
+    await writeFile(
+      join(adapterRoot, "tool-discovery.toml"),
+      toolDiscoveries(2),
+    );
+    await writeFile(
+      join(adapterRoot, "devices.toml"),
+      deviceRules({ source: "missing" }),
+    );
+    assertOne(
+      await messages(),
+      "Matcher serial-present source reference does not exist: missing",
+    );
+
+    await writeFile(
+      join(adapterRoot, "devices.toml"),
+      deviceRules({ action: "missing-action", parser: "missing-parser" }),
+    );
+    const probeMessages = await messages();
+    assertOne(
+      probeMessages,
+      "Device probe action reference does not exist: missing-action",
+    );
+    assertOne(
+      probeMessages,
+      "Device probe parser reference does not exist: missing-parser",
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("JSON Pointer extracts share strict cast handling with regex extracts", async () => {
   const root = await mkdtemp(join(tmpdir(), "benchpilot-parser-casts-"));
   const adapterRoot = join(root, "complete");
@@ -228,6 +307,10 @@ test("artifact plans preserve path and glob entries and reject unsafe paths", as
 test("complete adapter fixture validates, compiles, and exercises all case types", async () => {
   const validation = await validateAdapter(complete);
   assert.deepEqual(validation.diagnostics, []);
+  assert.deepEqual(
+    await validateSemantics(await loadAdapter(complete), catalog),
+    [],
+  );
   const compiled = await compileAdapter(complete);
   assert.deepEqual(compiled.diagnostics, []);
   assert.equal(compiled.bundle.capabilityCatalog.version, 1);
