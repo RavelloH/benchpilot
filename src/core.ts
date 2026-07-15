@@ -567,6 +567,7 @@ export class OperationRunner {
     let data: Json | undefined;
     let primaryError: BenchPilotError | undefined;
     let approvalLoss = new Promise<never>(() => {});
+    let capabilityStageStarted = false;
     try {
       emit("operation.started", { command, runId: run?.id });
       if (capability.lockMode === "exclusive") {
@@ -602,6 +603,7 @@ export class OperationRunner {
         approvalLease = new ApprovalManager(this.s.paths).startClaimLease(
           claimedApproval,
         );
+        emit("approval.claimed", { approvalId: claimedApproval.id });
         approvalLoss = approvalLease.lost.then((error) => {
           if (!controller.signal.aborted)
             controller.abort({
@@ -611,6 +613,7 @@ export class OperationRunner {
           throw error;
         });
       }
+      capabilityStageStarted = true;
       emit("stage.started", { stage: capability.id });
       const execution = capability.execute(
         {
@@ -708,17 +711,29 @@ export class OperationRunner {
                 ? abortReasonToError(controller.signal.reason).message
                 : (e as Error).message,
             );
+      if (capabilityStageStarted)
+        emit("stage.failed", {
+          stage: capability.id,
+          kind: primaryError.kind,
+          message: primaryError.message,
+        });
     }
     clearTimeout(timer);
     process.removeListener("SIGINT", onSigint);
     process.removeListener("SIGTERM", onSigterm);
+    emit("cleanup.started");
     for (const cleanup of cleanups.reverse()) {
       try {
         await runCleanupWithGrace(cleanup.handler, cleanup.name);
+        emit("cleanup.completed", { name: cleanup.name });
       } catch (error: unknown) {
         cleanupErrors.push({
           name: cleanup.name,
           critical: cleanup.critical,
+          message: (error as Error).message,
+        });
+        emit("cleanup.failed", {
+          name: cleanup.name,
           message: (error as Error).message,
         });
       }

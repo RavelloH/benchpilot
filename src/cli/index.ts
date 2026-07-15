@@ -722,11 +722,12 @@ export async function main(adapters: Adapter[] = [demoAdapter]) {
       flags.jsonl &&
       !(err as BenchPilotError & { jsonlTerminalEmitted?: boolean })
         .jsonlTerminalEmitted
-    )
+    ) {
+      const isOperation = ["device", "system"].includes(parsed?.path[0] || "");
       stdout.write(
-        `${JSON.stringify({ schema: "benchpilot.event", version: 1, event: { type: "operation.failed", timestamp: new Date().toISOString() }, context: {}, data: { error: result } })}\n`,
+        `${JSON.stringify({ schema: "benchpilot.event", version: 1, event: { type: isOperation ? "operation.failed" : "command.failed", timestamp: new Date().toISOString() }, context: {}, data: { error: result } })}\n`,
       );
-    else process.stderr.write(`${err.kind}: ${err.message}\n`);
+    } else process.stderr.write(`${err.kind}: ${err.message}\n`);
     process.exitCode = err.exitCode;
   }
 }

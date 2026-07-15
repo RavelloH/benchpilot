@@ -68,6 +68,10 @@ test("installed CLI surface initializes and runs the demo", async () => {
     const commandEvent = JSON.parse(commandJsonl.stdout);
     assert.equal(commandEvent.schema, "benchpilot.event");
     assert.equal(commandEvent.event.type, "command.result");
+    const failedCommand = await run(dir, "config", "unknown", "--jsonl").catch(
+      (error) => error,
+    );
+    assert.equal(JSON.parse(failedCommand.stdout).event.type, "command.failed");
     const safe = await run(
       dir,
       "device",
@@ -186,6 +190,48 @@ test("demo state persists and disconnected devices reject hardware operations", 
       (error) => error,
     );
     assert.equal(JSON.parse(flash.stdout).kind, "DEVICE_NOT_CONNECTED");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("demo device connectivity falls back to the device and honors adapter override", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "benchpilot-demo-config-"));
+  try {
+    const config = path.join(dir, "benchpilot.toml");
+    await writeFile(
+      config,
+      [
+        "version = 1",
+        "[devices.demo]",
+        'adapter = "demo"',
+        "connected = false",
+      ].join("\n"),
+    );
+    const disconnected = await run(
+      dir,
+      "device",
+      "demo",
+      "flash",
+      "--json",
+    ).catch((error) => error);
+    assert.equal(JSON.parse(disconnected.stdout).kind, "DEVICE_NOT_CONNECTED");
+    await writeFile(
+      config,
+      [
+        "version = 1",
+        "[devices.demo]",
+        'adapter = "demo"',
+        "connected = false",
+        "[adapters.demo]",
+        "connected = true",
+      ].join("\n"),
+    );
+    assert.equal(
+      JSON.parse((await run(dir, "device", "demo", "flash", "--json")).stdout)
+        .ok,
+      true,
+    );
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

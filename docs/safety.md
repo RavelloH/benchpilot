@@ -8,3 +8,6 @@ Approvals are read-only checked before a Run and claimed only after the device l
 Claims carry a bounded lease. A capability can mark when a dangerous effect starts:
 pre-effect failure releases the claim, while failures after that marker consume it to
 preserve the audit trail.
+
+For the Demo adapter, `[adapters.demo].connected` is the explicit global
+override. When it is absent, an individual device's `connected` value is used.

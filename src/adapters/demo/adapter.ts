@@ -337,7 +337,12 @@ class DemoDevice implements DeviceRuntime {
     return { ...artifact };
   }
   private connected(ctx: OperationContext) {
-    return settings(ctx).connected !== false;
+    // A global adapter setting is an explicit override. Device-local state is
+    // the fallback for independently configured simulated devices.
+    const adapterConnected = settings(ctx).connected;
+    return adapterConnected !== undefined
+      ? adapterConnected !== false
+      : this.config.connected !== false;
   }
   private stateFile(ctx: OperationContext) {
     return path.join(

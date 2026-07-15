@@ -40,12 +40,6 @@ const delay = (ms: number) =>
     timer.unref();
   });
 
-const waitForChild = (child: ChildProcess) =>
-  new Promise<void>((resolve) => {
-    if (child.exitCode !== null || child.signalCode !== null) resolve();
-    else child.once("close", () => resolve());
-  });
-
 const runTaskkill = (args: string[]) =>
   new Promise<void>((resolve) => {
     const taskkill = spawn("taskkill", args, {
@@ -110,6 +104,9 @@ export function startProcess(options: ProcessRunOptions): StartedProcess {
     detached: process.platform !== "win32" && (options.killTree ?? true),
     stdio: ["ignore", "pipe", "pipe"],
   });
+  // `exitCode` is set before `close`. Capture this from spawn time so an
+  // abort never resolves before the original child's streams are closed.
+  const closed = new Promise<void>((resolve) => child.once("close", resolve));
   options.signal.removeEventListener("abort", onAbortDuringLaunch);
   let stdout = "";
   let stderr = "";
@@ -165,14 +162,14 @@ export function startProcess(options: ProcessRunOptions): StartedProcess {
     stopped = (async () => {
       const killTree = options.killTree ?? true;
       await terminateTree(child, false, killTree);
-      await Promise.race([
-        waitForChild(child),
-        delay(options.gracefulKillMs ?? 2_000),
+      const gracefullyClosed = await Promise.race([
+        closed.then(() => true),
+        delay(options.gracefulKillMs ?? 2_000).then(() => false),
       ]);
-      if (child.exitCode === null && child.signalCode === null) {
+      if (!gracefullyClosed) {
         await terminateTree(child, true, killTree);
         const ended = await Promise.race([
-          waitForChild(child).then(() => true),
+          closed.then(() => true),
           delay(options.forceKillMs ?? 2_000).then(() => false),
         ]);
         if (!ended)
