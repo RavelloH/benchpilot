@@ -367,3 +367,23 @@ test("device probes require an explicit disabled reason", async () => {
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("discovery candidates require their type-specific fields", async () => {
+  const root = await temporaryAdapter();
+  try {
+    await writeFile(
+      join(root, "tool-discovery.toml"),
+      `schema = "benchpilot.adapter.tool-discovery"\nschema_version = 1\n[discoveries.bad]\nstrategy = "first-valid"\n[[discoveries.bad.candidates]]\nid = "path"\ntype = "path"\npriority = 1\n[discoveries.bad.validation]\npath_type = "file"\nexecutable = true\n`,
+    );
+    const result = await validateAdapter(root);
+    assert.ok(
+      result.diagnostics.some(
+        (item) =>
+          item.code === "ADAPTER_SCHEMA_INVALID" &&
+          item.file === "tool-discovery.toml",
+      ),
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
