@@ -467,8 +467,16 @@ test("approval lease renews an active claim", async () => {
     const claim = await manager.claim(binding);
     assert.ok(claim);
     const lease = manager.startClaimLease(claim, 5, 30);
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    const renewed = await manager.get(request.id);
+    let renewed = claim;
+    const deadline = Date.now() + 250;
+    do {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      renewed = await manager.get(request.id);
+    } while (
+      Date.parse(renewed.claimHeartbeatAt) <=
+        Date.parse(claim.claimHeartbeatAt) &&
+      Date.now() < deadline
+    );
     assert.ok(
       Date.parse(renewed.claimHeartbeatAt) > Date.parse(claim.claimHeartbeatAt),
     );
