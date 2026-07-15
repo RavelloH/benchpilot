@@ -1,5 +1,4 @@
 import { Readable } from "node:stream";
-import { createHash } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import type {
@@ -330,16 +329,12 @@ class DemoDevice implements DeviceRuntime {
     const file = path.join(ctx.run.dir, "artifacts", "demo-firmware.bin");
     const contents = `benchpilot demo firmware\ninstance=${this.identity.instance}\n`;
     await fs.writeFile(file, contents);
-    const artifact = {
+    const artifact = await ctx.registerArtifact({
       name: "demo-firmware.bin",
       kind: "firmware",
       path: file,
-      size: Buffer.byteLength(contents),
-      sha256: createHash("sha256").update(contents).digest("hex"),
-      createdAt: new Date().toISOString(),
-    };
-    ctx.registerArtifact(artifact);
-    return artifact;
+    });
+    return { ...artifact };
   }
   private connected(ctx: OperationContext) {
     return settings(ctx).connected !== false;
@@ -371,10 +366,12 @@ class DemoDevice implements DeviceRuntime {
 }
 export const demoAdapter: Adapter = {
   id: "demo",
+  apiVersion: 1,
   version: "0.0.0",
   summary: "Explicitly simulated software-only adapter",
+  configSchema: objectSchema(),
   async discover(config) {
-    const d = (config.adapters as Json | undefined)?.demo as Json | undefined;
+    const d = config;
     return d?.connected === false
       ? []
       : [
@@ -386,7 +383,7 @@ export const demoAdapter: Adapter = {
         ];
   },
   async doctor(config) {
-    const d = (config.adapters as Json | undefined)?.demo as Json | undefined;
+    const d = config;
     return [
       {
         id: "demo-connected",

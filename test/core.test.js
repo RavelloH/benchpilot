@@ -1,27 +1,32 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFile, spawn } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import {
   AdapterRegistry,
+  ArtifactRegistry,
   abortPromise,
   ApprovalManager,
   atomicJson,
+  booleanSchema,
   durationSchema,
   enumSchema,
   BenchPilotError,
   PathService,
   projectStorageKey,
   RunManager,
+  SchemaValidationError,
   lockIdentity,
   LockManager,
+  objectSchema,
   OperationRunner,
   redactResolvedConfig,
   runProcess,
   setKey,
+  stringSchema,
 } from "../dist/index.js";
 
 const exec = promisify(execFile);
@@ -48,9 +53,7 @@ test("runtime schemas validate values with stable errors", () => {
   assert.equal(durationSchema().parse("2s"), 2000);
   assert.throws(
     () => durationSchema().parse("soon"),
-    (error) =>
-      error instanceof BenchPilotError &&
-      error.kind === "INVALID_CAPABILITY_INPUT",
+    (error) => error instanceof SchemaValidationError,
   );
   assert.equal(enumSchema(["debug", "info"]).parse("debug"), "debug");
 });
@@ -244,8 +247,10 @@ test("a normal operation recovers and reuses a stale approval claim", async () =
     const registry = new AdapterRegistry();
     registry.register({
       id: "approval-recovery",
+      apiVersion: 1,
       version: "1",
       summary: "approval recovery test",
+      configSchema: objectSchema(),
       discover: async () => [],
       doctor: async () => [],
       createDevice: async (instance) => ({
@@ -312,8 +317,10 @@ test("registry supports adapters without CLI routing changes", () => {
   const registry = new AdapterRegistry();
   registry.register({
     id: "test",
+    apiVersion: 1,
     version: "1",
     summary: "test",
+    configSchema: objectSchema(),
     discover: async () => [],
     doctor: async () => [],
     createDevice: async () => ({
@@ -322,6 +329,188 @@ test("registry supports adapters without CLI routing changes", () => {
     }),
   });
   assert.equal(registry.get("test").id, "test");
+});
+
+test("adapter definitions require a supported API and configuration schema", () => {
+  const registry = new AdapterRegistry();
+  const methods = {
+    discover: async () => [],
+    doctor: async () => [],
+    createDevice: async () => ({
+      identity: { instance: "x", physicalId: "x", adapter: "test" },
+      capabilities: () => [],
+    }),
+  };
+  assert.throws(
+    () =>
+      registry.register({
+        id: "missing-api",
+        version: "1",
+        summary: "x",
+        configSchema: objectSchema(),
+        ...methods,
+      }),
+    (error) =>
+      error instanceof BenchPilotError &&
+      error.kind === "UNSUPPORTED_ADAPTER_API_VERSION",
+  );
+  assert.throws(
+    () =>
+      registry.register({
+        id: "wrong-api",
+        apiVersion: 2,
+        version: "1",
+        summary: "x",
+        configSchema: objectSchema(),
+        ...methods,
+      }),
+    (error) =>
+      error instanceof BenchPilotError &&
+      error.kind === "UNSUPPORTED_ADAPTER_API_VERSION",
+  );
+  assert.throws(
+    () =>
+      registry.register({
+        id: "missing-schema",
+        apiVersion: 1,
+        version: "1",
+        summary: "x",
+        ...methods,
+      }),
+    (error) =>
+      error instanceof BenchPilotError &&
+      error.kind === "INVALID_ADAPTER_DEFINITION",
+  );
+  registry.register({
+    id: "configured",
+    apiVersion: 1,
+    version: "1",
+    summary: "configured",
+    configSchema: objectSchema({ enabled: booleanSchema() }),
+    ...methods,
+  });
+  assert.throws(
+    () =>
+      registry.configFor(registry.get("configured"), {
+        adapters: { configured: { enabled: "yes" } },
+      }),
+    (error) =>
+      error instanceof BenchPilotError &&
+      error.kind === "INVALID_ADAPTER_CONFIG",
+  );
+});
+
+test("output schema failures are classified as INVALID_CAPABILITY_OUTPUT", async () => {
+  const root = await mkdtemp(
+    path.join(os.tmpdir(), "benchpilot-output-schema-"),
+  );
+  try {
+    const paths = new PathService({ BENCHPILOT_HOME: root });
+    const registry = new AdapterRegistry();
+    registry.register({
+      id: "output-schema",
+      apiVersion: 1,
+      version: "1",
+      summary: "output schema test",
+      configSchema: objectSchema(),
+      discover: async () => [],
+      doctor: async () => [],
+      createDevice: async (instance) => ({
+        identity: { instance, physicalId: "output", adapter: "output-schema" },
+        capabilities: () => [
+          {
+            id: "bad-output",
+            summary: "bad output",
+            defaultTimeoutMs: 1_000,
+            lockMode: "none",
+            createsRun: false,
+            safety: { mode: "normal" },
+            outputSchema: objectSchema({ value: stringSchema() }),
+            execute: async () => ({ value: 1 }),
+          },
+        ],
+      }),
+    });
+    const runner = new OperationRunner({
+      paths,
+      registry,
+      project: undefined,
+      flags: { quiet: true },
+      config: {
+        value: { devices: { device: { adapter: "output-schema" } } },
+        origins: new Map(),
+        layers: [],
+      },
+    });
+    const error = await runner
+      .execute("device", "bad-output", {})
+      .catch((cause) => cause);
+    assert.equal(error.kind, "INVALID_CAPABILITY_OUTPUT");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("artifact registry verifies location, file type, size, and hash", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "benchpilot-artifact-"));
+  try {
+    const artifacts = path.join(root, "artifacts");
+    await mkdir(artifacts);
+    const file = path.join(artifacts, "firmware.bin");
+    await writeFile(file, "firmware");
+    const registry = new ArtifactRegistry({
+      id: "run",
+      dir: root,
+      started: Date.now(),
+      command: "build",
+    });
+    const artifact = await registry.register({
+      name: "firmware.bin",
+      kind: "firmware",
+      path: file,
+    });
+    assert.equal(artifact.path, path.join("artifacts", "firmware.bin"));
+    assert.equal(artifact.size, 8);
+    assert.match(artifact.sha256, /^[a-f0-9]{64}$/);
+    await assert.rejects(
+      registry.register({
+        name: "missing",
+        kind: "firmware",
+        path: path.join(artifacts, "missing.bin"),
+      }),
+      (error) =>
+        error instanceof BenchPilotError && error.kind === "INVALID_ARTIFACT",
+    );
+    await assert.rejects(
+      registry.register({
+        name: "directory",
+        kind: "firmware",
+        path: artifacts,
+      }),
+      (error) =>
+        error instanceof BenchPilotError && error.kind === "INVALID_ARTIFACT",
+    );
+    await assert.rejects(
+      registry.register({ name: "outside", kind: "firmware", path: root }),
+      (error) =>
+        error instanceof BenchPilotError && error.kind === "INVALID_ARTIFACT",
+    );
+    const outside = path.join(root, "outside.bin");
+    await writeFile(outside, "outside");
+    const link = path.join(artifacts, "escape.bin");
+    try {
+      await symlink(outside, link, "file");
+      await assert.rejects(
+        registry.register({ name: "escape", kind: "firmware", path: link }),
+        (error) =>
+          error instanceof BenchPilotError && error.kind === "INVALID_ARTIFACT",
+      );
+    } catch (error) {
+      if (error.code !== "EPERM") throw error;
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test("lock lease stops before release and rejects unsafe IDs", async () => {
@@ -352,8 +541,10 @@ test("lock ownership loss aborts the capability and preserves the replacement", 
     const registry = new AdapterRegistry();
     registry.register({
       id: "lock-loss",
+      apiVersion: 1,
       version: "1",
       summary: "lock loss test",
+      configSchema: objectSchema(),
       discover: async () => [],
       doctor: async () => [],
       createDevice: async (instance) => ({
@@ -494,8 +685,10 @@ test("critical cleanup failure finalizes a failed run after releasing its lock",
     const registry = new AdapterRegistry();
     registry.register({
       id: "test",
+      apiVersion: 1,
       version: "1",
       summary: "cleanup test",
+      configSchema: objectSchema(),
       discover: async () => [],
       doctor: async () => [],
       createDevice: async (instance) => ({
@@ -577,8 +770,10 @@ test("timeout returns even when a capability ignores AbortSignal and runs cleanu
     const registry = new AdapterRegistry();
     registry.register({
       id: "timeout",
+      apiVersion: 1,
       version: "1",
       summary: "timeout test",
+      configSchema: objectSchema(),
       discover: async () => [],
       doctor: async () => [],
       createDevice: async (instance) => ({
@@ -632,8 +827,10 @@ async function runDangerousFailure(root, markEffect) {
   const registry = new AdapterRegistry();
   registry.register({
     id: "danger",
+    apiVersion: 1,
     version: "1",
     summary: "danger test",
+    configSchema: objectSchema(),
     discover: async () => [],
     doctor: async () => [],
     createDevice: async (instance) => ({

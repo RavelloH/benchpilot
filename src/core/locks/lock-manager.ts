@@ -49,7 +49,8 @@ export class LockManager {
       } catch (error: unknown) {
         const code = (error as NodeJS.ErrnoException).code;
         if (code === "ENOENT") ownershipLost(id);
-        if (code !== "EEXIST" || attempt >= 200) throw error;
+        if (!["EEXIST", "EPERM"].includes(code || "") || attempt >= 200)
+          throw error;
         await new Promise((resolve) => setTimeout(resolve, 5));
       }
     }

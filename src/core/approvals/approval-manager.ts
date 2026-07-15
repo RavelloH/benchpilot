@@ -57,7 +57,9 @@ export class ApprovalManager {
         break;
       } catch (error: unknown) {
         if (
-          (error as NodeJS.ErrnoException).code !== "EEXIST" ||
+          !["EEXIST", "EPERM"].includes(
+            (error as NodeJS.ErrnoException).code || "",
+          ) ||
           attempt >= 200
         )
           throw error;

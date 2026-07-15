@@ -5,7 +5,10 @@ import path from "node:path";
 import TOML from "@iarna/toml";
 import RlogModule from "rlog-js";
 import { BenchPilotError, fail } from "./core/errors/benchpilot-error.js";
-import type { RuntimeSchema } from "./core/adapters/schemas.js";
+import {
+  SchemaValidationError,
+  type RuntimeSchema,
+} from "./core/adapters/schemas.js";
 import { lockIdentity } from "./core/locks/lock-identity.js";
 import { LockManager } from "./core/locks/lock-manager.js";
 import type { LockLease, LockRecord } from "./core/locks/types.js";
@@ -27,6 +30,11 @@ import { sha, stable } from "./core/utilities/stable-json.js";
 import { resolveInside } from "./core/utilities/resolve-inside.js";
 import { RunManager } from "./core/runs/run-manager.js";
 import type { ArtifactRecord, Run } from "./core/runs/run-manager.js";
+import { ArtifactRegistry } from "./core/artifacts/artifact-registry.js";
+import type {
+  ArtifactRegistration,
+  ArtifactRecord as RegisteredArtifactRecord,
+} from "./core/artifacts/types.js";
 const Rlog = RlogModule.default;
 
 export type Json = Record<string, unknown>;
@@ -58,6 +66,7 @@ export {
   numberSchema,
   objectSchema,
   optional,
+  SchemaValidationError,
   stringSchema,
 } from "./core/adapters/schemas.js";
 export type { RuntimeSchema } from "./core/adapters/schemas.js";
@@ -102,6 +111,11 @@ export {
   type ArtifactRecord,
   type Run,
 } from "./core/runs/run-manager.js";
+export { ArtifactRegistry } from "./core/artifacts/artifact-registry.js";
+export type {
+  ArtifactRegistration,
+  ArtifactRecord as RegisteredArtifactRecord,
+} from "./core/artifacts/types.js";
 export function projectStorageKey(project: {
   id?: string;
   root?: string;
@@ -340,11 +354,12 @@ export interface DeviceRuntime {
 }
 export interface Adapter {
   id: string;
-  apiVersion?: 1;
+  apiVersion: 1;
   version: string;
   summary: string;
   description?: string;
-  configSchema?: RuntimeSchema<unknown>;
+  configSchema: RuntimeSchema<Json>;
+  deviceConfigSchema?: RuntimeSchema<Json>;
   discover(config: Json): Promise<Json[]>;
   doctor(config: Json): Promise<Json[]>;
   createDevice(instance: string, config: Json): Promise<DeviceRuntime>;
@@ -352,8 +367,35 @@ export interface Adapter {
 export class AdapterRegistry {
   private adapters = new Map<string, Adapter>();
   register(a: Adapter) {
+    if (!/^[a-z][a-z0-9-]*$/.test(a.id))
+      fail("INVALID_ADAPTER_DEFINITION", 8, "Adapter id is invalid.");
     if (this.adapters.has(a.id))
       fail("DUPLICATE_ADAPTER", 8, `Adapter already registered: ${a.id}`);
+    if (a.apiVersion !== 1)
+      fail(
+        "UNSUPPORTED_ADAPTER_API_VERSION",
+        8,
+        `Adapter ${a.id} requires API version 1.`,
+      );
+    if (!a.version || !a.summary)
+      fail(
+        "INVALID_ADAPTER_DEFINITION",
+        8,
+        `Adapter ${a.id} requires a version and summary.`,
+      );
+    if (!a.configSchema || typeof a.configSchema.parse !== "function")
+      fail(
+        "INVALID_ADAPTER_DEFINITION",
+        8,
+        `Adapter ${a.id} requires configSchema.`,
+      );
+    for (const method of ["discover", "doctor", "createDevice"] as const)
+      if (typeof a[method] !== "function")
+        fail(
+          "INVALID_ADAPTER_DEFINITION",
+          8,
+          `Adapter ${a.id} requires ${method}().`,
+        );
     this.adapters.set(a.id, a);
   }
   get(id: string): Adapter {
@@ -363,6 +405,43 @@ export class AdapterRegistry {
   }
   list() {
     return [...this.adapters.values()];
+  }
+  configFor(adapter: Adapter, config: Json): Json {
+    const raw = ((config.adapters as Json | undefined)?.[adapter.id] ||
+      {}) as Json;
+    try {
+      return adapter.configSchema.parse(raw);
+    } catch (error) {
+      const detail =
+        error instanceof SchemaValidationError ? error.path.join(".") : "";
+      throw new BenchPilotError(
+        "INVALID_ADAPTER_CONFIG",
+        3,
+        `Adapter ${adapter.id} configuration is invalid${detail ? ` at ${detail}` : ""}: ${(error as Error).message}`,
+        false,
+        undefined,
+        ["Check [adapters." + adapter.id + "] in your configuration."],
+      );
+    }
+  }
+  async createDevice(
+    adapter: Adapter,
+    instance: string,
+    deviceConfig: Json,
+    config: Json,
+  ) {
+    this.configFor(adapter, config);
+    if (adapter.deviceConfigSchema)
+      try {
+        deviceConfig = adapter.deviceConfigSchema.parse(deviceConfig);
+      } catch (error) {
+        throw new BenchPilotError(
+          "INVALID_DEVICE_CONFIG",
+          3,
+          `Device ${instance} configuration for ${adapter.id} is invalid: ${(error as Error).message}`,
+        );
+      }
+    return adapter.createDevice(instance, deviceConfig);
   }
 }
 
@@ -597,7 +676,9 @@ export interface OperationContext {
   };
   markDangerousEffectStarted(details?: Json): void;
   emitEvent(type: string, data?: Json): void;
-  registerArtifact(record: ArtifactRecord): void;
+  registerArtifact(
+    record: ArtifactRegistration,
+  ): Promise<RegisteredArtifactRecord>;
 }
 export interface OperationServices {
   paths: PathService;
@@ -620,9 +701,13 @@ export class OperationRunner {
     if (!object(raw))
       fail("DEVICE_NOT_FOUND", 3, `Device not found: ${instance}`);
     const d = raw as Json;
-    const runtime = await this.s.registry
-      .get(String(d.adapter))
-      .createDevice(instance, d);
+    const adapter = this.s.registry.get(String(d.adapter));
+    const runtime = await this.s.registry.createDevice(
+      adapter,
+      instance,
+      d,
+      this.s.config.value,
+    );
     const cap = runtime.capabilities().find((x) => x.id === capabilityId);
     if (!cap)
       fail(
@@ -648,13 +733,25 @@ export class OperationRunner {
           `Missing required option: ${option.name}.`,
         );
       if (input[option.name] !== undefined && option.schema)
-        input[option.name] = option.schema.parse(input[option.name]);
+        try {
+          input[option.name] = option.schema.parse(input[option.name]);
+        } catch (error) {
+          throw new BenchPilotError(
+            "INVALID_CAPABILITY_INPUT",
+            2,
+            (error as Error).message,
+          );
+        }
     }
     try {
       input = capability.inputSchema?.parse(input) ?? input;
     } catch (error) {
       if (error instanceof BenchPilotError) throw error;
-      fail("INVALID_CAPABILITY_INPUT", 2, (error as Error).message);
+      throw new BenchPilotError(
+        "INVALID_CAPABILITY_INPUT",
+        2,
+        (error as Error).message,
+      );
     }
     const command = `device.${capabilityId}`,
       lockId = lockIdentity({
@@ -764,7 +861,8 @@ export class OperationRunner {
       handler: () => Promise<void> | void;
     }> = [];
     const cleanupErrors: CleanupError[] = [];
-    const artifacts: Json[] = [];
+    const artifacts: RegisteredArtifactRecord[] = [];
+    const artifactRegistry = run ? new ArtifactRegistry(run) : undefined;
     let dangerousEffectStarted = false;
     let dangerousEffectStartedAt: string | undefined;
     let dangerousEffectDetails: Json | undefined;
@@ -866,20 +964,16 @@ export class OperationRunner {
           emitEvent(type, eventData = {}) {
             emit(type, eventData);
           },
-          registerArtifact(record) {
-            if (!run) fail("INVALID_ARTIFACT", 5, "Artifacts require a Run.");
-            const artifactRoot = path.join(run!.dir, "artifacts");
-            const absolute = resolveInside(artifactRoot, record.path);
-            if (absolute !== path.resolve(record.path))
-              fail(
+          async registerArtifact(record) {
+            if (!artifactRegistry)
+              throw new BenchPilotError(
                 "INVALID_ARTIFACT",
                 5,
-                "Artifact path must be inside the Run artifacts directory.",
+                "Artifacts require a Run.",
               );
-            artifacts.push({
-              ...record,
-              path: path.relative(run!.dir, absolute),
-            });
+            const artifact = await artifactRegistry.register(record);
+            artifacts.push(artifact);
+            return artifact;
           },
         },
         input,
@@ -906,8 +1000,21 @@ export class OperationRunner {
       try {
         data = capability.outputSchema?.parse(data) ?? data;
       } catch (error) {
-        if (error instanceof BenchPilotError) throw error;
-        fail("INVALID_CAPABILITY_OUTPUT", 5, (error as Error).message);
+        if (error instanceof SchemaValidationError)
+          throw new BenchPilotError(
+            "INVALID_CAPABILITY_OUTPUT",
+            5,
+            error.message,
+            false,
+            undefined,
+            [],
+            {
+              path: error.path,
+              expected: error.expected,
+              actual: error.actual,
+            },
+          );
+        throw error;
       }
       emit("stage.completed", { stage: capability.id });
     } catch (e: unknown) {
@@ -1028,8 +1135,6 @@ export class OperationRunner {
     const criticalCleanupFailed = cleanupErrors.some(
       (error) => error.critical === true,
     );
-    if (!artifacts.length && data && object(data) && object(data.artifact))
-      artifacts.push(data.artifact);
     if (!primaryError && criticalCleanupFailed)
       primaryError = new BenchPilotError(
         "CLEANUP_FAILED",

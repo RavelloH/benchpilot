@@ -5,6 +5,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+import { parse } from "../dist/cli/parser.js";
 const exec = promisify(execFile);
 const cli = path.resolve("dist/cli/index.js");
 async function run(dir, ...args) {
@@ -14,6 +15,17 @@ async function run(dir, ...args) {
     encoding: "utf8",
   });
 }
+test("capability boolean options are parsed without a hard-coded option list", () => {
+  const parsed = parse([
+    "device",
+    "demo",
+    "build",
+    "--erase",
+    "--verify=false",
+    "--no-cache",
+  ]);
+  assert.deepEqual(parsed.flags, { erase: true, verify: false, cache: false });
+});
 test("installed CLI surface initializes and runs the demo", async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "benchpilot-test-"));
   try {
@@ -129,7 +141,7 @@ test("injected adapter executes through the dynamic CLI route", async () => {
       'version = 1\n[devices.test-device]\nadapter = "test"\n',
     );
     const module = path.resolve("dist/cli/index.js").replaceAll("\\", "/");
-    const script = `import { main } from ${JSON.stringify(`file:///${module}`)}; const adapter = { id: "test", version: "1", summary: "test adapter", discover: async () => [{ adapter: "test", id: "candidate" }], doctor: async () => [], createDevice: async (instance) => ({ identity: { instance, physicalId: "test-physical", adapter: "test" }, capabilities: () => [{ id: "echo", summary: "echo", defaultTimeoutMs: 1000, lockMode: "none", createsRun: false, safety: { mode: "normal" }, execute: async (_ctx, input) => ({ echoed: input.duration ?? "ok" }) }] }) }; process.argv = [process.execPath, "benchpilot", "device", "test-device", "echo", "--json"]; await main([adapter]);`;
+    const script = `import { main } from ${JSON.stringify(`file:///${module}`)}; const adapter = { id: "test", apiVersion: 1, version: "1", summary: "test adapter", configSchema: { parse: (value) => value, describe: () => ({ type: "object" }) }, discover: async () => [{ adapter: "test", id: "candidate" }], doctor: async () => [], createDevice: async (instance) => ({ identity: { instance, physicalId: "test-physical", adapter: "test" }, capabilities: () => [{ id: "echo", summary: "echo", defaultTimeoutMs: 1000, lockMode: "none", createsRun: false, safety: { mode: "normal" }, execute: async (_ctx, input) => ({ echoed: input.duration ?? "ok" }) }] }) }; process.argv = [process.execPath, "benchpilot", "device", "test-device", "echo", "--json"]; await main([adapter]);`;
     const result = await exec(
       process.execPath,
       ["--input-type=module", "-e", script],

@@ -11,7 +11,7 @@ export type Flags = Json & {
   [key: string]: unknown;
 };
 
-const booleanOptions = new Set([
+const globalBooleanOptions = new Set([
   "json",
   "jsonl",
   "quiet",
@@ -20,16 +20,6 @@ const booleanOptions = new Set([
   "no-color",
   "help",
   "version",
-  "all",
-  "local",
-  "project",
-  "global",
-  "show-origin",
-  "save",
-  "dangerously-reset-demo-state",
-  "dangerously-burn-demo-fuse",
-  "dangerously-clear-active-lock",
-  "dangerously-remove-all-runs",
 ]);
 
 export function parse(argv: string[]): { path: string[]; flags: Flags } {
@@ -41,13 +31,18 @@ export function parse(argv: string[]): { path: string[]; flags: Flags } {
       positional.push(token);
       continue;
     }
-    const [key, inline] = token.slice(2).split("=", 2);
-    if (booleanOptions.has(key)) flags[key] = true;
+    const [rawKey, inline] = token.slice(2).split("=", 2);
+    const negated = rawKey.startsWith("no-");
+    const key = negated ? rawKey.slice(3) : rawKey;
+    if (negated) flags[key] = false;
+    else if (inline !== undefined)
+      flags[key] =
+        inline === "true" ? true : inline === "false" ? false : inline;
+    else if (globalBooleanOptions.has(key)) flags[key] = true;
     else {
-      const value = inline ?? argv[++index];
-      if (!value || value.startsWith("--"))
-        fail("USAGE_ERROR", 2, `Option --${key} requires a value.`);
-      flags[key] = value;
+      const next = argv[index + 1];
+      if (next && !next.startsWith("--")) flags[key] = argv[++index]!;
+      else flags[key] = true;
     }
   }
   if (flags.json && flags.jsonl)

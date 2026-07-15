@@ -429,7 +429,7 @@ export async function main(adapters: Adapter[] = [demoAdapter]) {
         message: "TOML and configuration schema valid",
       });
       for (const d of registry.list())
-        checks.push(...(await d.doctor(config.value)));
+        checks.push(...(await d.doctor(registry.configFor(d, config.value))));
       if (flags.save) {
         /* doctor is intentionally read-only unless explicit save; its diagnostics are returned */
       }
@@ -469,7 +469,14 @@ export async function main(adapters: Adapter[] = [demoAdapter]) {
           flags,
         );
       else if (parts[2] === "doctor")
-        write({ checks: await adapter.doctor(config.value) }, flags);
+        write(
+          {
+            checks: await adapter.doctor(
+              registry.configFor(adapter, config.value),
+            ),
+          },
+          flags,
+        );
       else fail("USAGE_ERROR", 2, "Unknown adapter command.");
       return;
     }
@@ -498,7 +505,9 @@ export async function main(adapters: Adapter[] = [demoAdapter]) {
             try {
               return {
                 adapter: adapter.id,
-                devices: await adapter.discover(config.value),
+                devices: await adapter.discover(
+                  registry.configFor(adapter, config.value),
+                ),
               };
             } catch (error: unknown) {
               return {
@@ -524,7 +533,12 @@ export async function main(adapters: Adapter[] = [demoAdapter]) {
       if (!rawDevice || typeof rawDevice !== "object")
         fail("DEVICE_NOT_FOUND", 3, `Device not found: ${parts[1]}`);
       const adapter = registry.get(String((rawDevice as Json).adapter));
-      const runtime = await adapter.createDevice(parts[1], rawDevice as Json);
+      const runtime = await registry.createDevice(
+        adapter,
+        parts[1],
+        rawDevice as Json,
+        config.value,
+      );
       if (parts.length === 2) {
         stdout.write(
           `benchpilot device ${parts[1]} — ${adapter.summary}\n\nCommands:\n${runtime
@@ -541,10 +555,10 @@ export async function main(adapters: Adapter[] = [demoAdapter]) {
           3,
           `Device ${parts[1]} does not support ${capability}.`,
         );
+      const definition = runtime
+        .capabilities()
+        .find((item) => item.id === capability)!;
       if (flags.help) {
-        const definition = runtime
-          .capabilities()
-          .find((item) => item.id === capability)!;
         const help = {
           schema: "benchpilot.help",
           version: 1,
@@ -577,7 +591,7 @@ export async function main(adapters: Adapter[] = [demoAdapter]) {
       const input = Object.fromEntries(
         Object.entries(flags).filter(
           ([name]) =>
-            !globalFlagNames.has(name) && !name.startsWith("dangerously-"),
+            !globalFlagNames.has(name) && name !== definition.safety.flag,
         ),
       );
       const result = await runner.execute(parts[1], capability, input);
