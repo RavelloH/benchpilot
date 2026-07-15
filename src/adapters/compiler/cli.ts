@@ -3,11 +3,10 @@ import { hasErrors } from "./diagnostics.js";
 import { runCases } from "./case-runner.js";
 
 const command = process.argv[2];
-const result =
-  command === "compile" ? await compileAll() : await validateAllAdapters();
+const validation = command === "compile" ? null : await validateAllAdapters();
+const result = validation ?? (await compileAll());
 let diagnostics = result.diagnostics;
-if (command === "test") {
-  const validation = await validateAllAdapters();
+if (command === "test" && validation) {
   diagnostics = [
     ...diagnostics,
     ...(
