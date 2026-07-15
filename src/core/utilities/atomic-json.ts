@@ -2,12 +2,32 @@ import { randomBytes } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
+const renameAtomically = async (temporary: string, file: string) => {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      await fs.rename(temporary, file);
+      return;
+    } catch (error: unknown) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (
+        process.platform !== "win32" ||
+        (code !== "EPERM" && code !== "EACCES") ||
+        attempt === 4
+      )
+        throw error;
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, 10 * (attempt + 1));
+      });
+    }
+  }
+};
+
 export async function atomicJson(file: string, data: unknown) {
   await fs.mkdir(path.dirname(file), { recursive: true });
   const temporary = `${file}.${process.pid}.${randomBytes(3).toString("hex")}.tmp`;
   try {
     await fs.writeFile(temporary, JSON.stringify(data, null, 2));
-    await fs.rename(temporary, file);
+    await renameAtomically(temporary, file);
   } catch (error) {
     await fs.unlink(temporary).catch(() => {});
     throw error;

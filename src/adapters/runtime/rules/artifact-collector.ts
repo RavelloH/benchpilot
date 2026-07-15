@@ -41,6 +41,11 @@ export const collectArtifacts = async (
     );
   const targetRoot = path.join(run.dir, "artifacts");
   await mkdir(targetRoot, { recursive: true });
+  const roots = await Promise.all(
+    allowedRoots.map(async (root) =>
+      realpath(root).catch(() => path.resolve(root)),
+    ),
+  );
   const artifacts = [];
   for (const plan of plans) {
     const matches = await sourcesFor(plan, baseRoot);
@@ -56,10 +61,7 @@ export const collectArtifacts = async (
       );
     for (const [index, match] of matches.entries()) {
       const source = await realpath(match).catch(() => undefined);
-      if (
-        !source ||
-        !allowedRoots.some((root) => inside(path.resolve(root), source))
-      )
+      if (!source || !roots.some((root) => inside(root, source)))
         throw new AdapterRuntimeError(
           "ADAPTER_ARTIFACT_UNSAFE",
           `Artifact path is outside the allowed roots: ${match}`,
