@@ -44,15 +44,30 @@
       }
     },
     "artifactEntryExpectation": {
-      "type": "object",
-      "required": ["id", "path", "required", "multiple"],
-      "additionalProperties": false,
-      "properties": {
-        "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
-        "path": { "type": "string", "minLength": 1 },
-        "required": { "type": "boolean" },
-        "multiple": { "type": "boolean" }
-      }
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["id", "path", "required", "multiple"],
+          "additionalProperties": false,
+          "properties": {
+            "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+            "path": { "type": "string", "minLength": 1 },
+            "required": { "type": "boolean" },
+            "multiple": { "type": "boolean" }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["id", "glob", "required", "multiple"],
+          "additionalProperties": false,
+          "properties": {
+            "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+            "glob": { "type": "string", "minLength": 1 },
+            "required": { "type": "boolean" },
+            "multiple": { "type": "boolean" }
+          }
+        }
+      ]
     },
     "case": {
       "oneOf": [
@@ -135,7 +150,15 @@
                       "type": "array",
                       "items": {
                         "type": "object",
-                        "additionalProperties": true
+                        "required": ["event", "data"],
+                        "additionalProperties": false,
+                        "properties": {
+                          "event": { "type": "string", "minLength": 1 },
+                          "data": {
+                            "type": "object",
+                            "additionalProperties": true
+                          }
+                        }
                       }
                     }
                   }

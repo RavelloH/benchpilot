@@ -98,7 +98,8 @@ export const validateSemantics = async (
     actions = obj(file("actions.toml").actions),
     workflows = obj(file("workflows.toml").workflows),
     parsers = obj(file("parsers.toml").parsers),
-    sets = obj(file("artifacts.toml").sets);
+    sets = obj(file("artifacts.toml").sets),
+    devices = file("devices.toml");
   const catalog = obj(parseToml(await readFile(catalogPath, "utf8")))
     .capabilities as JsonObject;
   const declaredSafetyFlags = new Map<string, string>();
@@ -453,6 +454,89 @@ export const validateSemantics = async (
             adapter.id,
           ),
         );
+      const probe = obj(discovery.probe);
+      if (Object.keys(probe).length)
+        ref(
+          errors,
+          parsers,
+          probe.parser,
+          "tool-discovery.toml",
+          adapter.id,
+          `Discovery ${key} probe parser`,
+        );
+    }
+    const deviceDiscovery = obj(devices.discovery);
+    const sourceIds = new Set<string>();
+    for (const raw of Array.isArray(deviceDiscovery.sources)
+      ? deviceDiscovery.sources
+      : []) {
+      const source = obj(raw);
+      if (
+        typeof source.id !== "string" ||
+        !id.test(source.id) ||
+        sourceIds.has(source.id)
+      )
+        errors.push(
+          diagnostic(
+            "ADAPTER_SCHEMA_INVALID",
+            "devices.toml",
+            `Device discovery has duplicate or invalid source id: ${String(source.id)}`,
+            undefined,
+            adapter.id,
+          ),
+        );
+      sourceIds.add(String(source.id));
+    }
+    const sources = Object.fromEntries(
+      [...sourceIds].map((source) => [source, true]),
+    );
+    const matcherIds = new Set<string>();
+    for (const raw of Array.isArray(deviceDiscovery.matchers)
+      ? deviceDiscovery.matchers
+      : []) {
+      const matcher = obj(raw);
+      if (
+        typeof matcher.id !== "string" ||
+        !id.test(matcher.id) ||
+        matcherIds.has(matcher.id)
+      )
+        errors.push(
+          diagnostic(
+            "ADAPTER_SCHEMA_INVALID",
+            "devices.toml",
+            `Device discovery has duplicate or invalid matcher id: ${String(matcher.id)}`,
+            undefined,
+            adapter.id,
+          ),
+        );
+      matcherIds.add(String(matcher.id));
+      ref(
+        errors,
+        sources,
+        matcher.source,
+        "devices.toml",
+        adapter.id,
+        `Matcher ${String(matcher.id)} source`,
+      );
+    }
+    const deviceProbe = obj(devices.probe);
+    if (deviceProbe.enabled === true) {
+      ref(
+        errors,
+        actions,
+        deviceProbe.action,
+        "devices.toml",
+        adapter.id,
+        "Device probe action",
+      );
+      ref(
+        errors,
+        parsers,
+        deviceProbe.parser,
+        "devices.toml",
+        adapter.id,
+        "Device probe parser",
+      );
     }
   }
   for (const [key, raw] of entries(environments)) {
@@ -636,7 +720,7 @@ export const validateSemantics = async (
       if (typeof step.id !== "string" || seen.has(step.id))
         errors.push(
           diagnostic(
-            "ADAPTER_WORKFLOW_CYCLE",
+            "ADAPTER_SCHEMA_INVALID",
             "workflows.toml",
             `Workflow ${key} has duplicate or invalid step id`,
             undefined,
@@ -648,7 +732,7 @@ export const validateSemantics = async (
       if (kind !== "action")
         errors.push(
           diagnostic(
-            "ADAPTER_WORKFLOW_CYCLE",
+            "ADAPTER_SCHEMA_INVALID",
             "workflows.toml",
             "Workflows may only use actions",
             undefined,

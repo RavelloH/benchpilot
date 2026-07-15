@@ -21,6 +21,13 @@ pattern = "progress=(?<current>\\d+)"
 event = "build.progress"
 [parsers.text.progress.fields]
 current = "integer"
+[[parsers.text.progress]]
+id = "warning"
+source = "stdout"
+pattern = "warning=(?<code>\\d+)"
+event = "build.warning"
+[parsers.text.progress.fields]
+code = "integer"
 [[parsers.text.errors]]
 id = "first"
 priority = 1

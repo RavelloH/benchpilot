@@ -70,12 +70,36 @@ const sourceText = (source: unknown, stdout: string, stderr: string) =>
     : source === "both"
       ? `${stdout}\n${stderr}`
       : stdout;
-const cast = (value: string, kind: unknown): unknown => {
-  if (kind === "integer") return Number.parseInt(value, 10);
-  if (kind === "number") return Number(value);
-  if (kind === "boolean") return value === "true";
-  if (kind === "json") return JSON.parse(value);
-  return value;
+type CastKind = "string" | "integer" | "number" | "boolean" | "json";
+const castValue = (value: unknown, kind: CastKind): unknown => {
+  if (kind === "string") return String(value);
+  if (kind === "integer") {
+    if (typeof value === "number")
+      return Number.isFinite(value) ? Math.trunc(value) : undefined;
+    if (typeof value !== "string" || !/^[+-]?\d+$/.test(value))
+      return undefined;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  if (kind === "number") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  if (kind === "boolean") {
+    if (typeof value === "boolean") return value;
+    if (value === "true") return true;
+    if (value === "false") return false;
+    return undefined;
+  }
+  if (kind === "json") {
+    if (typeof value !== "string") return value;
+    try {
+      return JSON.parse(value);
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
 };
 const pointer = (value: unknown, path: string) =>
   path
@@ -87,21 +111,38 @@ const pointer = (value: unknown, path: string) =>
         return /^(0|[1-9][0-9]*)$/.test(key) ? current[Number(key)] : undefined;
       return object(current)[key];
     }, value);
+const unsafeArtifactPath = (value: unknown) =>
+  typeof value === "string" &&
+  (value.split(/[\\/]/).includes("..") ||
+    /^[\\/]/.test(value) ||
+    /^[A-Za-z]:[\\/]/.test(value) ||
+    /^(\\\\|\/\/)/.test(value));
 
 export const runCases = async (
   adapter: LoadedAdapter,
 ): Promise<AdapterDiagnostic[]> => {
   const errors: AdapterDiagnostic[] = [];
-  const cases = adapter.files["tests/cases.toml"].cases;
+  const caseFile = adapter.files["tests/cases.toml"];
+  if (!caseFile || !Array.isArray(caseFile.cases))
+    return [
+      diagnostic(
+        "ADAPTER_CASE_INVALID",
+        "tests/cases.toml",
+        "Cases file is missing or invalid",
+        undefined,
+        adapter.id,
+      ),
+    ];
+  const cases = caseFile.cases;
   for (const raw of Array.isArray(cases) ? cases : []) {
     const test = object(raw),
       platform = String(test.platform),
       overlay = object(adapter.files[`platforms/${platform}.toml`]?.overrides);
     const base = {
-      actions: adapter.files["actions.toml"].actions,
-      workflows: adapter.files["workflows.toml"].workflows,
-      parsers: adapter.files["parsers.toml"].parsers,
-      artifacts: adapter.files["artifacts.toml"].sets,
+      actions: adapter.files["actions.toml"]?.actions ?? {},
+      workflows: adapter.files["workflows.toml"]?.workflows ?? {},
+      parsers: adapter.files["parsers.toml"]?.parsers ?? {},
+      artifacts: adapter.files["artifacts.toml"]?.sets ?? {},
     };
     const rules = mergePlatform(base, overlay),
       context = object(test.context),
@@ -354,9 +395,9 @@ export const runCases = async (
               extracted =
                 match?.groups?.[String(rule.group)] ??
                 match?.[Number(rule.group)];
-              if (extracted !== undefined)
-                extracted = cast(String(extracted), rule.cast);
             }
+            if (extracted !== undefined)
+              extracted = castValue(extracted, rule.cast as CastKind);
           } catch {
             extracted = undefined;
           }
@@ -381,13 +422,15 @@ export const runCases = async (
               sourceText(rule.source, output, errorOutput).matchAll(
                 new RegExp(String(rule.pattern), "g"),
               ),
-              (match) =>
-                Object.fromEntries(
+              (match) => ({
+                event: rule.event,
+                data: Object.fromEntries(
                   Object.entries(object(rule.fields)).map(([name, kind]) => [
                     name,
-                    cast(match.groups?.[name] ?? "", kind),
+                    castValue(match.groups?.[name] ?? "", kind as CastKind),
                   ]),
                 ),
+              }),
             );
           } catch {
             return [];
@@ -454,24 +497,35 @@ export const runCases = async (
       const plans = (Array.isArray(set.entries) ? set.entries : []).map(
         (entry) => {
           const value = object(entry);
-          const relative = value.path ?? value.glob;
-          return {
-            id: value.id,
-            path:
-              relative === undefined
-                ? undefined
-                : `${base}/${String(render(relative, context) ?? "")}`.replace(
-                    /\\/g,
-                    "/",
-                  ),
-            required: value.required,
-            multiple: value.multiple,
-          };
+          const relative =
+            typeof value.path === "string" ? value.path : value.glob;
+          const rendered = String(render(relative, context) ?? "");
+          const resolved = `${base}/${rendered}`.replace(/\\/g, "/");
+          return typeof value.path === "string"
+            ? {
+                id: value.id,
+                path: resolved,
+                required: value.required,
+                multiple: value.multiple,
+              }
+            : {
+                id: value.id,
+                glob: resolved,
+                required: value.required,
+                multiple: value.multiple,
+              };
         },
       );
-      for (const entry of plans) {
-        const path = entry.path;
-        if (typeof path === "string" && path.split(/[\\/]/).includes(".."))
+      const entries = Array.isArray(set.entries) ? set.entries : [];
+      for (const [index, entry] of plans.entries()) {
+        const value = ("path" in entry ? entry.path : entry.glob) as unknown;
+        const source = object(entries[index]);
+        const relative =
+          typeof source.path === "string" ? source.path : source.glob;
+        const unsafe = [base, render(relative, context), value].some(
+          unsafeArtifactPath,
+        );
+        if (unsafe)
           errors.push(
             diagnostic(
               "ADAPTER_CASE_INVALID",

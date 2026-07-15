@@ -8,7 +8,7 @@ discovery = "python"
 mode = "direct"
 command = "${discovery.path}"
 prefix_args = []
-environment = "inherit"
+environment = "active"
 [tools.script]
 description = "Script"
 required = true

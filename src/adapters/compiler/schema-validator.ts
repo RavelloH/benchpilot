@@ -31,6 +31,8 @@ type Ajv = {
   validateSchema(schema: unknown): boolean;
   errors?: { message?: string; instancePath: string }[];
 };
+const escapeJsonPointer = (value: string) =>
+  value.replace(/~/g, "~0").replace(/\//g, "~1");
 const createAjv = (): Ajv => {
   const Ajv2020 = Ajv2020Import as unknown as new (options: unknown) => Ajv;
   const addFormats = addFormatsImport as unknown as (instance: Ajv) => void;
@@ -303,8 +305,13 @@ export const validateSchemas = async (
         `Schema meta-validation failed: ${(error as Error).message}`,
       );
     }
+    const schemaId =
+      typeof schema.$id === "string"
+        ? schema.$id
+        : `benchpilot://adapter/${adapter.id}/${name}`;
+    const rootSchema = { ...schema, $id: schemaId };
     try {
-      ajv.compile(schema);
+      ajv.compile(rootSchema);
     } catch (error) {
       schemaError(
         diagnostics,
@@ -318,11 +325,12 @@ export const validateSchemas = async (
       schema.$defs &&
       typeof schema.$defs === "object"
     )
-      for (const [definition, value] of Object.entries(
-        schema.$defs as JsonObject,
-      ))
+      for (const definition of Object.keys(schema.$defs as JsonObject))
         try {
-          ajv.compile(value);
+          ajv.compile({
+            $schema: "https://json-schema.org/draft/2020-12/schema",
+            $ref: `${schemaId}#/$defs/${escapeJsonPointer(definition)}`,
+          });
         } catch (error) {
           schemaError(
             diagnostics,

@@ -2,6 +2,13 @@ schema = "benchpilot.adapter.environments"
 schema_version = 1
 [environments.inherit]
 strategy = "inherit"
+[environments.active]
+strategy = "first-valid"
+[[environments.active.providers]]
+id = "current"
+type = "active"
+priority = 10
+required_variables = ["PATH"]
 [environments.static]
 strategy = "first-valid"
 [[environments.static.providers]]

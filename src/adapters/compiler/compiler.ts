@@ -1,7 +1,7 @@
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { basename, resolve } from "node:path";
 import { sha, stable } from "../../core/utilities/stable-json.js";
-import { hasErrors } from "./diagnostics.js";
+import { diagnostic, hasErrors } from "./diagnostics.js";
 import { validateAdapterLayout } from "./layout.js";
 import { fixedFiles } from "./layout.js";
 import { loadAdapter } from "./loader.js";
@@ -43,7 +43,24 @@ export const validateAdapter = async (
       adapter: { id: basename(root), root, files: {}, schemas: {} },
       diagnostics: layout,
     };
-  const adapter = await loadAdapter(root);
+  let adapter: LoadedAdapter;
+  try {
+    adapter = await loadAdapter(root);
+  } catch (error) {
+    return {
+      adapter: { id: basename(root), root, files: {}, schemas: {} },
+      diagnostics: [
+        ...layout,
+        diagnostic(
+          "ADAPTER_SCHEMA_INVALID",
+          "adapter",
+          `Could not load adapter: ${(error as Error).message}`,
+          undefined,
+          basename(root) === "_template" ? "template" : basename(root),
+        ),
+      ],
+    };
+  }
   const diagnostics = [
     ...layout,
     ...(await validateSchemas(adapter, schemaRoot)),
@@ -211,7 +228,11 @@ export const compileAll = async (output = resolve("dist", "adapters")) => {
   const diagnostics = results.flatMap((item) => item.diagnostics);
   if (hasErrors(diagnostics)) return { diagnostics };
   await mkdir(output, { recursive: true });
-  await rm(resolve(output, "template.json"), { force: true });
+  await Promise.all(
+    (await readdir(output, { withFileTypes: true }))
+      .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
+      .map((entry) => rm(resolve(output, entry.name))),
+  );
   const bundles = results.flatMap((item) => (item.bundle ? [item.bundle] : []));
   await Promise.all(
     bundles.map((bundle) =>

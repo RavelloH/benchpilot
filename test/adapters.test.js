@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { cp, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -79,12 +80,148 @@ test("catalog content contributes to bundle hashes without absolute paths", asyn
 test("bulk compilation excludes the template and writes an empty index", async () => {
   const output = await mkdtemp(join(tmpdir(), "benchpilot-adapter-output-"));
   try {
+    await writeFile(join(output, "stale.json"), "stale\n");
+    await writeFile(join(output, "keep.txt"), "keep\n");
     const result = await compileAll(output);
     assert.deepEqual(result.diagnostics, []);
     assert.equal(await readFile(join(output, "index.json"), "utf8"), "[]\n");
     await assert.rejects(readFile(join(output, "template.json"), "utf8"));
+    await assert.rejects(readFile(join(output, "stale.json"), "utf8"));
+    assert.equal(await readFile(join(output, "keep.txt"), "utf8"), "keep\n");
   } finally {
     await rm(output, { recursive: true, force: true });
+  }
+});
+
+test("device discovery validates source, matcher, and probe references", async () => {
+  const rules = [
+    [
+      "missing matcher source",
+      `schema = "benchpilot.adapter.devices"\nschema_version = 1\n[discovery]\nenabled = true\n[[discovery.matchers]]\nid = "serial-present"\nsource = "missing"\nfield = "serial"\noperator = "exists"\nscore = 1\n[identity]\nfields = ["device.id"]\nallow_port_fallback = false\n`,
+      "ADAPTER_REFERENCE_NOT_FOUND",
+    ],
+    [
+      "duplicate source id",
+      `schema = "benchpilot.adapter.devices"\nschema_version = 1\n[discovery]\nenabled = true\n[[discovery.sources]]\nid = "serial"\ntype = "serial"\n[[discovery.sources]]\nid = "serial"\ntype = "usb"\n[identity]\nfields = ["device.id"]\nallow_port_fallback = false\n`,
+      "ADAPTER_SCHEMA_INVALID",
+    ],
+    [
+      "duplicate matcher id",
+      `schema = "benchpilot.adapter.devices"\nschema_version = 1\n[discovery]\nenabled = true\n[[discovery.sources]]\nid = "serial"\ntype = "serial"\n[[discovery.matchers]]\nid = "present"\nsource = "serial"\nfield = "serial"\noperator = "exists"\nscore = 1\n[[discovery.matchers]]\nid = "present"\nsource = "serial"\nfield = "serial"\noperator = "exists"\nscore = 2\n[identity]\nfields = ["device.id"]\nallow_port_fallback = false\n`,
+      "ADAPTER_SCHEMA_INVALID",
+    ],
+    [
+      "missing probe action",
+      `schema = "benchpilot.adapter.devices"\nschema_version = 1\n[discovery]\nenabled = false\n[identity]\nfields = ["device.id"]\nallow_port_fallback = false\n[probe]\nenabled = true\naction = "missing"\nparser = "text"\nmay_reset_device = false\ndestructive = false\n`,
+      "ADAPTER_REFERENCE_NOT_FOUND",
+    ],
+    [
+      "missing probe parser",
+      `schema = "benchpilot.adapter.devices"\nschema_version = 1\n[discovery]\nenabled = false\n[identity]\nfields = ["device.id"]\nallow_port_fallback = false\n[probe]\nenabled = true\naction = "run"\nparser = "missing"\nmay_reset_device = false\ndestructive = false\n`,
+      "ADAPTER_REFERENCE_NOT_FOUND",
+    ],
+  ];
+  for (const [name, devices, code] of rules) {
+    const root = await mkdtemp(join(tmpdir(), "benchpilot-device-rules-"));
+    const adapterRoot = join(root, "complete");
+    try {
+      await cp(complete, adapterRoot, { recursive: true });
+      await writeFile(join(adapterRoot, "devices.toml"), devices);
+      const result = await validateAdapter(adapterRoot);
+      assert.ok(
+        result.diagnostics.some(
+          (item) => item.code === code && item.file === "devices.toml",
+        ),
+        name,
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  }
+});
+
+test("tool discovery probes reference declared parsers", async () => {
+  const root = await mkdtemp(join(tmpdir(), "benchpilot-discovery-probe-"));
+  const adapterRoot = join(root, "complete");
+  try {
+    await cp(complete, adapterRoot, { recursive: true });
+    const discovery = await readFile(
+      join(adapterRoot, "tool-discovery.toml"),
+      "utf8",
+    );
+    await writeFile(
+      join(adapterRoot, "tool-discovery.toml"),
+      discovery.replace('parser = "text"', 'parser = "missing"'),
+    );
+    const result = await validateAdapter(adapterRoot);
+    assert.ok(
+      result.diagnostics.some(
+        (item) =>
+          item.code === "ADAPTER_REFERENCE_NOT_FOUND" &&
+          item.file === "tool-discovery.toml",
+      ),
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("JSON Pointer extracts share strict cast handling with regex extracts", async () => {
+  const root = await mkdtemp(join(tmpdir(), "benchpilot-parser-casts-"));
+  const adapterRoot = join(root, "complete");
+  const parser = (required) =>
+    `schema = "benchpilot.adapter.parsers"\nschema_version = 1\n[parsers.json]\nmode = "json"\nencoding = "utf8"\nstrip_ansi = false\nsuccess_exit_codes = [0]\n[[parsers.json.extract]]\nid = "integer"\nsource = "stdout"\ntype = "json-pointer"\npointer = "/integer"\ntarget = "integer"\ncast = "integer"\nrequired = true\n[[parsers.json.extract]]\nid = "number"\nsource = "stdout"\ntype = "json-pointer"\npointer = "/number"\ntarget = "number"\ncast = "number"\nrequired = true\n[[parsers.json.extract]]\nid = "boolean"\nsource = "stdout"\ntype = "json-pointer"\npointer = "/boolean"\ntarget = "boolean"\ncast = "boolean"\nrequired = true\n[[parsers.json.extract]]\nid = "payload"\nsource = "stdout"\ntype = "json-pointer"\npointer = "/payload"\ntarget = "payload"\ncast = "json"\nrequired = true\n[[parsers.json.extract]]\nid = "bad-integer"\nsource = "stdout"\ntype = "json-pointer"\npointer = "/badInteger"\ntarget = "badInteger"\ncast = "integer"\nrequired = ${required}\n[[parsers.json.extract]]\nid = "bad-boolean"\nsource = "stdout"\ntype = "json-pointer"\npointer = "/badBoolean"\ntarget = "badBoolean"\ncast = "boolean"\nrequired = false\n`;
+  try {
+    await cp(complete, adapterRoot, { recursive: true });
+    await writeFile(join(adapterRoot, "parsers.toml"), parser(true));
+    await writeFile(
+      join(adapterRoot, "tests", "cases.toml"),
+      `schema = "benchpilot.adapter.cases"\nschema_version = 1\n[[cases]]\nid = "parse-json"\ntype = "parse-output"\nplatform = "linux"\ntarget = "json"\nstdout_fixture = "fixtures/output.json"\nexit_code = 0\n[cases.context]\n[cases.expect]\nsuccess = true\nresult = { integer = 3, number = 1.5, boolean = false, payload = { key = "value" } }\n`,
+    );
+    await writeFile(
+      join(adapterRoot, "tests", "fixtures", "output.json"),
+      '{"integer":"3","number":"1.5","boolean":"false","payload":{"key":"value"},"badInteger":"no","badBoolean":"no"}',
+    );
+    let errors = await runCases(await loadAdapter(adapterRoot));
+    assert.ok(errors.some((item) => item.message.includes("bad-integer")));
+    await writeFile(join(adapterRoot, "parsers.toml"), parser(false));
+    errors = await runCases(await loadAdapter(adapterRoot));
+    assert.deepEqual(errors, []);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("artifact plans preserve path and glob entries and reject unsafe paths", async () => {
+  const root = await mkdtemp(join(tmpdir(), "benchpilot-artifact-plan-"));
+  const adapterRoot = join(root, "complete");
+  try {
+    await cp(complete, adapterRoot, { recursive: true });
+    const unsafeEntries = [
+      { base: "../escape", path: "file.txt", glob: "*.log" },
+      { base: "/absolute", path: "file.txt", glob: "*.log" },
+      { base: "C:\\\\absolute", path: "file.txt", glob: "*.log" },
+      { base: "\\\\server\\\\share", path: "file.txt", glob: "*.log" },
+      { base: "project", path: "../escape", glob: "*.log" },
+      { base: "project", path: "file.txt", glob: "/absolute" },
+      { base: "project", path: "file.txt", glob: "C:\\\\absolute" },
+      { base: "project", path: "file.txt", glob: "\\\\server\\\\share" },
+    ];
+    for (const { base, path, glob } of unsafeEntries) {
+      await writeFile(
+        join(adapterRoot, "artifacts.toml"),
+        `schema = "benchpilot.adapter.artifacts"\nschema_version = 1\n[sets.output]\nbase = '${base}'\nentries = [{ id = "path", kind = "metadata", path = '${path}', required = false, multiple = false }, { id = "glob", kind = "log", glob = '${glob}', required = false, multiple = true }]\n`,
+      );
+      const errors = await runCases(await loadAdapter(adapterRoot));
+      assert.ok(
+        errors.some((item) =>
+          item.message.includes("escapes its base directory"),
+        ),
+        base,
+      );
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
   }
 });
 
@@ -101,6 +238,10 @@ test("complete adapter fixture validates, compiles, and exercises all case types
   assert.deepEqual(
     compiled.bundle.platforms.macos.tools.python.launch.prefix_args,
     ["-E"],
+  );
+  assert.equal(
+    compiled.bundle.platforms.linux.tools.python.launch.environment,
+    "active",
   );
   assert.deepEqual(await runCases(validation.adapter), []);
 });
@@ -299,6 +440,74 @@ test("embedded adapter schemas must compile", async () => {
     const result = await validateAdapter(root);
     assert.ok(
       result.diagnostics.some(
+        (item) =>
+          item.code === "ADAPTER_SCHEMA_INVALID" &&
+          item.file === "schemas/inputs.schema.json",
+      ),
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("adapter schema definitions resolve through their complete root schema", async () => {
+  const validSchemas = [
+    {
+      $defs: {
+        common: { type: "object", properties: { port: { type: "string" } } },
+        flash: { $ref: "#/$defs/common" },
+      },
+    },
+    {
+      $defs: {
+        common: { type: "object" },
+        middle: { $ref: "#/$defs/common" },
+        flash: { $ref: "#/$defs/middle" },
+      },
+    },
+    {
+      $defs: {
+        node: {
+          type: "object",
+          properties: { child: { $ref: "#/$defs/node" } },
+        },
+      },
+    },
+    {
+      $defs: {
+        "common/a~b": { type: "object" },
+        flash: { $ref: "#/$defs/common~1a~0b" },
+      },
+    },
+  ];
+  for (const schema of validSchemas) {
+    const root = await temporaryAdapter();
+    try {
+      await writeFile(
+        join(root, "schemas", "inputs.schema.json"),
+        JSON.stringify({
+          $schema: "https://json-schema.org/draft/2020-12/schema",
+          type: "object",
+          ...schema,
+        }),
+      );
+      assert.deepEqual((await validateAdapter(root)).diagnostics, []);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  }
+  const root = await temporaryAdapter();
+  try {
+    await writeFile(
+      join(root, "schemas", "inputs.schema.json"),
+      JSON.stringify({
+        $schema: "https://json-schema.org/draft/2020-12/schema",
+        type: "object",
+        $defs: { flash: { $ref: "#/$defs/missing" } },
+      }),
+    );
+    assert.ok(
+      (await validateAdapter(root)).diagnostics.some(
         (item) =>
           item.code === "ADAPTER_SCHEMA_INVALID" &&
           item.file === "schemas/inputs.schema.json",
@@ -555,6 +764,77 @@ test("environment providers require their type-specific fields", async () => {
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test("active environment providers require a string array", async () => {
+  const root = await mkdtemp(join(tmpdir(), "benchpilot-active-environment-"));
+  const adapterRoot = join(root, "complete");
+  try {
+    await cp(complete, adapterRoot, { recursive: true });
+    const environments = await readFile(
+      join(adapterRoot, "environments.toml"),
+      "utf8",
+    );
+    await writeFile(
+      join(adapterRoot, "environments.toml"),
+      environments.replace(
+        'required_variables = ["PATH"]',
+        'required_variables = "PATH"',
+      ),
+    );
+    assert.ok(
+      (await validateAdapter(adapterRoot)).diagnostics.some(
+        (item) =>
+          item.code === "ADAPTER_SCHEMA_INVALID" &&
+          item.file === "environments.toml",
+      ),
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+const runAdapterTestCli = async (mutate) => {
+  const root = await mkdtemp(join(tmpdir(), "benchpilot-adapter-cli-"));
+  try {
+    const adapterRoot = join(root, "src", "adapters");
+    await mkdir(join(root, "src"), { recursive: true });
+    await cp(join(process.cwd(), "src", "adapters"), adapterRoot, {
+      recursive: true,
+    });
+    await mutate(join(adapterRoot, "_template"));
+    const output = await new Promise((resolve, reject) => {
+      const child = spawn(
+        process.execPath,
+        [join(process.cwd(), "dist", "adapters", "compiler", "cli.js"), "test"],
+        { cwd: root },
+      );
+      let stdout = "",
+        stderr = "";
+      child.stdout.on("data", (chunk) => (stdout += chunk));
+      child.stderr.on("data", (chunk) => (stderr += chunk));
+      child.on("error", reject);
+      child.on("close", (code) => resolve({ code, stdout, stderr }));
+    });
+    assert.notEqual(output.code, 0);
+    const result = JSON.parse(output.stdout);
+    assert.equal(result.ok, false);
+    assert.ok(Array.isArray(result.diagnostics));
+    assert.doesNotMatch(output.stderr, /(?:TypeError|Unhandled|^\s*at )/m);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+};
+
+test("adapter:test keeps malformed declarations in its JSON protocol", async () => {
+  await runAdapterTestCli((root) => rm(join(root, "actions.toml")));
+  await runAdapterTestCli((root) => rm(join(root, "tests", "cases.toml")));
+  await runAdapterTestCli((root) =>
+    writeFile(join(root, "actions.toml"), "[actions"),
+  );
+  await runAdapterTestCli((root) =>
+    writeFile(join(root, "schemas", "inputs.schema.json"), "{"),
+  );
 });
 
 test("parser rules require non-empty patterns", async () => {

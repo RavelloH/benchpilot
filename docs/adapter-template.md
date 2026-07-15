@@ -6,6 +6,9 @@ capability. Disabled capabilities require a reason and must mark all platforms
 unsupported. The four JSON Schema files define configuration, device, input and
 output data; inputs and outputs are referenced by `$defs` names.
 
+Definitions may use normal JSON Schema references to other `$defs` in the same
+root schema, including escaped JSON Pointer definition names.
+
 The template is intentionally non-executable. It documents the full package
 shape without adding a vendor adapter.
 

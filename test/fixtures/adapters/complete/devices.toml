@@ -5,14 +5,30 @@ enabled = true
 [[discovery.sources]]
 id = "serial"
 type = "serial"
+[[discovery.sources]]
+id = "usb"
+type = "usb"
 [[discovery.matchers]]
 id = "serial-present"
 source = "serial"
 field = "serial"
 operator = "exists"
 score = 10
+[[discovery.matchers]]
+id = "vendor-match"
+source = "usb"
+field = "vendor_id"
+operator = "equals-ignore-case"
+value = "303a"
+score = 80
 [discovery.result]
 minimum_score = 10
 [identity]
 fields = ["device.serial"]
 allow_port_fallback = false
+[probe]
+enabled = true
+action = "run"
+parser = "text"
+may_reset_device = false
+destructive = false

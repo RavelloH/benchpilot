@@ -30,7 +30,11 @@ exit_code = 0
 [cases.expect]
 success = true
 result = { version = 3 }
-progress = [{ current = 2 }]
+progress = [
+  { event = "build.progress", data = { current = 1 } },
+  { event = "build.progress", data = { current = 2 } },
+  { event = "build.warning", data = { code = 9 } }
+]
 
 [[cases]]
 id = "parse-error"
@@ -77,5 +81,5 @@ project = "project"
 [cases.expect]
 entries = [
   { id = "output", path = "project/output.json", required = false, multiple = false },
-  { id = "logs", path = "project/*.log", required = false, multiple = true }
+  { id = "logs", glob = "project/*.log", required = false, multiple = true }
 ]

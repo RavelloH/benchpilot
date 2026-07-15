@@ -11,7 +11,9 @@ if (command === "test" && validation) {
     ...diagnostics,
     ...(
       await Promise.all(
-        validation.results.map((item) => runCases(item.adapter)),
+        validation.results
+          .filter((item) => !hasErrors(item.diagnostics))
+          .map((item) => runCases(item.adapter)),
       )
     ).flat(),
   ];

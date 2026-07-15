@@ -15,6 +15,10 @@ priority = 1
 [discoveries.python.validation]
 path_type = "file"
 executable = true
+[discoveries.python.probe]
+args = ["--version"]
+parser = "text"
+timeout = "1s"
 [discoveries.script]
 strategy = "first-valid"
 [[discoveries.script.candidates]]
