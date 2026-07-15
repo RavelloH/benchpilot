@@ -9,6 +9,8 @@ import {
   validateAdapter,
 } from "../dist/adapters/compiler/compiler.js";
 import { mergePlatform } from "../dist/adapters/compiler/platform-merger.js";
+import { runCases } from "../dist/adapters/compiler/case-runner.js";
+import { loadAdapter } from "../dist/adapters/compiler/loader.js";
 
 const template = join(process.cwd(), "src", "adapters", "_template");
 const temporaryAdapter = async () => {
@@ -130,6 +132,23 @@ test("template validation rejects fields excluded by adapter schemas", async () 
         (item) => item.code === "ADAPTER_TEMPLATE_INVALID",
       ),
     );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("render-action cases expand repeat arguments", async () => {
+  const root = await temporaryAdapter();
+  try {
+    await writeFile(
+      join(root, "actions.toml"),
+      `schema = "benchpilot.adapter.actions"\nschema_version = 1\n\n[actions.run]\ntype = "process"\ntool = "tool"\ncwd = "${"${device.project}"}"\narguments = [{ kind = "repeat", values = "${"${input.values}"}", prefix = "--tag" }]\n`,
+    );
+    await writeFile(
+      join(root, "tests", "cases.toml"),
+      `schema = "benchpilot.adapter.cases"\nschema_version = 1\n\n[[cases]]\nid = "repeat"\ntype = "render-action"\nplatform = "linux"\ntarget = "run"\n[cases.context.device]\nproject = "project"\n[cases.context.input]\nvalues = ["one", "two"]\n[cases.expect]\ntool = "tool"\ncwd = "project"\nargs = ["--tag", "one", "--tag", "two"]\n`,
+    );
+    assert.deepEqual(await runCases(await loadAdapter(root)), []);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

@@ -120,6 +120,14 @@ export const runCases = async (
             if (arg.kind === "flag") return [arg.flag];
             if (arg.kind === "option")
               return [arg.flag, String(render(arg.value, context) ?? "")];
+            if (arg.kind === "repeat") {
+              const values = render(arg.values, context);
+              const prefix =
+                arg.prefix === undefined ? [] : [String(arg.prefix)];
+              return Array.isArray(values)
+                ? values.flatMap((value) => [...prefix, String(value)])
+                : [];
+            }
             return [String(render(arg.value, context) ?? "")];
           });
         if (JSON.stringify(args) !== JSON.stringify(expect.args))
