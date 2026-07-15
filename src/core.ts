@@ -58,6 +58,7 @@ export type {
 export type {
   OperationContext,
   OperationServices,
+  OperationExecutionOptions,
 } from "./core/operations/types.js";
 export { runCleanupWithGrace } from "./core/operations/cleanup.js";
 export {
@@ -111,3 +112,4 @@ export type {
   Safety,
 } from "./core/capabilities/types.js";
 export { OperationRunner } from "./core/operations/operation-runner.js";
+export type { ProcessState } from "./core/process/process-runner.js";

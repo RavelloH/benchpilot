@@ -28,4 +28,8 @@ export class EventWriter implements BenchPilotEventWriter {
   failed(error: Json) {
     this.emit("operation.failed", { error });
   }
+
+  child(context: Json) {
+    return new EventWriter(this.output, { ...this.context, ...context });
+  }
 }

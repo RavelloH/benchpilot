@@ -7,6 +7,15 @@ import path from "node:path";
 const root = process.cwd();
 const temp = await mkdtemp(path.join(os.tmpdir(), "benchpilot-package-"));
 const pnpmCli = process.env.npm_execpath;
+const npm = process.platform === "win32" ? "npm.cmd" : "npm";
+const npmCommand = (args, options) => {
+  if (process.platform !== "win32") return execFileSync(npm, args, options);
+  return execFileSync(
+    process.env.ComSpec || "cmd.exe",
+    ["/d", "/c", "npm", ...args],
+    options,
+  );
+};
 
 try {
   assert.ok(pnpmCli, "pnpm CLI path is unavailable.");
@@ -29,13 +38,13 @@ try {
     path.join(project, "package.json"),
     `${JSON.stringify({ private: true }, null, 2)}\n`,
   );
-  execFileSync(process.execPath, [pnpmCli, "install", archive], {
+  npmCommand(["install", archive], {
     cwd: project,
     stdio: "inherit",
   });
   const env = { ...process.env, BENCHPILOT_HOME: path.join(project, "home") };
   const run = (...args) =>
-    execFileSync(process.execPath, [pnpmCli, "exec", "benchpilot", ...args], {
+    npmCommand(["exec", "--no", "--", "benchpilot", ...args], {
       cwd: project,
       env,
       encoding: "utf8",

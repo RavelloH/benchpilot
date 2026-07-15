@@ -40,6 +40,15 @@ test("capability boolean options are parsed without a hard-coded option list", (
     { erase: true, verify: false, cache: false },
   );
 });
+
+test("global color options use a positive internal flag", () => {
+  assert.equal(parse([]).flags.color, undefined);
+  assert.equal(parse(["--no-color"]).flags.color, false);
+  assert.equal(parse(["--color"]).flags.color, true);
+  assert.deepEqual(parse(["--no-cache"]).rawOptions, [
+    { name: "cache", negated: true },
+  ]);
+});
 test("installed CLI surface initializes and runs the demo", async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "benchpilot-test-"));
   try {
@@ -180,6 +189,51 @@ test("jsonl emits one failed terminal event after cleanup", async () => {
         /operation\.(completed|failed)/.test(event.event.type),
       ).length,
       1,
+    );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("system JSONL emits child device events and one system terminal event", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "benchpilot-system-jsonl-"));
+  try {
+    await writeFile(
+      path.join(dir, "benchpilot.toml"),
+      [
+        "version = 1",
+        "[devices.left]",
+        'adapter = "demo"',
+        'device_id = "left"',
+        "[devices.right]",
+        'adapter = "demo"',
+        'device_id = "right"',
+        "[systems.test]",
+        'devices = ["left", "right"]',
+      ].join("\n"),
+    );
+    const output = await run(dir, "system", "test", "deploy", "--jsonl");
+    const events = output.stdout
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    assert.equal(
+      events.filter(
+        (event) => event.event.type === "system.operation.completed",
+      ).length,
+      1,
+    );
+    assert.equal(
+      events.filter((event) => event.event.type === "command.result").length,
+      0,
+    );
+    assert.ok(
+      events.some(
+        (event) =>
+          event.event.type === "device.operation.completed" &&
+          event.context.system === "test" &&
+          event.context.device === "left",
+      ),
     );
   } finally {
     await rm(dir, { recursive: true, force: true });

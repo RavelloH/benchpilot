@@ -31,8 +31,13 @@ export interface ProcessRunResult {
 export interface StartedProcess {
   readonly child: ChildProcess;
   readonly result: Promise<ProcessRunResult>;
+  readonly state: ProcessState;
+  isRunning(): boolean;
   stop(): Promise<void>;
 }
+
+export type ProcessState =
+  "running" | "exited" | "stopping" | "stopped" | "cleanup-timeout";
 
 const delay = (ms: number) =>
   new Promise<void>((resolve) => {
@@ -143,6 +148,7 @@ export function startProcess(options: ProcessRunOptions): StartedProcess {
   let stopped: Promise<void> | undefined;
   let aborting = false;
   let settled = false;
+  let state: ProcessState = "running";
   const removeAbortListener = () =>
     options.signal.removeEventListener("abort", onAbort);
   const finish = (value: ProcessRunResult) => {
@@ -159,7 +165,9 @@ export function startProcess(options: ProcessRunOptions): StartedProcess {
   };
   const stop = () => {
     if (stopped) return stopped;
+    if (state === "exited" || state === "stopped") return Promise.resolve();
     stopped = (async () => {
+      state = "stopping";
       const killTree = options.killTree ?? true;
       await terminateTree(child, false, killTree);
       const gracefullyClosed = await Promise.race([
@@ -172,13 +180,16 @@ export function startProcess(options: ProcessRunOptions): StartedProcess {
           closed.then(() => true),
           delay(options.forceKillMs ?? 2_000).then(() => false),
         ]);
-        if (!ended)
+        if (!ended) {
+          state = "cleanup-timeout";
           throw new BenchPilotError(
             "PROCESS_CLEANUP_TIMEOUT",
             5,
             `Process tree did not exit: ${options.command}`,
           );
+        }
       }
+      state = "stopped";
     })();
     return stopped;
   };
@@ -194,6 +205,7 @@ export function startProcess(options: ProcessRunOptions): StartedProcess {
   child.once("error", (error) => fail(error));
   child.once("close", (code, signal) => {
     if (aborting) return;
+    state = "exited";
     finish({
       code,
       signal,
@@ -203,7 +215,17 @@ export function startProcess(options: ProcessRunOptions): StartedProcess {
   });
   // Covers an abort after listener registration but before/while spawn returns.
   if (abortedDuringLaunch || options.signal.aborted) onAbort();
-  return { child, result, stop };
+  return {
+    child,
+    result,
+    get state() {
+      return state;
+    },
+    isRunning() {
+      return state === "running" || state === "stopping";
+    },
+    stop,
+  };
 }
 
 /** Runs an executable and waits for its complete process tree on abort. */

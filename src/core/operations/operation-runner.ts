@@ -14,7 +14,11 @@ import {
   type OperationAbortReason,
 } from "./abort.js";
 import type { CleanupError, OperationOutcome } from "./operation-outcome.js";
-import type { OperationContext, OperationServices } from "./types.js";
+import type {
+  OperationContext,
+  OperationExecutionOptions,
+  OperationServices,
+} from "./types.js";
 import { runCleanupWithGrace } from "./cleanup.js";
 import { atomicJson } from "../utilities/atomic-json.js";
 import { sha } from "../utilities/stable-json.js";
@@ -38,7 +42,12 @@ export class OperationRunner {
     instance: string,
     capabilityId: string,
     input: Json,
+    options: OperationExecutionOptions = {},
   ): Promise<Json> {
+    const eventWriter =
+      options.eventContext && this.s.eventWriter?.child
+        ? this.s.eventWriter.child(options.eventContext)
+        : this.s.eventWriter;
     const raw = (this.s.config.value.devices as Json | undefined)?.[instance];
     if (!object(raw))
       fail("DEVICE_NOT_FOUND", 3, `Device not found: ${instance}`);
@@ -176,7 +185,7 @@ export class OperationRunner {
       jsonlFilePath: run && path.join(run.dir, "events.jsonl"),
       jsonlOutput: "none",
       screenOutput: this.s.flags.quiet ? "none" : "stderr",
-      enableColorfulOutput: !this.s.flags["no-color"],
+      enableColorfulOutput: this.s.flags.color !== false,
       screenLogLevel: this.s.flags.verbose ? "debug" : "info",
       context: {
         runId: run?.id,
@@ -192,7 +201,7 @@ export class OperationRunner {
       options?: { level?: "error" | "warn" | "info" | "debug" },
     ) => {
       logger.event(type, data, options);
-      this.s.eventWriter?.emit(type, data);
+      eventWriter?.emit(type, data);
     };
     let lock: LockRecord | undefined;
     let lease: LockLease | undefined;
@@ -598,13 +607,23 @@ export class OperationRunner {
     };
     if (run) await runManager.finalize(run, outcome.status, outcome.result);
     if (outcome.primaryError) {
-      this.s.eventWriter?.failed(outcome.result);
+      if (options.eventScope === "child")
+        eventWriter?.emit("device.operation.failed", { error: outcome.result });
+      else eventWriter?.failed(outcome.result);
       throw Object.assign(outcome.primaryError, {
         result: outcome.result,
-        jsonlTerminalEmitted: Boolean(this.s.eventWriter),
+        jsonlTerminalEmitted: Boolean(eventWriter),
       });
     }
-    this.s.eventWriter?.completed(outcome.result);
+    if (options.eventScope === "child")
+      eventWriter?.emit("device.operation.completed", {
+        result: outcome.result,
+      });
+    else eventWriter?.completed(outcome.result);
     return outcome.result;
+  }
+
+  emitSystemEvent(type: string, data: Json = {}) {
+    this.s.eventWriter?.emit(type, data);
   }
 }

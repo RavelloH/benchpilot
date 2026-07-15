@@ -15,42 +15,61 @@ export async function systemOperation(
   )
     fail("SYSTEM_NOT_FOUND", 3, `System not found: ${name}`);
   const devices = (system as Json).devices as string[];
-  if (operation === "info")
-    return { system: name, devices, operations: systemCapabilities };
-  if (operation === "status")
-    return {
-      system: name,
-      results: await Promise.all(
-        devices.map(async (device) => ({
-          device,
-          result: await runner.execute(device, "status", {}),
-        })),
-      ),
-    };
-  if (operation === "emergency-stop") {
-    const results = [];
-    for (const device of devices)
-      try {
-        results.push({
-          device,
-          result: await runner.execute(device, "stop", {}),
-        });
-      } catch (error) {
-        results.push({ device, error: (error as Error).message });
-      }
-    return { system: name, results };
-  }
-  const capability =
-    operation === "smoke"
-      ? "selftest"
-      : operation === "collect"
-        ? "capture"
-        : "deploy";
-  const results = [];
-  for (const device of [...devices].sort())
-    results.push({
+  runner.emitSystemEvent("system.operation.started", {
+    system: name,
+    operation,
+  });
+  const execute = (device: string, capability: string) =>
+    runner.execute(
       device,
-      result: await runner.execute(device, capability, {}),
+      capability,
+      {},
+      {
+        eventScope: "child",
+        eventContext: { system: name, device },
+      },
+    );
+  try {
+    let result: Json;
+    if (operation === "info")
+      result = { system: name, devices, operations: systemCapabilities };
+    else if (operation === "status")
+      result = {
+        system: name,
+        results: await Promise.all(
+          devices.map(async (device) => ({
+            device,
+            result: await execute(device, "status"),
+          })),
+        ),
+      };
+    else if (operation === "emergency-stop") {
+      const results = [];
+      for (const device of devices)
+        try {
+          results.push({ device, result: await execute(device, "stop") });
+        } catch (error) {
+          results.push({ device, error: (error as Error).message });
+        }
+      result = { system: name, results };
+    } else {
+      const capability =
+        operation === "smoke"
+          ? "selftest"
+          : operation === "collect"
+            ? "capture"
+            : "deploy";
+      const results = [];
+      for (const device of [...devices].sort())
+        results.push({ device, result: await execute(device, capability) });
+      result = { system: name, operation, results };
+    }
+    runner.emitSystemEvent("system.operation.completed", { result });
+    return result;
+  } catch (error) {
+    runner.emitSystemEvent("system.operation.failed", {
+      error: { message: (error as Error).message },
     });
-  return { system: name, operation, results };
+    throw Object.assign(error as Error, { jsonlTerminalEmitted: true });
+  }
 }

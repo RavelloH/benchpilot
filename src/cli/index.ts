@@ -318,10 +318,13 @@ export async function main(adapters: Adapter[] = [demoAdapter]) {
         );
         return;
       }
-      write(
-        await systemOperation(parts[1], parts[2], runner, config.value),
-        flags,
+      const result = await systemOperation(
+        parts[1],
+        parts[2],
+        runner,
+        config.value,
       );
+      if (!flags.jsonl) write(result, flags);
       return;
     }
     if (

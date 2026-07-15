@@ -28,6 +28,7 @@ import {
   redactResolvedConfig,
   readJson,
   runProcess,
+  startProcess,
   setKey,
   stringSchema,
 } from "../dist/index.js";
@@ -92,6 +93,20 @@ test("process runner rejects before spawn when its signal is already aborted", a
     }),
     /already aborted/,
   );
+});
+
+test("process runner stop is idempotent after normal completion", async () => {
+  const started = startProcess({
+    command: process.execPath,
+    args: ["-e", "process.exit(0)"],
+    signal: new AbortController().signal,
+  });
+  await started.result;
+  assert.equal(started.state, "exited");
+  await started.stop();
+  await started.stop();
+  assert.equal(started.state, "exited");
+  assert.equal(started.isRunning(), false);
 });
 
 test("process runner terminates a spawned child tree before rejecting", async () => {

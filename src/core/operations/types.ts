@@ -44,3 +44,8 @@ export interface OperationServices {
   lockLeaseMs?: number;
   eventWriter?: BenchPilotEventWriter;
 }
+
+export interface OperationExecutionOptions {
+  eventScope?: "root" | "child";
+  eventContext?: Json;
+}

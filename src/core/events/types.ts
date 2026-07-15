@@ -12,4 +12,5 @@ export interface BenchPilotEventWriter {
   emit(type: string, payload?: Json): void;
   completed(result: Json): void;
   failed(error: Json): void;
+  child?(context: Json): BenchPilotEventWriter;
 }

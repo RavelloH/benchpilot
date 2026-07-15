@@ -18,7 +18,7 @@ const globalBooleanOptions = new Set([
   "quiet",
   "verbose",
   "dry-run",
-  "no-color",
+  "color",
   "help",
   "version",
 ]);
