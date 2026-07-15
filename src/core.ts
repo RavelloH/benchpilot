@@ -7,6 +7,8 @@ import {
   SchemaValidationError,
   type RuntimeSchema,
 } from "./core/adapters/schemas.js";
+import { AdapterRegistry } from "./core/adapters/registry.js";
+import type { Adapter } from "./core/adapters/types.js";
 import { lockIdentity } from "./core/locks/lock-identity.js";
 import { LockManager } from "./core/locks/lock-manager.js";
 import type { LockLease, LockRecord } from "./core/locks/types.js";
@@ -67,6 +69,8 @@ export {
   stringSchema,
 } from "./core/adapters/schemas.js";
 export type { RuntimeSchema } from "./core/adapters/schemas.js";
+export { AdapterRegistry } from "./core/adapters/registry.js";
+export type { Adapter } from "./core/adapters/types.js";
 export {
   lockIdentity,
   type PhysicalResourceIdentity,
@@ -354,99 +358,6 @@ export interface DeviceRuntime {
   identity: { instance: string; physicalId: string; adapter: string };
   capabilities(): Capability[];
 }
-export interface Adapter {
-  id: string;
-  apiVersion: 1;
-  version: string;
-  summary: string;
-  description?: string;
-  configSchema: RuntimeSchema<Json>;
-  deviceConfigSchema?: RuntimeSchema<Json>;
-  discover(config: Json): Promise<Json[]>;
-  doctor(config: Json): Promise<Json[]>;
-  createDevice(instance: string, config: Json): Promise<DeviceRuntime>;
-}
-export class AdapterRegistry {
-  private adapters = new Map<string, Adapter>();
-  register(a: Adapter) {
-    if (!/^[a-z][a-z0-9-]*$/.test(a.id))
-      fail("INVALID_ADAPTER_DEFINITION", 8, "Adapter id is invalid.");
-    if (this.adapters.has(a.id))
-      fail("DUPLICATE_ADAPTER", 8, `Adapter already registered: ${a.id}`);
-    if (a.apiVersion !== 1)
-      fail(
-        "UNSUPPORTED_ADAPTER_API_VERSION",
-        8,
-        `Adapter ${a.id} requires API version 1.`,
-      );
-    if (!a.version || !a.summary)
-      fail(
-        "INVALID_ADAPTER_DEFINITION",
-        8,
-        `Adapter ${a.id} requires a version and summary.`,
-      );
-    if (!a.configSchema || typeof a.configSchema.parse !== "function")
-      fail(
-        "INVALID_ADAPTER_DEFINITION",
-        8,
-        `Adapter ${a.id} requires configSchema.`,
-      );
-    for (const method of ["discover", "doctor", "createDevice"] as const)
-      if (typeof a[method] !== "function")
-        fail(
-          "INVALID_ADAPTER_DEFINITION",
-          8,
-          `Adapter ${a.id} requires ${method}().`,
-        );
-    this.adapters.set(a.id, a);
-  }
-  get(id: string): Adapter {
-    const a = this.adapters.get(id);
-    if (!a) fail("UNKNOWN_ADAPTER", 3, `Unknown adapter: ${id}`);
-    return a!;
-  }
-  list() {
-    return [...this.adapters.values()];
-  }
-  configFor(adapter: Adapter, config: Json): Json {
-    const raw = ((config.adapters as Json | undefined)?.[adapter.id] ||
-      {}) as Json;
-    try {
-      return adapter.configSchema.parse(raw);
-    } catch (error) {
-      const detail =
-        error instanceof SchemaValidationError ? error.path.join(".") : "";
-      throw new BenchPilotError(
-        "INVALID_ADAPTER_CONFIG",
-        3,
-        `Adapter ${adapter.id} configuration is invalid${detail ? ` at ${detail}` : ""}: ${(error as Error).message}`,
-        false,
-        undefined,
-        ["Check [adapters." + adapter.id + "] in your configuration."],
-      );
-    }
-  }
-  async createDevice(
-    adapter: Adapter,
-    instance: string,
-    deviceConfig: Json,
-    config: Json,
-  ) {
-    this.configFor(adapter, config);
-    if (adapter.deviceConfigSchema)
-      try {
-        deviceConfig = adapter.deviceConfigSchema.parse(deviceConfig);
-      } catch (error) {
-        throw new BenchPilotError(
-          "INVALID_DEVICE_CONFIG",
-          3,
-          `Device ${instance} configuration for ${adapter.id} is invalid: ${(error as Error).message}`,
-        );
-      }
-    return adapter.createDevice(instance, deviceConfig);
-  }
-}
-
 export interface OperationContext {
   signal: AbortSignal;
   logger: InstanceType<typeof Rlog>;
