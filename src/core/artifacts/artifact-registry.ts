@@ -29,19 +29,20 @@ export class ArtifactRegistry {
         5,
         "Artifact name, kind, and path are required.",
       );
-    const artifactRoot = await fs.realpath(this.root).catch(() => undefined);
+    const requested = path.resolve(registration.path);
+    const declaredRoot = path.resolve(this.root);
+    if (!inside(declaredRoot, requested))
+      fail(
+        "INVALID_ARTIFACT",
+        5,
+        "Artifact path must be inside the Run artifacts directory.",
+      );
+    const artifactRoot = await fs.realpath(declaredRoot).catch(() => undefined);
     if (!artifactRoot)
       throw new BenchPilotError(
         "INVALID_ARTIFACT",
         5,
         "Run artifact directory does not exist.",
-      );
-    const requested = path.resolve(registration.path);
-    if (!inside(artifactRoot, requested))
-      fail(
-        "INVALID_ARTIFACT",
-        5,
-        "Artifact path must be inside the Run artifacts directory.",
       );
     const resolved = await fs.realpath(requested).catch(() => {
       throw new BenchPilotError(
@@ -62,7 +63,7 @@ export class ArtifactRegistry {
     return {
       name: registration.name,
       kind: registration.kind,
-      path: path.relative(this.run.dir, resolved),
+      path: path.relative(this.run.dir, requested),
       size: stat.size,
       sha256: createHash("sha256").update(contents).digest("hex"),
       createdAt: new Date().toISOString(),

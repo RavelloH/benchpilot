@@ -571,6 +571,36 @@ test("artifact registry verifies location, file type, size, and hash", async () 
   }
 });
 
+test("artifact registry accepts a canonicalized run path without escaping it", async () => {
+  const target = await mkdtemp(path.join(os.tmpdir(), "benchpilot-artifact-"));
+  const alias = `${target}-alias`;
+  try {
+    await mkdir(path.join(target, "artifacts"));
+    await symlink(
+      target,
+      alias,
+      process.platform === "win32" ? "junction" : "dir",
+    );
+    const file = path.join(alias, "artifacts", "firmware.bin");
+    await writeFile(file, "firmware");
+    const registry = new ArtifactRegistry({
+      id: "run",
+      dir: alias,
+      started: Date.now(),
+      command: "build",
+    });
+    const artifact = await registry.register({
+      name: "firmware.bin",
+      kind: "firmware",
+      path: file,
+    });
+    assert.equal(artifact.path, path.join("artifacts", "firmware.bin"));
+  } finally {
+    await rm(alias, { recursive: true, force: true });
+    await rm(target, { recursive: true, force: true });
+  }
+});
+
 test("lock lease stops before release and rejects unsafe IDs", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "benchpilot-lock-"));
   try {
