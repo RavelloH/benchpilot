@@ -5,6 +5,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+import { capabilityInput } from "../dist/cli/option-parser.js";
 import { parse } from "../dist/cli/parser.js";
 const exec = promisify(execFile);
 const cli = path.resolve("dist/cli/index.js");
@@ -24,7 +25,20 @@ test("capability boolean options are parsed without a hard-coded option list", (
     "--verify=false",
     "--no-cache",
   ]);
-  assert.deepEqual(parsed.flags, { erase: true, verify: false, cache: false });
+  assert.deepEqual(parsed.flags, {});
+  assert.deepEqual(parsed.rawOptions, [
+    { name: "erase" },
+    { name: "verify", value: "false" },
+    { name: "cache", negated: true },
+  ]);
+  assert.deepEqual(
+    capabilityInput(parsed.rawOptions, [
+      { name: "erase", schema: { describe: () => ({ type: "boolean" }) } },
+      { name: "verify", schema: { describe: () => ({ type: "boolean" }) } },
+      { name: "cache", schema: { describe: () => ({ type: "boolean" }) } },
+    ]),
+    { erase: true, verify: false, cache: false },
+  );
 });
 test("installed CLI surface initializes and runs the demo", async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "benchpilot-test-"));

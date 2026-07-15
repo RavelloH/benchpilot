@@ -35,6 +35,11 @@ import {
   systemCapabilities,
 } from "./help-renderer.js";
 import { type Flags, parse } from "./parser.js";
+import {
+  capabilityInput,
+  commandOptionFlags,
+  optionEnabled,
+} from "./option-parser.js";
 import { write } from "./output-renderer.js";
 
 const version = "0.0.0";
@@ -161,14 +166,15 @@ export async function main(adapters: Adapter[] = [demoAdapter]) {
   let parsed;
   try {
     parsed = parse(process.argv.slice(2));
-    const { path: parts, flags } = parsed;
+    const { path: parts, flags, rawOptions } = parsed;
+    const commandFlags = { ...flags, ...commandOptionFlags(rawOptions) };
     if (flags.version) {
       stdout.write(`${version}\n`);
       return;
     }
     if (parts[0] === "help") {
       const target = parts.slice(1);
-      if (flags.all) {
+      if (commandFlags.all) {
         const value = {
           schema: "benchpilot.help-index",
           version: 1,
@@ -239,7 +245,9 @@ export async function main(adapters: Adapter[] = [demoAdapter]) {
           {
             key,
             value,
-            origin: flags["show-origin"] ? config.origins.get(key) : undefined,
+            origin: commandFlags["show-origin"]
+              ? config.origins.get(key)
+              : undefined,
           },
           flags,
           String(value),
@@ -284,7 +292,7 @@ export async function main(adapters: Adapter[] = [demoAdapter]) {
           await editConfig(
             paths,
             project,
-            flags,
+            commandFlags,
             key,
             sub === "set" ? parts[3] : undefined,
           ),
@@ -313,7 +321,7 @@ export async function main(adapters: Adapter[] = [demoAdapter]) {
       });
       for (const d of registry.list())
         checks.push(...(await d.doctor(registry.configFor(d, config.value))));
-      if (flags.save) {
+      if (commandFlags.save) {
         /* doctor is intentionally read-only unless explicit save; its diagnostics are returned */
       }
       write(
@@ -380,8 +388,8 @@ export async function main(adapters: Adapter[] = [demoAdapter]) {
         return;
       }
       if (parts[1] === "scan") {
-        const adapters = flags.adapter
-          ? [registry.get(String(flags.adapter))]
+        const adapters = commandFlags.adapter
+          ? [registry.get(String(commandFlags.adapter))]
           : registry.list();
         const scans = await Promise.all(
           adapters.map(async (adapter) => {
@@ -458,25 +466,16 @@ export async function main(adapters: Adapter[] = [demoAdapter]) {
         write(help, flags, `${definition.id} — ${definition.summary}\n`);
         return;
       }
-      const globalFlagNames = new Set([
-        "json",
-        "jsonl",
-        "quiet",
-        "verbose",
-        "timeout",
-        "dry-run",
-        "no-color",
-        "session",
-        "help",
-        "version",
-        "config",
-      ]);
-      const input = Object.fromEntries(
-        Object.entries(flags).filter(
-          ([name]) =>
-            !globalFlagNames.has(name) && name !== definition.safety.flag,
-        ),
+      const input = capabilityInput(
+        rawOptions,
+        definition.options || [],
+        definition.safety.flag,
       );
+      if (definition.safety.mode !== "normal" && definition.safety.flag)
+        flags[definition.safety.flag] = optionEnabled(
+          rawOptions,
+          definition.safety.flag,
+        );
       const result = await runner.execute(parts[1], capability, input);
       const r = result as Json;
       write(
@@ -529,18 +528,19 @@ export async function main(adapters: Adapter[] = [demoAdapter]) {
       );
       if (parts[1] === "list") {
         let runs = await manager.list();
-        if (flags.status)
-          runs = runs.filter((r) => r.manifest?.status === flags.status);
-        if (flags.limit) runs = runs.slice(0, Number(flags.limit));
+        if (commandFlags.status)
+          runs = runs.filter((r) => r.manifest?.status === commandFlags.status);
+        if (commandFlags.limit)
+          runs = runs.slice(0, Number(commandFlags.limit));
         write({ runs }, flags);
         return;
       }
       if (parts[1] === "prune") {
         const runs = await manager.list();
         if (
-          !flags["older-than"] &&
-          !flags.keep &&
-          !flags["dangerously-remove-all-runs"]
+          !commandFlags["older-than"] &&
+          !commandFlags.keep &&
+          !commandFlags["dangerously-remove-all-runs"]
         )
           fail(
             "DANGEROUS_CONFIRMATION_REQUIRED",
@@ -548,9 +548,9 @@ export async function main(adapters: Adapter[] = [demoAdapter]) {
             "runs prune requires --older-than, --keep, or --dangerously-remove-all-runs.",
           );
         let remove = runs;
-        if (flags.keep) remove = runs.slice(Number(flags.keep));
-        if (flags["older-than"]) {
-          const age = duration(flags["older-than"]);
+        if (commandFlags.keep) remove = runs.slice(Number(commandFlags.keep));
+        if (commandFlags["older-than"]) {
+          const age = duration(commandFlags["older-than"]);
           remove = runs.filter(
             (r) => Date.now() - Date.parse(String(r.manifest?.startedAt)) > age,
           );
@@ -643,7 +643,7 @@ export async function main(adapters: Adapter[] = [demoAdapter]) {
           {
             cleared: await locks.clear(
               parts[1],
-              Boolean(flags["dangerously-clear-active-lock"]),
+              Boolean(commandFlags["dangerously-clear-active-lock"]),
             ),
           },
           flags,

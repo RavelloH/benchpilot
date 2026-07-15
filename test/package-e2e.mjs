@@ -14,6 +14,13 @@ const npmCli = path.join(
   "bin",
   "npm-cli.js",
 );
+const npxCli = path.join(
+  path.dirname(process.execPath),
+  "node_modules",
+  "npm",
+  "bin",
+  "npx-cli.js",
+);
 
 try {
   assert.ok(pnpmCli, "pnpm CLI path is unavailable.");
@@ -38,23 +45,19 @@ try {
     cwd: temp,
     stdio: "inherit",
   });
-  const bin = path.join(
-    temp,
-    "node_modules",
-    "benchpilot",
-    "dist",
-    "cli",
-    "index.js",
-  );
   const project = path.join(temp, "project");
   await mkdir(project);
   const env = { ...process.env, BENCHPILOT_HOME: path.join(project, "home") };
   const run = (...args) =>
-    execFileSync(process.execPath, [bin, ...args], {
-      cwd: project,
-      env,
-      encoding: "utf8",
-    });
+    execFileSync(
+      process.execPath,
+      [npxCli, "--no-install", "benchpilot", ...args],
+      {
+        cwd: project,
+        env,
+        encoding: "utf8",
+      },
+    );
   assert.match(run("--version"), /0\.0\.0/);
   run("init");
   const commands = [

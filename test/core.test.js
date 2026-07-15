@@ -79,6 +79,19 @@ test("process runner aborts without invoking a shell", async () => {
   await assert.rejects(pending, /test abort/);
 });
 
+test("process runner rejects before spawn when its signal is already aborted", async () => {
+  const controller = new AbortController();
+  controller.abort(new Error("already aborted"));
+  await assert.rejects(
+    runProcess({
+      command: process.execPath,
+      args: ["-e", "throw new Error('must not run')"],
+      signal: controller.signal,
+    }),
+    /already aborted/,
+  );
+});
+
 test("process runner terminates a spawned child tree before rejecting", async () => {
   const controller = new AbortController();
   let descendantPid;
@@ -682,6 +695,70 @@ test("heartbeat rechecks ownership after a guarded asynchronous step", async () 
     });
     const lock = await locks.acquire("demo-device-cas", "test");
     const pending = locks.heartbeat(lock);
+    for (let attempt = 0; attempt < 50 && !resume; attempt += 1)
+      await new Promise((resolve) => setTimeout(resolve, 2));
+    await atomicJson(locks.file(lock.lockId), {
+      ...lock,
+      ownerToken: "replacement",
+    });
+    resume();
+    await assert.rejects(
+      pending,
+      (error) =>
+        error instanceof BenchPilotError &&
+        error.kind === "LOCK_OWNERSHIP_LOST",
+    );
+    assert.equal((await locks.list())[0].ownerToken, "replacement");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("release rechecks ownership after a guarded asynchronous step", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "benchpilot-release-cas-"));
+  let resume;
+  try {
+    const paths = new PathService({ BENCHPILOT_HOME: root });
+    const locks = new LockManager(paths, {
+      releaseRead: () =>
+        new Promise((resolve) => {
+          resume = resolve;
+        }),
+    });
+    const lock = await locks.acquire("demo-device-release", "test");
+    const pending = locks.release(lock);
+    for (let attempt = 0; attempt < 50 && !resume; attempt += 1)
+      await new Promise((resolve) => setTimeout(resolve, 2));
+    await atomicJson(locks.file(lock.lockId), {
+      ...lock,
+      ownerToken: "replacement",
+    });
+    resume();
+    await assert.rejects(
+      pending,
+      (error) =>
+        error instanceof BenchPilotError &&
+        error.kind === "LOCK_OWNERSHIP_LOST",
+    );
+    assert.equal((await locks.list())[0].ownerToken, "replacement");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("clear rechecks ownership after a guarded asynchronous step", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "benchpilot-clear-cas-"));
+  let resume;
+  try {
+    const paths = new PathService({ BENCHPILOT_HOME: root });
+    const locks = new LockManager(paths, {
+      clearRead: () =>
+        new Promise((resolve) => {
+          resume = resolve;
+        }),
+    });
+    const lock = await locks.acquire("demo-device-clear", "test");
+    const pending = locks.clear(lock.lockId, true);
     for (let attempt = 0; attempt < 50 && !resume; attempt += 1)
       await new Promise((resolve) => setTimeout(resolve, 2));
     await atomicJson(locks.file(lock.lockId), {
