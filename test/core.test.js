@@ -669,6 +669,38 @@ test("heartbeat reports lock ownership loss without deleting a replacement", asy
   }
 });
 
+test("heartbeat rechecks ownership after a guarded asynchronous step", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "benchpilot-lock-cas-"));
+  let resume;
+  try {
+    const paths = new PathService({ BENCHPILOT_HOME: root });
+    const locks = new LockManager(paths, {
+      heartbeatRead: () =>
+        new Promise((resolve) => {
+          resume = resolve;
+        }),
+    });
+    const lock = await locks.acquire("demo-device-cas", "test");
+    const pending = locks.heartbeat(lock);
+    for (let attempt = 0; attempt < 50 && !resume; attempt += 1)
+      await new Promise((resolve) => setTimeout(resolve, 2));
+    await atomicJson(locks.file(lock.lockId), {
+      ...lock,
+      ownerToken: "replacement",
+    });
+    resume();
+    await assert.rejects(
+      pending,
+      (error) =>
+        error instanceof BenchPilotError &&
+        error.kind === "LOCK_OWNERSHIP_LOST",
+    );
+    assert.equal((await locks.list())[0].ownerToken, "replacement");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("separate processes cannot acquire the same physical lock", async () => {
   const root = await mkdtemp(
     path.join(os.tmpdir(), "benchpilot-lock-process-"),

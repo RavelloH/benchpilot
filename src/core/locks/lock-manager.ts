@@ -125,9 +125,17 @@ export class LockManager {
         );
       if (existing.ownerToken !== lock.ownerToken) ownershipLost(lock.lockId);
       await this.hooks.heartbeatRead?.(existing);
+      const current = await readJson<LockRecord>(this.file(lock.lockId));
+      if (!current)
+        throw new BenchPilotError(
+          "LOCK_OWNERSHIP_LOST",
+          4,
+          `Lock ownership lost: ${lock.lockId}`,
+        );
+      if (current.ownerToken !== lock.ownerToken) ownershipLost(lock.lockId);
       const now = new Date();
       const updated: LockRecord = {
-        ...existing,
+        ...current,
         heartbeatAt: now.toISOString(),
         expiresAt: new Date(now.getTime() + leaseMs).toISOString(),
       };
@@ -213,6 +221,14 @@ export class LockManager {
       if (!existing) return;
       if (existing.ownerToken !== lock.ownerToken) ownershipLost(lock.lockId);
       await this.hooks.releaseRead?.(existing);
+      const current = await readJson<LockRecord>(this.file(lock.lockId));
+      if (!current)
+        throw new BenchPilotError(
+          "LOCK_OWNERSHIP_LOST",
+          4,
+          `Lock ownership lost: ${lock.lockId}`,
+        );
+      if (current.ownerToken !== lock.ownerToken) ownershipLost(lock.lockId);
       await fs.unlink(this.file(lock.lockId));
     });
     try {
