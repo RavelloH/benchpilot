@@ -590,6 +590,29 @@ test("lock lease stops before release and rejects unsafe IDs", async () => {
   }
 });
 
+test(
+  "lock heartbeat maintains ownership past the original thirty-second lease",
+  { timeout: 45_000 },
+  async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), "benchpilot-lock-long-"));
+    try {
+      const paths = new PathService({ BENCHPILOT_HOME: root });
+      const locks = new LockManager(paths);
+      const lock = await locks.acquire("demo-device-long-heartbeat", "test");
+      const originalExpiry = Date.parse(lock.expiresAt);
+      const lease = locks.startHeartbeat(lock, 1_000, 30_000);
+      await new Promise((resolve) => setTimeout(resolve, 35_000));
+      await lease.stop();
+      const [current] = await locks.list();
+      assert.ok(current);
+      assert.ok(Date.parse(current.heartbeatAt) > originalExpiry);
+      await locks.release(lock);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+);
+
 test("lock ownership loss aborts the capability and preserves the replacement", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "benchpilot-lock-abort-"));
   let aborted = false;

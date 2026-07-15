@@ -149,6 +149,42 @@ test("jsonl streams operation events before a delayed operation finishes", async
   }
 });
 
+test("jsonl emits one failed terminal event after cleanup", async () => {
+  const dir = await mkdtemp(
+    path.join(os.tmpdir(), "benchpilot-jsonl-failure-"),
+  );
+  try {
+    await writeFile(
+      path.join(dir, "benchpilot.toml"),
+      [
+        "version = 1",
+        "[devices.demo]",
+        'adapter = "demo"',
+        "[adapters.demo]",
+        'fail_stage = "flash"',
+      ].join("\n"),
+    );
+    const failed = await run(dir, "device", "demo", "deploy", "--jsonl").catch(
+      (error) => error,
+    );
+    const events = failed.stdout
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    assert.ok(events.some((event) => event.event.type === "stage.failed"));
+    assert.ok(events.some((event) => event.event.type === "cleanup.started"));
+    assert.equal(events.at(-1).event.type, "operation.failed");
+    assert.equal(
+      events.filter((event) =>
+        /operation\.(completed|failed)/.test(event.event.type),
+      ).length,
+      1,
+    );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("injected adapter executes through the dynamic CLI route", async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "benchpilot-injected-"));
   try {
