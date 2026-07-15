@@ -29,6 +29,10 @@ const baseNames = [
   "parsers",
   "artifacts",
 ];
+const fileFor = (name: string) =>
+  name === "discoveries" ? "tool-discovery.toml" : `${name}.toml`;
+const propertyFor = (name: string) =>
+  name === "artifacts" ? "sets" : name === "devices" ? undefined : name;
 
 export const validateAdapter = async (
   root: string,
@@ -63,17 +67,12 @@ export const validateAdapter = async (
     for (const [key, value] of Object.entries(overlay))
       if (value && typeof value === "object" && !Array.isArray(value))
         for (const id of Object.keys(value as JsonObject)) {
-          const baseFile =
-            key === "discoveries"
-              ? "tool-discovery.toml"
-              : `${key === "artifacts" ? "artifacts" : key}.toml`;
-          const baseKey = key === "artifacts" ? "sets" : key;
-          if (
-            !Object.hasOwn(
-              (adapter.files[baseFile][baseKey] ?? {}) as object,
-              id,
-            )
-          )
+          const baseFile = fileFor(key),
+            baseKey = propertyFor(key);
+          const base = baseKey
+            ? adapter.files[baseFile][baseKey]
+            : adapter.files[baseFile];
+          if (!Object.hasOwn((base ?? {}) as object, id))
             diagnostics.push({
               severity: "error",
               code: "ADAPTER_PLATFORM_OVERRIDE_INVALID",
@@ -82,6 +81,24 @@ export const validateAdapter = async (
               message: `Platform overlay cannot introduce ${key} id ${id}`,
             });
         }
+    const platformFiles = { ...adapter.files };
+    for (const [key, value] of Object.entries(overlay)) {
+      const target = fileFor(key),
+        property = propertyFor(key);
+      if (!target || !property) continue;
+      platformFiles[target] = {
+        ...platformFiles[target],
+        [property]: mergePlatform(
+          (platformFiles[target][property] ?? {}) as JsonObject,
+          value as JsonObject,
+        ),
+      };
+    }
+    const mergedAdapter = { ...adapter, files: platformFiles };
+    diagnostics.push(
+      ...(await validateSchemas(mergedAdapter, schemaRoot)),
+      ...(await validateSemantics(mergedAdapter, catalog)),
+    );
   }
   return { adapter, diagnostics };
 };
@@ -119,14 +136,22 @@ export const compileAdapter = async (
   for (const platform of ["windows", "linux", "macos"]) {
     const overlay = adapter.files[`platforms/${platform}.toml`]
       .overrides as JsonObject;
-    const base = Object.fromEntries(
-      baseNames.map((name) => [
-        name,
-        adapter.files[
-          `${name === "discoveries" ? "tool-discovery" : name}.toml`
-        ][name === "artifacts" ? "sets" : name],
-      ]),
-    );
+    const {
+      schema: _schema,
+      schema_version: _schemaVersion,
+      ...deviceRules
+    } = adapter.files["devices.toml"];
+    const base = {
+      capabilities: adapter.files["capabilities.toml"].capabilities,
+      tools: adapter.files["tools.toml"].tools,
+      discoveries: adapter.files["tool-discovery.toml"].discoveries,
+      environments: adapter.files["environments.toml"].environments,
+      devices: deviceRules,
+      actions: adapter.files["actions.toml"].actions,
+      workflows: adapter.files["workflows.toml"].workflows,
+      parsers: adapter.files["parsers.toml"].parsers,
+      artifacts: adapter.files["artifacts.toml"].sets,
+    };
     platforms[platform] = mergePlatform(base, overlay);
   }
   const source = await Promise.all(

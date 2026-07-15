@@ -2,7 +2,10 @@ import { parse as parseToml } from "@iarna/toml";
 import { readFile } from "node:fs/promises";
 import type { AdapterDiagnostic, JsonObject, LoadedAdapter } from "./types.js";
 import { diagnostic } from "./diagnostics.js";
-import { validateTemplates } from "./template-validator.js";
+import {
+  validateSchemaTemplates,
+  validateTemplates,
+} from "./template-validator.js";
 
 const id = /^[a-z][a-z0-9-]*$/;
 const duration = /^\d+(ms|s|m|h)$/;
@@ -582,5 +585,9 @@ export const validateSemantics = async (
   }
   for (const [name, value] of Object.entries(adapter.files))
     errors.push(...validateTemplates(value, name, adapter.id));
+  for (const [name, value] of Object.entries(adapter.files))
+    errors.push(
+      ...validateSchemaTemplates(value, name, adapter.id, adapter.schemas),
+    );
   return errors;
 };

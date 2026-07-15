@@ -102,3 +102,22 @@ test("semantic validation requires a reason for partial platform support", async
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("template validation rejects fields excluded by adapter schemas", async () => {
+  const root = await temporaryAdapter();
+  try {
+    const actions = await readFile(join(root, "actions.toml"), "utf8");
+    await writeFile(
+      join(root, "actions.toml"),
+      `${actions}\n[actions.bad]\ntype = "copy"\nfrom = "${"${config.unknown}"}"\nto = "output"\n`,
+    );
+    const result = await validateAdapter(root);
+    assert.ok(
+      result.diagnostics.some(
+        (item) => item.code === "ADAPTER_TEMPLATE_INVALID",
+      ),
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
