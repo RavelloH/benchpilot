@@ -32,6 +32,7 @@ const sectionNames = Object.keys(sections) as Array<keyof typeof sections>;
 
 export const validateAdapter = async (
   root: string,
+  catalogPath = catalog,
 ): Promise<{ adapter: LoadedAdapter; diagnostics: AdapterDiagnostic[] }> => {
   const layout = await validateAdapterLayout(
     root,
@@ -46,7 +47,7 @@ export const validateAdapter = async (
   const diagnostics = [
     ...layout,
     ...(await validateSchemas(adapter, schemaRoot)),
-    ...(await validateSemantics(adapter, catalog)),
+    ...(await validateSemantics(adapter, catalogPath)),
   ];
   for (const platform of ["windows", "linux", "macos"]) {
     const platformFile = `platforms/${platform}.toml`;
@@ -111,7 +112,7 @@ export const validateAdapter = async (
     const mergedAdapter = { ...adapter, files: platformFiles };
     diagnostics.push(
       ...(await validateSchemas(mergedAdapter, schemaRoot)),
-      ...(await validateSemantics(mergedAdapter, catalog)),
+      ...(await validateSemantics(mergedAdapter, catalogPath)),
     );
   }
   return { adapter, diagnostics };
@@ -133,7 +134,7 @@ export const compileRoots = async () =>
 
 export const validateAllAdapters = async () => {
   const results = await Promise.all(
-    (await adapterRoots()).map(validateAdapter),
+    (await adapterRoots()).map((root) => validateAdapter(root)),
   );
   return {
     diagnostics: results.flatMap((result) => result.diagnostics),
@@ -143,11 +144,12 @@ export const validateAllAdapters = async () => {
 
 export const compileAdapter = async (
   root: string,
+  catalogPath = catalog,
 ): Promise<{
   bundle?: CompiledAdapterBundleV1;
   diagnostics: AdapterDiagnostic[];
 }> => {
-  const { adapter, diagnostics } = await validateAdapter(root);
+  const { adapter, diagnostics } = await validateAdapter(root, catalogPath);
   if (hasErrors(diagnostics)) return { diagnostics };
   const platforms: Record<string, JsonObject> = {};
   for (const platform of ["windows", "linux", "macos"]) {
@@ -171,7 +173,7 @@ export const compileAdapter = async (
     };
     platforms[platform] = mergePlatform(base, overlay);
   }
-  const catalogContent = await readFile(catalog, "utf8");
+  const catalogContent = await readFile(catalogPath, "utf8");
   const capabilityCatalog = (await import("@iarna/toml")).parse(
     catalogContent,
   ) as JsonObject;
@@ -205,7 +207,7 @@ export const compileAdapter = async (
 
 export const compileAll = async (output = resolve("dist", "adapters")) => {
   const roots = await compileRoots();
-  const results = await Promise.all(roots.map(compileAdapter));
+  const results = await Promise.all(roots.map((root) => compileAdapter(root)));
   const diagnostics = results.flatMap((item) => item.diagnostics);
   if (hasErrors(diagnostics)) return { diagnostics };
   await mkdir(output, { recursive: true });

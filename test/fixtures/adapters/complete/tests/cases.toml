@@ -33,6 +33,19 @@ result = { version = 3 }
 progress = [{ current = 2 }]
 
 [[cases]]
+id = "parse-error"
+type = "parse-output"
+platform = "linux"
+target = "text"
+stdout_fixture = "fixtures/output.txt"
+stderr_fixture = "fixtures/error-match.txt"
+exit_code = 1
+[cases.context]
+[cases.expect]
+success = false
+error = { kind = "ERROR", retryable = true }
+
+[[cases]]
 id = "parse-json"
 type = "parse-output"
 platform = "linux"

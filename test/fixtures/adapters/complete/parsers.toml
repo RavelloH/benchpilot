@@ -23,7 +23,7 @@ event = "build.progress"
 current = "integer"
 [[parsers.text.errors]]
 id = "first"
-priority = 10
+priority = 1
 source = "stderr"
 pattern = "fatal"
 kind = "FATAL"
@@ -31,7 +31,7 @@ retryable = false
 recovery = []
 [[parsers.text.errors]]
 id = "second"
-priority = 1
+priority = 10
 source = "stderr"
 pattern = "error"
 kind = "ERROR"

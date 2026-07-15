@@ -3,4 +3,4 @@ schema_version = 1
 platform = "windows"
 [overrides]
 [overrides.actions.run]
-cwd = "C:/project"
+cwd = "windows-project"

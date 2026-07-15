@@ -21,6 +21,13 @@ const complete = join(
   "complete",
 );
 const invalid = join(process.cwd(), "test", "fixtures", "adapters", "invalid");
+const catalog = join(
+  process.cwd(),
+  "src",
+  "adapters",
+  "catalog",
+  "capabilities.toml",
+);
 const temporaryAdapter = async () => {
   const root = await mkdtemp(join(tmpdir(), "benchpilot-adapter-"));
   const adapterRoot = join(root, "template");
@@ -35,11 +42,35 @@ test("the adapter template validates and compiles deterministically", async () =
     const second = await compileAdapter(root);
     assert.deepEqual(first.diagnostics, []);
     assert.equal(first.bundle.sourceHash, second.bundle.sourceHash);
+    assert.equal(JSON.stringify(first.bundle), JSON.stringify(second.bundle));
     assert.deepEqual(Object.keys(first.bundle.platforms), [
       "windows",
       "linux",
       "macos",
     ]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("catalog content contributes to bundle hashes without absolute paths", async () => {
+  const root = await mkdtemp(join(tmpdir(), "benchpilot-catalog-"));
+  try {
+    const temporaryCatalog = join(root, "capabilities.toml");
+    await writeFile(
+      temporaryCatalog,
+      `${await readFile(catalog, "utf8")}\n# temporary hash input\n`,
+    );
+    const original = await compileAdapter(complete);
+    const changed = await compileAdapter(complete, temporaryCatalog);
+    assert.deepEqual(original.diagnostics, []);
+    assert.deepEqual(changed.diagnostics, []);
+    assert.notEqual(original.bundle.sourceHash, changed.bundle.sourceHash);
+    assert.notEqual(
+      original.bundle.capabilityCatalogHash,
+      changed.bundle.capabilityCatalogHash,
+    );
+    assert.equal(JSON.stringify(changed.bundle).includes(process.cwd()), false);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -63,7 +94,10 @@ test("complete adapter fixture validates, compiles, and exercises all case types
   const compiled = await compileAdapter(complete);
   assert.deepEqual(compiled.diagnostics, []);
   assert.equal(compiled.bundle.capabilityCatalog.version, 1);
-  assert.equal(compiled.bundle.platforms.windows.actions.run.cwd, "C:/project");
+  assert.equal(
+    compiled.bundle.platforms.windows.actions.run.cwd,
+    "windows-project",
+  );
   assert.deepEqual(
     compiled.bundle.platforms.macos.tools.python.launch.prefix_args,
     ["-E"],
