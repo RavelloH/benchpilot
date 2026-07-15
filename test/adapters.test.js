@@ -212,3 +212,20 @@ test("embedded adapter schemas must compile", async () => {
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("device overlays merge into the final platform bundle", async () => {
+  const root = await temporaryAdapter();
+  try {
+    await writeFile(
+      join(root, "platforms", "windows.toml"),
+      `schema = "benchpilot.adapter.platform"\nschema_version = 1\nplatform = "windows"\n[overrides.devices.identity]\nfields = ["device.serial"]\nallow_port_fallback = false\n`,
+    );
+    const result = await compileAdapter(root);
+    assert.deepEqual(result.diagnostics, []);
+    assert.deepEqual(result.bundle.platforms.windows.devices.identity.fields, [
+      "device.serial",
+    ]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
