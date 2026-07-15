@@ -7,20 +7,6 @@ import path from "node:path";
 const root = process.cwd();
 const temp = await mkdtemp(path.join(os.tmpdir(), "benchpilot-package-"));
 const pnpmCli = process.env.npm_execpath;
-const npmCli = path.join(
-  path.dirname(process.execPath),
-  "node_modules",
-  "npm",
-  "bin",
-  "npm-cli.js",
-);
-const npxCli = path.join(
-  path.dirname(process.execPath),
-  "node_modules",
-  "npm",
-  "bin",
-  "npx-cli.js",
-);
 
 try {
   assert.ok(pnpmCli, "pnpm CLI path is unavailable.");
@@ -37,27 +23,23 @@ try {
     (await readdir(temp)).find((name) => name.endsWith(".tgz")) || "",
   );
   assert.notEqual(archive, temp, "pnpm pack did not create an archive.");
-  await writeFile(
-    path.join(temp, "package.json"),
-    `${JSON.stringify({ private: true }, null, 2)}\n`,
-  );
-  execFileSync(process.execPath, [npmCli, "install", archive], {
-    cwd: temp,
-    stdio: "inherit",
-  });
   const project = path.join(temp, "project");
   await mkdir(project);
+  await writeFile(
+    path.join(project, "package.json"),
+    `${JSON.stringify({ private: true }, null, 2)}\n`,
+  );
+  execFileSync(process.execPath, [pnpmCli, "install", archive], {
+    cwd: project,
+    stdio: "inherit",
+  });
   const env = { ...process.env, BENCHPILOT_HOME: path.join(project, "home") };
   const run = (...args) =>
-    execFileSync(
-      process.execPath,
-      [npxCli, "--no-install", "benchpilot", ...args],
-      {
-        cwd: project,
-        env,
-        encoding: "utf8",
-      },
-    );
+    execFileSync(process.execPath, [pnpmCli, "exec", "benchpilot", ...args], {
+      cwd: project,
+      env,
+      encoding: "utf8",
+    });
   assert.match(run("--version"), /0\.0\.0/);
   assert.match(run(), /Agent-first device lifecycle CLI/);
   run("init");
