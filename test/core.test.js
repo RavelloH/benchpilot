@@ -53,6 +53,44 @@ test("core hardening uses safe lock names and redacts config", () => {
   );
 });
 
+test("persistent paths use the user .benchpilot directory on every platform", () => {
+  for (const platform of ["win32", "darwin", "linux"]) {
+    const home = path.join(os.tmpdir(), `benchpilot-${platform}-home`);
+    const paths = new PathService(
+      {
+        LOCALAPPDATA: path.join(home, "ignored-local-app-data"),
+        XDG_CONFIG_HOME: path.join(home, "ignored-config"),
+        XDG_STATE_HOME: path.join(home, "ignored-state"),
+        TEMP: path.join(home, "runtime-temp"),
+      },
+      platform,
+      home,
+      path.join(home, "fallback-temp"),
+    );
+    assert.equal(
+      paths.globalConfig(),
+      path.join(home, ".benchpilot", "config.toml"),
+    );
+    assert.equal(paths.stateRoot(), path.join(home, ".benchpilot", "state"));
+    assert.equal(
+      paths.approvalsRoot(),
+      path.join(home, ".benchpilot", "state", "approvals"),
+    );
+    assert.equal(
+      paths.runsRoot("project"),
+      path.join(home, ".benchpilot", "state", "projects", "project", "runs"),
+    );
+  }
+});
+
+test("BENCHPILOT_HOME keeps persistent and runtime paths isolated for tests", () => {
+  const root = path.join(os.tmpdir(), "benchpilot-portable-home");
+  const paths = new PathService({ BENCHPILOT_HOME: root });
+  assert.equal(paths.globalConfig(), path.join(root, "config.toml"));
+  assert.equal(paths.stateRoot(), path.join(root, "state"));
+  assert.equal(paths.runtimeRoot(), path.join(root, "runtime", "locks"));
+});
+
 test("node doctor version support starts at Node.js 22.13", () => {
   assert.equal(isSupportedNodeVersion("22.12.9"), false);
   assert.equal(isSupportedNodeVersion("22.13.0"), true);

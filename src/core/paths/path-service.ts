@@ -11,43 +11,16 @@ export class PathService {
   get portable() {
     return this.env.BENCHPILOT_HOME;
   }
+  private persistentRoot() {
+    return path.join(this.home, ".benchpilot");
+  }
   globalConfig() {
     if (this.portable) return path.join(this.portable, "config.toml");
-    if (this.platform === "win32")
-      return path.join(
-        this.env.LOCALAPPDATA || this.home,
-        "BenchPilot",
-        "config.toml",
-      );
-    if (this.platform === "darwin")
-      return path.join(
-        this.home,
-        "Library",
-        "Application Support",
-        "BenchPilot",
-        "config.toml",
-      );
-    return path.join(
-      this.env.XDG_CONFIG_HOME || path.join(this.home, ".config"),
-      "benchpilot",
-      "config.toml",
-    );
+    return path.join(this.persistentRoot(), "config.toml");
   }
   stateRoot() {
     if (this.portable) return path.join(this.portable, "state");
-    if (this.platform === "win32")
-      return path.join(this.env.LOCALAPPDATA || this.temp, "BenchPilot");
-    if (this.platform === "darwin")
-      return path.join(
-        this.home,
-        "Library",
-        "Application Support",
-        "BenchPilot",
-      );
-    return path.join(
-      this.env.XDG_STATE_HOME || path.join(this.home, ".local", "state"),
-      "benchpilot",
-    );
+    return path.join(this.persistentRoot(), "state");
   }
   runtimeRoot() {
     if (this.portable) return path.join(this.portable, "runtime", "locks");
