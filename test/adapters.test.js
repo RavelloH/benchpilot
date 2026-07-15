@@ -75,3 +75,30 @@ test("semantic validation rejects invalid parser regular expressions", async () 
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("semantic validation requires a reason for partial platform support", async () => {
+  const root = await temporaryAdapter();
+  try {
+    const capabilities = await readFile(
+      join(root, "capabilities.toml"),
+      "utf8",
+    );
+    await writeFile(
+      join(root, "capabilities.toml"),
+      capabilities
+        .replace(
+          "enabled = false",
+          'enabled = true\nhandler = "action:missing"',
+        )
+        .replace("windows = false", "windows = true"),
+    );
+    const result = await validateAdapter(root);
+    assert.ok(
+      result.diagnostics.some(
+        (item) => item.code === "ADAPTER_CAPABILITY_INVALID",
+      ),
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

@@ -229,6 +229,48 @@ export const validateSemantics = async (
         "Handler",
       );
     }
+    if (
+      enabled &&
+      platforms.some((platform) => support[platform] === false) &&
+      platforms.some((platform) => support[platform] === true)
+    )
+      for (const platform of platforms)
+        if (
+          support[platform] === false &&
+          typeof obj(item.platform_reasons)[platform] !== "string"
+        )
+          errors.push(
+            diagnostic(
+              "ADAPTER_CAPABILITY_INVALID",
+              "capabilities.toml",
+              `Capability ${key} needs a reason for unsupported ${platform}`,
+              undefined,
+              adapter.id,
+            ),
+          );
+    if (item.lock && !["none", "device"].includes(String(item.lock)))
+      errors.push(
+        diagnostic(
+          "ADAPTER_CAPABILITY_INVALID",
+          "capabilities.toml",
+          `Capability ${key} has an invalid lock mode`,
+          undefined,
+          adapter.id,
+        ),
+      );
+    if (
+      item.lock === "device" &&
+      !Array.isArray(obj(file("devices.toml").identity).fields)
+    )
+      errors.push(
+        diagnostic(
+          "ADAPTER_CAPABILITY_INVALID",
+          "capabilities.toml",
+          `Device-locked capability ${key} requires device identity fields`,
+          undefined,
+          adapter.id,
+        ),
+      );
     for (const schema of ["input_schema", "output_schema"] as const)
       if (
         item[schema] &&
@@ -276,6 +318,97 @@ export const validateSemantics = async (
           adapter.id,
         ),
       );
+  }
+  for (const [key, raw] of entries(discoveries)) {
+    const discovery = obj(raw),
+      candidateIds = new Set<string>();
+    if (discovery.strategy !== "first-valid")
+      errors.push(
+        diagnostic(
+          "ADAPTER_SCHEMA_INVALID",
+          "tool-discovery.toml",
+          `Discovery ${key} must use first-valid`,
+          undefined,
+          adapter.id,
+        ),
+      );
+    for (const candidate of Array.isArray(discovery.candidates)
+      ? discovery.candidates
+      : []) {
+      const item = obj(candidate);
+      if (typeof item.id !== "string" || candidateIds.has(item.id))
+        errors.push(
+          diagnostic(
+            "ADAPTER_SCHEMA_INVALID",
+            "tool-discovery.toml",
+            `Discovery ${key} has duplicate or invalid candidate id`,
+            undefined,
+            adapter.id,
+          ),
+        );
+      candidateIds.add(String(item.id));
+      if (
+        ![
+          "config",
+          "config-path",
+          "environment",
+          "environment-path",
+          "path",
+          "fixed",
+          "glob",
+        ].includes(String(item.type))
+      )
+        errors.push(
+          diagnostic(
+            "ADAPTER_SCHEMA_INVALID",
+            "tool-discovery.toml",
+            `Discovery ${key} has invalid candidate type`,
+            undefined,
+            adapter.id,
+          ),
+        );
+    }
+  }
+  for (const [key, raw] of entries(environments)) {
+    const environment = obj(raw);
+    if (!["inherit", "first-valid"].includes(String(environment.strategy)))
+      errors.push(
+        diagnostic(
+          "ADAPTER_SCHEMA_INVALID",
+          "environments.toml",
+          `Environment ${key} has invalid strategy`,
+          undefined,
+          adapter.id,
+        ),
+      );
+    for (const provider of Array.isArray(environment.providers)
+      ? environment.providers
+      : []) {
+      const item = obj(provider);
+      if (!["active", "static", "capture-script"].includes(String(item.type)))
+        errors.push(
+          diagnostic(
+            "ADAPTER_SCHEMA_INVALID",
+            "environments.toml",
+            `Environment ${key} has invalid provider type`,
+            undefined,
+            adapter.id,
+          ),
+        );
+      if (
+        item.type === "capture-script" &&
+        (typeof item.script !== "string" || !/^\$\{[^}]+\}$/.test(item.script))
+      )
+        errors.push(
+          diagnostic(
+            "ADAPTER_SCHEMA_INVALID",
+            "environments.toml",
+            `Capture script for ${key} must be a single path template`,
+            undefined,
+            adapter.id,
+          ),
+        );
+    }
   }
   for (const [key, raw] of entries(tools)) {
     const tool = obj(raw),

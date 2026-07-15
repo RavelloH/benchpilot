@@ -13,12 +13,14 @@ const lookup = (context: JsonObject, path: string) =>
   path
     .split(".")
     .reduce<unknown>((value, part) => object(value)[part], context);
-const render = (value: unknown, context: JsonObject): unknown =>
-  typeof value === "string"
-    ? value.replace(/\$\{([^}]+)\}/g, (_match, path: string) =>
-        String(lookup(context, path) ?? ""),
-      )
-    : value;
+const render = (value: unknown, context: JsonObject): unknown => {
+  if (typeof value !== "string") return value;
+  const exact = /^\$\{([^}]+)\}$/.exec(value);
+  if (exact) return lookup(context, exact[1]);
+  return value.replace(/\$\{([^}]+)\}/g, (_match, path: string) =>
+    String(lookup(context, path) ?? ""),
+  );
+};
 const active = (when: unknown, context: JsonObject) => {
   if (!when) return true;
   const item = object(when),
@@ -95,8 +97,8 @@ export const runCases = async (
             const arg = object(item);
             if (arg.kind === "flag") return [arg.flag];
             if (arg.kind === "option")
-              return [arg.flag, render(arg.value, context)];
-            return [render(arg.value, context)];
+              return [arg.flag, String(render(arg.value, context) ?? "")];
+            return [String(render(arg.value, context) ?? "")];
           });
         if (JSON.stringify(args) !== JSON.stringify(expect.args))
           errors.push(
@@ -104,6 +106,29 @@ export const runCases = async (
               "ADAPTER_CASE_INVALID",
               "tests/cases.toml",
               `Rendered arguments differ for ${target}`,
+              undefined,
+              adapter.id,
+            ),
+          );
+        if (expect.tool !== undefined && expect.tool !== action.tool)
+          errors.push(
+            diagnostic(
+              "ADAPTER_CASE_INVALID",
+              "tests/cases.toml",
+              `Rendered tool differs for ${target}`,
+              undefined,
+              adapter.id,
+            ),
+          );
+        if (
+          expect.cwd !== undefined &&
+          expect.cwd !== render(action.cwd, context)
+        )
+          errors.push(
+            diagnostic(
+              "ADAPTER_CASE_INVALID",
+              "tests/cases.toml",
+              `Rendered cwd differs for ${target}`,
               undefined,
               adapter.id,
             ),
@@ -151,9 +176,79 @@ export const runCases = async (
               adapter.id,
             ),
           );
-        else await readFile(resolve(adapter.root, "tests", fixture), "utf8");
+        else {
+          const output = await readFile(
+            resolve(adapter.root, "tests", fixture),
+            "utf8",
+          );
+          const source = test.stderr_fixture ? output : "";
+          const both = `${source}\n${test.stdout_fixture ? output : ""}`;
+          const matches = (Array.isArray(parser.errors) ? parser.errors : [])
+            .map(object)
+            .sort(
+              (left, right) =>
+                Number(right.priority ?? 0) - Number(left.priority ?? 0),
+            )
+            .find((rule) => {
+              const text =
+                rule.source === "stderr"
+                  ? source
+                  : rule.source === "stdout"
+                    ? output
+                    : both;
+              try {
+                return new RegExp(String(rule.pattern)).test(text);
+              } catch {
+                return false;
+              }
+            });
+          const expectedError = object(expect.error);
+          if (
+            Object.keys(expectedError).length &&
+            (!matches ||
+              matches.kind !== expectedError.kind ||
+              matches.retryable !== expectedError.retryable)
+          )
+            errors.push(
+              diagnostic(
+                "ADAPTER_CASE_INVALID",
+                "tests/cases.toml",
+                `Parser result differs for ${target}`,
+                undefined,
+                adapter.id,
+              ),
+            );
+        }
       }
-    } else if (test.type !== "resolve-artifacts")
+    } else if (test.type === "resolve-artifacts") {
+      const set = object(object(rules.artifacts)[target]);
+      if (!Object.keys(set).length)
+        errors.push(
+          diagnostic(
+            "ADAPTER_CASE_INVALID",
+            "tests/cases.toml",
+            `Artifact set does not exist: ${target}`,
+            undefined,
+            adapter.id,
+          ),
+        );
+      for (const entry of Array.isArray(set.entries) ? set.entries : []) {
+        const path = render(object(entry).path, context);
+        if (
+          typeof path === "string" &&
+          (path.startsWith("/") || path.split(/[\\/]/).includes(".."))
+        )
+          errors.push(
+            diagnostic(
+              "ADAPTER_CASE_INVALID",
+              "tests/cases.toml",
+              "Artifact path escapes its base directory",
+              undefined,
+              adapter.id,
+            ),
+          );
+      }
+    } else
       errors.push(
         diagnostic(
           "ADAPTER_CASE_INVALID",
