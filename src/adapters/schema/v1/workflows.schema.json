@@ -6,6 +6,89 @@
   "properties": {
     "schema": { "const": "benchpilot.adapter.workflows" },
     "schema_version": { "const": 1 },
-    "workflows": { "type": "object" }
+    "workflows": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/id" },
+      "additionalProperties": { "$ref": "#/$defs/workflow" }
+    }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+    "duration": { "type": "string", "pattern": "^[1-9][0-9]*(ms|s|m|h)$" },
+    "condition": {
+      "type": "object",
+      "required": ["path", "operator"],
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^(?!.*(__proto__|prototype|constructor|\\$\\{))[a-z][a-z0-9_]*(\\.[a-zA-Z][a-zA-Z0-9_]*)*$"
+        },
+        "operator": {
+          "enum": [
+            "exists",
+            "not-exists",
+            "equals",
+            "not-equals",
+            "in",
+            "not-in",
+            "truthy",
+            "falsy"
+          ]
+        },
+        "value": {}
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "operator": { "enum": ["equals", "not-equals"] } }
+          },
+          "then": { "required": ["value"] }
+        },
+        {
+          "if": { "properties": { "operator": { "enum": ["in", "not-in"] } } },
+          "then": {
+            "required": ["value"],
+            "properties": { "value": { "type": "array" } }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operator": {
+                "enum": ["exists", "not-exists", "truthy", "falsy"]
+              }
+            }
+          },
+          "then": { "not": { "required": ["value"] } }
+        }
+      ]
+    },
+    "step": {
+      "type": "object",
+      "required": ["id", "uses"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "uses": { "type": "string", "pattern": "^action:[a-z][a-z0-9-]*$" },
+        "with": { "type": "object" },
+        "when": { "$ref": "#/$defs/condition" },
+        "continue_on_error": { "type": "boolean" }
+      }
+    },
+    "workflow": {
+      "type": "object",
+      "required": ["timeout", "stop_on_failure", "steps"],
+      "additionalProperties": false,
+      "properties": {
+        "timeout": { "$ref": "#/$defs/duration" },
+        "stop_on_failure": { "type": "boolean" },
+        "steps": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/step" }
+        }
+      }
+    }
   }
 }

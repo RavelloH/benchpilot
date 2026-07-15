@@ -286,3 +286,23 @@ test("action schemas reject unknown fields", async () => {
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("workflow schemas allow action steps only", async () => {
+  const root = await temporaryAdapter();
+  try {
+    await writeFile(
+      join(root, "workflows.toml"),
+      `schema = "benchpilot.adapter.workflows"\nschema_version = 1\n[workflows.bad]\ntimeout = "1m"\nstop_on_failure = true\n[[workflows.bad.steps]]\nid = "nested"\nuses = "workflow:other"\n`,
+    );
+    const result = await validateAdapter(root);
+    assert.ok(
+      result.diagnostics.some(
+        (item) =>
+          item.code === "ADAPTER_SCHEMA_INVALID" &&
+          item.file === "workflows.toml",
+      ),
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
