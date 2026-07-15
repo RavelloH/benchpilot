@@ -48,6 +48,114 @@ const schemaError = (
   diagnostics.push(
     diagnostic("ADAPTER_SCHEMA_INVALID", file, message, path, adapter.id),
   );
+const object = (value: unknown): JsonObject =>
+  value && typeof value === "object" && !Array.isArray(value)
+    ? (value as JsonObject)
+    : {};
+const fields = (value: JsonObject, required: string[], allowed: string[]) =>
+  required.every((field) => value[field] !== undefined) &&
+  Object.keys(value).every((field) => allowed.includes(field));
+const validateActionAndToolShapes = (
+  adapter: LoadedAdapter,
+  diagnostics: AdapterDiagnostic[],
+) => {
+  const actions = object(adapter.files["actions.toml"].actions);
+  const actionRules: Record<string, [string[], string[]]> = {
+    process: [
+      ["type", "tool", "cwd", "arguments"],
+      [
+        "type",
+        "tool",
+        "cwd",
+        "arguments",
+        "env",
+        "timeout",
+        "parser",
+        "artifact_set",
+      ],
+    ],
+    "serial-read": [
+      ["type", "port", "baud", "duration", "encoding", "line_mode"],
+      [
+        "type",
+        "port",
+        "baud",
+        "duration",
+        "encoding",
+        "line_mode",
+        "timeout",
+        "parser",
+        "artifact_set",
+      ],
+    ],
+    "serial-write": [
+      ["type", "port", "baud", "data", "encoding"],
+      [
+        "type",
+        "port",
+        "baud",
+        "data",
+        "encoding",
+        "timeout",
+        "parser",
+        "artifact_set",
+      ],
+    ],
+    copy: [
+      ["type", "from", "to", "recursive", "overwrite"],
+      [
+        "type",
+        "from",
+        "to",
+        "recursive",
+        "overwrite",
+        "timeout",
+        "parser",
+        "artifact_set",
+      ],
+    ],
+  };
+  for (const [id, raw] of Object.entries(actions)) {
+    const action = object(raw),
+      rule = actionRules[String(action.type)];
+    if (!rule || !fields(action, ...rule))
+      schemaError(
+        diagnostics,
+        adapter,
+        "actions.toml",
+        `Action ${id} has invalid fields`,
+      );
+  }
+  const tools = object(adapter.files["tools.toml"].tools);
+  for (const [id, raw] of Object.entries(tools)) {
+    const tool = object(raw),
+      launch = object(tool.launch),
+      mode = String(launch.mode);
+    const launchFields =
+      mode === "direct"
+        ? ["mode", "command", "prefix_args", "environment"]
+        : mode === "via-tool"
+          ? ["mode", "tool", "prefix_args", "environment"]
+          : [];
+    if (
+      !fields(
+        tool,
+        ["description", "required", "discovery", "launch"],
+        ["description", "required", "discovery", "launch"],
+      ) ||
+      !launchFields.length ||
+      !fields(launch, launchFields, launchFields) ||
+      !Array.isArray(launch.prefix_args) ||
+      launch.prefix_args.some((item) => typeof item !== "string")
+    )
+      schemaError(
+        diagnostics,
+        adapter,
+        "tools.toml",
+        `Tool ${id} has invalid launch fields`,
+      );
+  }
+};
 const forbidden = new Set(["__proto__", "prototype", "constructor"]);
 const validateSchemaExtensions = (
   value: unknown,
@@ -211,6 +319,7 @@ export const validateSchemas = async (
         }
     validateSchemaExtensions(schema, adapter, file, diagnostics);
   }
+  validateActionAndToolShapes(adapter, diagnostics);
   return diagnostics;
 };
 
