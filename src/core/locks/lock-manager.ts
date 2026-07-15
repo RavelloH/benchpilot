@@ -121,8 +121,8 @@ export class LockManager {
     } catch (error: unknown) {
       await fs.rm(staging, { recursive: true, force: true }).catch(() => {});
       if (
-        !(["EEXIST", "EPERM"] as const).includes(
-          (error as NodeJS.ErrnoException).code as "EEXIST" | "EPERM",
+        !["EEXIST", "EPERM", "ENOTEMPTY"].includes(
+          (error as NodeJS.ErrnoException).code || "",
         )
       )
         throw error;
