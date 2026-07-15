@@ -6,9 +6,124 @@
   "properties": {
     "schema": { "const": "benchpilot.adapter.devices" },
     "schema_version": { "const": 1 },
-    "discovery": { "type": "object" },
-    "identity": { "type": "object" },
-    "connections": { "type": "object" },
-    "probe": { "type": "object" }
+    "discovery": { "$ref": "#/$defs/discovery" },
+    "identity": { "$ref": "#/$defs/identity" },
+    "connections": {
+      "type": "object",
+      "propertyNames": { "pattern": "^[a-z][a-z0-9-]*$" },
+      "additionalProperties": { "$ref": "#/$defs/connection" }
+    },
+    "probe": { "$ref": "#/$defs/probe" }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+    "source": {
+      "type": "object",
+      "required": ["id", "type"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "type": { "enum": ["serial", "usb", "network", "command"] }
+      }
+    },
+    "matcher": {
+      "type": "object",
+      "required": ["id", "source", "field", "operator", "score"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "source": { "$ref": "#/$defs/id" },
+        "field": { "type": "string", "minLength": 1 },
+        "operator": {
+          "enum": [
+            "equals",
+            "equals-ignore-case",
+            "regex",
+            "contains",
+            "exists",
+            "in"
+          ]
+        },
+        "value": {},
+        "score": { "type": "integer" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "operator": { "const": "exists" } } },
+          "then": { "not": { "required": ["value"] } },
+          "else": { "required": ["value"] }
+        }
+      ]
+    },
+    "discovery": {
+      "type": "object",
+      "required": ["enabled"],
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "sources": { "type": "array", "items": { "$ref": "#/$defs/source" } },
+        "matchers": { "type": "array", "items": { "$ref": "#/$defs/matcher" } },
+        "result": {
+          "type": "object",
+          "required": ["minimum_score"],
+          "additionalProperties": false,
+          "properties": { "minimum_score": { "type": "integer" } }
+        }
+      }
+    },
+    "identity": {
+      "type": "object",
+      "required": ["fields", "allow_port_fallback"],
+      "additionalProperties": false,
+      "properties": {
+        "fields": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "allow_port_fallback": { "type": "boolean" }
+      }
+    },
+    "connection": {
+      "type": "object",
+      "required": ["enabled"],
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "address": { "type": "string" },
+        "baud": { "type": ["string", "integer"] }
+      }
+    },
+    "probe": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["enabled", "reason"],
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "const": false },
+            "reason": { "type": "string", "minLength": 1 }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "enabled",
+            "action",
+            "parser",
+            "may_reset_device",
+            "destructive"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "const": true },
+            "action": { "$ref": "#/$defs/id" },
+            "parser": { "$ref": "#/$defs/id" },
+            "may_reset_device": { "type": "boolean" },
+            "destructive": { "type": "boolean" }
+          }
+        }
+      ]
+    }
   }
 }

@@ -3,5 +3,5 @@ schema_version = 1
 [discovery]
 enabled = false
 [identity]
-fields = []
+fields = ["device.id"]
 allow_port_fallback = false

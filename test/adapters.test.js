@@ -346,3 +346,24 @@ test("parser rules require non-empty patterns", async () => {
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("device probes require an explicit disabled reason", async () => {
+  const root = await temporaryAdapter();
+  try {
+    const devices = await readFile(join(root, "devices.toml"), "utf8");
+    await writeFile(
+      join(root, "devices.toml"),
+      `${devices}\n[probe]\nenabled = false\n`,
+    );
+    const result = await validateAdapter(root);
+    assert.ok(
+      result.diagnostics.some(
+        (item) =>
+          item.code === "ADAPTER_SCHEMA_INVALID" &&
+          item.file === "devices.toml",
+      ),
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
