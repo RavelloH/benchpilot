@@ -11,6 +11,12 @@ importers:
       '@iarna/toml':
         specifier: ^2.2.5
         version: 2.2.5
+      ajv:
+        specifier: ^8.20.0
+        version: 8.20.0
+      ajv-formats:
+        specifier: ^3.0.1
+        version: 3.0.1(ajv@8.20.0)
       rlog-js:
         specifier: ^3.0.0
         version: 3.0.0
@@ -18,12 +24,6 @@ importers:
       '@types/node':
         specifier: ^22.0.0
         version: 22.20.1
-      ajv:
-        specifier: ^8.17.1
-        version: 8.20.0
-      ajv-formats:
-        specifier: ^3.0.1
-        version: 3.0.1(ajv@8.20.0)
       husky:
         specifier: ^9.1.7
         version: 9.1.7

@@ -1,122 +1,17 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import type { AdapterDiagnostic, JsonObject, LoadedAdapter } from "./types.js";
+import type { AdapterDiagnostic, LoadedAdapter } from "./types.js";
 import { diagnostic } from "./diagnostics.js";
 import { ensureInside } from "./layout.js";
 import { mergePlatform } from "./platform-merger.js";
-
-const object = (value: unknown): JsonObject =>
-  value && typeof value === "object" && !Array.isArray(value)
-    ? (value as JsonObject)
-    : {};
-const lookup = (context: JsonObject, path: string) =>
-  path
-    .split(".")
-    .reduce<unknown>((value, part) => object(value)[part], context);
-const render = (value: unknown, context: JsonObject): unknown => {
-  if (typeof value !== "string") return value;
-  const exact = /^\$\{([^}]+)\}$/.exec(value);
-  if (exact) return lookup(context, exact[1]);
-  return value.replace(/\$\{([^}]+)\}/g, (_match, path: string) =>
-    String(lookup(context, path) ?? ""),
-  );
-};
-const renderDeep = (value: unknown, context: JsonObject): unknown => {
-  if (Array.isArray(value))
-    return value.map((item) => renderDeep(item, context));
-  if (value && typeof value === "object")
-    return Object.fromEntries(
-      Object.entries(value as JsonObject).map(([key, item]) => [
-        key,
-        renderDeep(item, context),
-      ]),
-    );
-  return render(value, context);
-};
-const active = (when: unknown, context: JsonObject) => {
-  if (!when) return true;
-  const item = object(when),
-    actual = lookup(context, String(item.path));
-  switch (item.operator) {
-    case "exists":
-      return actual !== undefined;
-    case "not-exists":
-      return actual === undefined;
-    case "truthy":
-      return Boolean(actual);
-    case "falsy":
-      return !actual;
-    case "equals":
-      return actual === renderDeep(item.value, context);
-    case "not-equals":
-      return actual !== renderDeep(item.value, context);
-    case "in":
-      return (
-        Array.isArray(item.value) &&
-        (renderDeep(item.value, context) as unknown[]).includes(actual)
-      );
-    case "not-in":
-      return (
-        Array.isArray(item.value) &&
-        !(renderDeep(item.value, context) as unknown[]).includes(actual)
-      );
-    default:
-      return false;
-  }
-};
-const sourceText = (source: unknown, stdout: string, stderr: string) =>
-  source === "stderr"
-    ? stderr
-    : source === "both"
-      ? `${stdout}\n${stderr}`
-      : stdout;
-type CastKind = "string" | "integer" | "number" | "boolean" | "json";
-const castValue = (value: unknown, kind: CastKind): unknown => {
-  if (kind === "string") return String(value);
-  if (kind === "integer") {
-    if (typeof value === "number")
-      return Number.isFinite(value) ? Math.trunc(value) : undefined;
-    if (typeof value !== "string" || !/^[+-]?\d+$/.test(value))
-      return undefined;
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : undefined;
-  }
-  if (kind === "number") {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : undefined;
-  }
-  if (kind === "boolean") {
-    if (typeof value === "boolean") return value;
-    if (value === "true") return true;
-    if (value === "false") return false;
-    return undefined;
-  }
-  if (kind === "json") {
-    if (typeof value !== "string") return value;
-    try {
-      return JSON.parse(value);
-    } catch {
-      return undefined;
-    }
-  }
-  return undefined;
-};
-const pointer = (value: unknown, path: string) =>
-  path
-    .slice(1)
-    .split("/")
-    .reduce<unknown>((current, part) => {
-      const key = part.replace(/~1/g, "/").replace(/~0/g, "~");
-      if (Array.isArray(current))
-        return /^(0|[1-9][0-9]*)$/.test(key) ? current[Number(key)] : undefined;
-      return object(current)[key];
-    }, value);
-const unsafeArtifactPath = (value: unknown) =>
-  typeof value === "string" &&
-  (value.split(/[\\/]/).includes("..") ||
-    /^[\\/]/.test(value) ||
-    /^[A-Za-z]:[\\/]/.test(value) ||
-    /^(\\\\|\/\/)/.test(value));
+import {
+  planActionArguments,
+  planActionEnvironment,
+} from "../runtime/planning/action-planner.js";
+import { planWorkflow } from "../runtime/planning/workflow-planner.js";
+import { planArtifacts } from "../runtime/rules/artifacts.js";
+import { parseOutput } from "../runtime/rules/parser.js";
+import { object, renderTemplate } from "../runtime/rules/template.js";
 
 export const runCases = async (
   adapter: LoadedAdapter,
@@ -173,23 +68,7 @@ export const runCases = async (
           ),
         );
       else {
-        const args = (Array.isArray(action.arguments) ? action.arguments : [])
-          .filter((item) => active(object(item).when, context))
-          .flatMap((item) => {
-            const arg = object(item);
-            if (arg.kind === "flag") return [arg.flag];
-            if (arg.kind === "option")
-              return [arg.flag, String(render(arg.value, context) ?? "")];
-            if (arg.kind === "repeat") {
-              const values = render(arg.values, context);
-              const prefix =
-                arg.prefix === undefined ? [] : [String(arg.prefix)];
-              return Array.isArray(values)
-                ? values.flatMap((value) => [...prefix, String(value)])
-                : [];
-            }
-            return [String(render(arg.value, context) ?? "")];
-          });
+        const args = planActionArguments(action, context);
         if (JSON.stringify(args) !== JSON.stringify(expect.args))
           errors.push(
             diagnostic(
@@ -212,7 +91,7 @@ export const runCases = async (
           );
         if (
           expect.cwd !== undefined &&
-          expect.cwd !== render(action.cwd, context)
+          expect.cwd !== renderTemplate(action.cwd, context)
         )
           errors.push(
             diagnostic(
@@ -223,12 +102,7 @@ export const runCases = async (
               adapter.id,
             ),
           );
-        const environment = Object.fromEntries(
-          Object.entries(object(action.env)).map(([key, value]) => [
-            key,
-            renderDeep(value, context),
-          ]),
-        );
+        const environment = planActionEnvironment(action, context);
         if (
           expect.environment !== undefined &&
           JSON.stringify(environment) !== JSON.stringify(expect.environment)
@@ -245,22 +119,7 @@ export const runCases = async (
       }
     } else if (test.type === "plan-workflow") {
       const flow = object(object(rules.workflows)[target]);
-      const plans = (Array.isArray(flow.steps) ? flow.steps : [])
-        .filter((step) => active(object(step).when, context))
-        .map((step) => {
-          const value = object(step);
-          return {
-            id: value.id,
-            uses: value.uses,
-            with: Object.fromEntries(
-              Object.entries(object(value.with)).map(([key, item]) => [
-                key,
-                renderDeep(item, context),
-              ]),
-            ),
-            continue_on_error: value.continue_on_error === true,
-          };
-        });
+      const plans = planWorkflow(flow, context);
       const steps =
         Array.isArray(expect.steps) &&
         expect.steps.every((item) => typeof item === "string")
@@ -338,34 +197,13 @@ export const runCases = async (
           );
           continue;
         }
-        const normalized = (value: string) =>
-          parser.strip_ansi
-            ? value.replace(/\u001B\[[0-?]*[ -\/]*[@-~]/g, "")
-            : value;
-        const output = normalized(stdout),
-          errorOutput = normalized(stderr);
-        const matches = (Array.isArray(parser.errors) ? parser.errors : [])
-          .map((rule, index) => ({ rule: object(rule), index }))
-          .sort(
-            (left, right) =>
-              Number(right.rule.priority ?? 0) -
-                Number(left.rule.priority ?? 0) || left.index - right.index,
-          )
-          .map(({ rule }) => rule)
-          .find((rule) => {
-            const text = sourceText(rule.source, output, errorOutput);
-            try {
-              return new RegExp(String(rule.pattern)).test(text);
-            } catch {
-              return false;
-            }
-          });
+        const parsed = parseOutput(parser, stdout, stderr, test.exit_code);
         const expectedError = object(expect.error);
         if (
           Object.keys(expectedError).length &&
-          (!matches ||
-            matches.kind !== expectedError.kind ||
-            matches.retryable !== expectedError.retryable)
+          (!parsed.error ||
+            parsed.error.kind !== expectedError.kind ||
+            parsed.error.retryable !== expectedError.retryable)
         )
           errors.push(
             diagnostic(
@@ -376,69 +214,19 @@ export const runCases = async (
               adapter.id,
             ),
           );
-        const result: JsonObject = {};
-        for (const rawRule of Array.isArray(parser.extract)
-          ? parser.extract
-          : []) {
-          const rule = object(rawRule);
-          let extracted: unknown;
-          try {
-            if (rule.type === "json-pointer")
-              extracted = pointer(
-                JSON.parse(sourceText(rule.source, output, errorOutput)),
-                String(rule.pointer),
-              );
-            else {
-              const match = new RegExp(String(rule.pattern)).exec(
-                sourceText(rule.source, output, errorOutput),
-              );
-              extracted =
-                match?.groups?.[String(rule.group)] ??
-                match?.[Number(rule.group)];
-            }
-            if (extracted !== undefined)
-              extracted = castValue(extracted, rule.cast as CastKind);
-          } catch {
-            extracted = undefined;
-          }
-          if (extracted === undefined && rule.required)
-            errors.push(
-              diagnostic(
-                "ADAPTER_CASE_INVALID",
-                "tests/cases.toml",
-                `Required extract missing: ${String(rule.id)}`,
-                undefined,
-                adapter.id,
-              ),
-            );
-          if (extracted !== undefined) result[String(rule.target)] = extracted;
-        }
-        const progress = (
-          Array.isArray(parser.progress) ? parser.progress : []
-        ).flatMap((rawRule) => {
-          const rule = object(rawRule);
-          try {
-            return Array.from(
-              sourceText(rule.source, output, errorOutput).matchAll(
-                new RegExp(String(rule.pattern), "g"),
-              ),
-              (match) => ({
-                event: rule.event,
-                data: Object.fromEntries(
-                  Object.entries(object(rule.fields)).map(([name, kind]) => [
-                    name,
-                    castValue(match.groups?.[name] ?? "", kind as CastKind),
-                  ]),
-                ),
-              }),
-            );
-          } catch {
-            return [];
-          }
-        });
+        for (const id of parsed.requiredMissing)
+          errors.push(
+            diagnostic(
+              "ADAPTER_CASE_INVALID",
+              "tests/cases.toml",
+              `Required extract missing: ${id}`,
+              undefined,
+              adapter.id,
+            ),
+          );
         if (
           expect.result !== undefined &&
-          JSON.stringify(result) !== JSON.stringify(expect.result)
+          JSON.stringify(parsed.result) !== JSON.stringify(expect.result)
         )
           errors.push(
             diagnostic(
@@ -451,7 +239,7 @@ export const runCases = async (
           );
         if (
           expect.progress !== undefined &&
-          JSON.stringify(progress) !== JSON.stringify(expect.progress)
+          JSON.stringify(parsed.progress) !== JSON.stringify(expect.progress)
         )
           errors.push(
             diagnostic(
@@ -462,15 +250,7 @@ export const runCases = async (
               adapter.id,
             ),
           );
-        if (
-          expect.success !== undefined &&
-          Boolean(
-            !matches &&
-            (parser.success_exit_codes as unknown[] | undefined)?.includes(
-              test.exit_code,
-            ),
-          ) !== expect.success
-        )
+        if (expect.success !== undefined && parsed.success !== expect.success)
           errors.push(
             diagnostic(
               "ADAPTER_CASE_INVALID",
@@ -493,49 +273,17 @@ export const runCases = async (
             adapter.id,
           ),
         );
-      const base = String(render(set.base, context) ?? "");
-      const plans = (Array.isArray(set.entries) ? set.entries : []).map(
-        (entry) => {
-          const value = object(entry);
-          const relative =
-            typeof value.path === "string" ? value.path : value.glob;
-          const rendered = String(render(relative, context) ?? "");
-          const resolved = `${base}/${rendered}`.replace(/\\/g, "/");
-          return typeof value.path === "string"
-            ? {
-                id: value.id,
-                path: resolved,
-                required: value.required,
-                multiple: value.multiple,
-              }
-            : {
-                id: value.id,
-                glob: resolved,
-                required: value.required,
-                multiple: value.multiple,
-              };
-        },
-      );
-      const entries = Array.isArray(set.entries) ? set.entries : [];
-      for (const [index, entry] of plans.entries()) {
-        const value = ("path" in entry ? entry.path : entry.glob) as unknown;
-        const source = object(entries[index]);
-        const relative =
-          typeof source.path === "string" ? source.path : source.glob;
-        const unsafe = [base, render(relative, context), value].some(
-          unsafeArtifactPath,
+      const { plans, unsafe } = planArtifacts(set, context);
+      if (unsafe)
+        errors.push(
+          diagnostic(
+            "ADAPTER_CASE_INVALID",
+            "tests/cases.toml",
+            "Artifact path escapes its base directory",
+            undefined,
+            adapter.id,
+          ),
         );
-        if (unsafe)
-          errors.push(
-            diagnostic(
-              "ADAPTER_CASE_INVALID",
-              "tests/cases.toml",
-              "Artifact path escapes its base directory",
-              undefined,
-              adapter.id,
-            ),
-          );
-      }
       if (
         expect.entries !== undefined &&
         JSON.stringify(plans) !== JSON.stringify(expect.entries)

@@ -65,12 +65,12 @@
   },
   "dependencies": {
     "@iarna/toml": "^2.2.5",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
     "rlog-js": "^3.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
-    "ajv": "^8.17.1",
-    "ajv-formats": "^3.0.1",
     "husky": "^9.1.7",
     "lint-staged": "^16.4.0",
     "prettier": "^3.8.3",
