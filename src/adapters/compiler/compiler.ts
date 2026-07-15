@@ -86,6 +86,27 @@ export const validateAdapter = async (
   return { adapter, diagnostics };
 };
 
+export const adapterRoots = async () => [
+  resolve(adaptersRoot, "_template"),
+  ...(await readdir(resolve(adaptersRoot, "builtin"), { withFileTypes: true })
+    .then((items) =>
+      items
+        .filter((item) => item.isDirectory())
+        .map((item) => resolve(adaptersRoot, "builtin", item.name)),
+    )
+    .catch(() => [])),
+];
+
+export const validateAllAdapters = async () => {
+  const results = await Promise.all(
+    (await adapterRoots()).map(validateAdapter),
+  );
+  return {
+    diagnostics: results.flatMap((result) => result.diagnostics),
+    results,
+  };
+};
+
 export const compileAdapter = async (
   root: string,
 ): Promise<{
@@ -130,16 +151,7 @@ export const compileAdapter = async (
 };
 
 export const compileAll = async (output = resolve("dist", "adapters")) => {
-  const roots = [
-    resolve(adaptersRoot, "_template"),
-    ...(await readdir(resolve(adaptersRoot, "builtin"), { withFileTypes: true })
-      .then((items) =>
-        items
-          .filter((item) => item.isDirectory())
-          .map((item) => resolve(adaptersRoot, "builtin", item.name)),
-      )
-      .catch(() => [])),
-  ];
+  const roots = await adapterRoots();
   const results = await Promise.all(roots.map(compileAdapter));
   const diagnostics = results.flatMap((item) => item.diagnostics);
   if (hasErrors(diagnostics)) return { diagnostics };
