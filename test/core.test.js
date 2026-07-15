@@ -20,6 +20,7 @@ import {
   RunManager,
   SchemaValidationError,
   lockIdentity,
+  isSupportedNodeVersion,
   LockManager,
   objectSchema,
   OperationRunner,
@@ -47,6 +48,13 @@ test("core hardening uses safe lock names and redacts config", () => {
     (error) =>
       error instanceof BenchPilotError && error.kind === "INVALID_CONFIG",
   );
+});
+
+test("node doctor version support starts at Node.js 22.13", () => {
+  assert.equal(isSupportedNodeVersion("22.12.9"), false);
+  assert.equal(isSupportedNodeVersion("22.13.0"), true);
+  assert.equal(isSupportedNodeVersion("23.0.0"), true);
+  assert.equal(isSupportedNodeVersion("24.0.0"), true);
 });
 
 test("runtime schemas validate values with stable errors", () => {

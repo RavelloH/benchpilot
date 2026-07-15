@@ -104,6 +104,11 @@ export {
 export { PathService } from "./core/paths/path-service.js";
 export { atomicJson, readJson } from "./core/utilities/atomic-json.js";
 export { sha, stable } from "./core/utilities/stable-json.js";
+export {
+  isSupportedNodeVersion,
+  parseNodeVersion,
+  type NodeVersion,
+} from "./core/utilities/node-version.js";
 export { resolveInside } from "./core/utilities/resolve-inside.js";
 export {
   RunManager,

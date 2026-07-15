@@ -12,13 +12,13 @@ node dist/cli/index.js device demo deploy --json
 node dist/cli/index.js device demo capture
 ```
 
-The command tree covers configuration, adapters/devices, systems, runs, locks and approvals. Device and adapter commands are resolved from the configured instance and registered adapter: adding an in-process adapter registration does not require a CLI routing change. Use `benchpilot help --all --json` for discoverable machine-readable help. `--json` emits one final result object; `--jsonl` streams RLog structured events to stdout and terminates failures with an `operation.failed` event.
+The command tree covers configuration, adapters/devices, systems, runs, locks and approvals. Device and adapter commands are resolved from the configured instance and registered adapter: adding an in-process adapter registration does not require a CLI routing change. Use `benchpilot help --all --json` for discoverable machine-readable help. `--json` emits one final result object; `--jsonl` is a real-time `benchpilot.event` stream with exactly one terminal `operation.completed` or `operation.failed` event. RLog remains responsible for run logs, not public JSONL stdout.
 
 Configuration is merged in this order: CLI input, `BENCHPILOT_*`, `--config`, project-local, project `benchpilot.toml`, global config, defaults. Unsafe key segments (`__proto__`, `prototype`, and `constructor`) are rejected; run snapshots redact common credential keys. On Windows global configuration uses `%LOCALAPPDATA%\BenchPilot\config.toml`. `benchpilot init` creates the minimal demo project without placing logs in the project. Runs live in OS state paths (or under `BENCHPILOT_HOME`); locks live in the runtime/temp area and use a hashed physical-resource identity rather than raw device IDs in file names.
 
 Dangerous demo reset requires `--dangerously-reset-demo-state`. The simulated `burn-fuse` operation additionally creates a local approval request and can only consume a matching interactive approval. This is a local workflow guard, not a defense against an attacker with filesystem control.
 
-See [architecture](docs/architecture.md), [CLI](docs/cli.md), [configuration](docs/config.md), [adapters](docs/adapters.md), [runs](docs/logging-and-runs.md), [locks](docs/locks.md), and [safety](docs/safety.md).
+See [architecture](docs/architecture.md), [CLI](docs/cli.md), [configuration](docs/config.md), [adapters](docs/adapters.md), [runs](docs/logging-and-runs.md), [locks](docs/locks.md), [safety](docs/safety.md), and [process runner](docs/process-runner.md).
 
 ## Development
 

@@ -53,6 +53,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "pnpm run build && node --test test/**/*.test.js",
     "test:coverage": "pnpm run build && node --test --experimental-test-coverage test/**/*.test.js",
+    "test:package": "pnpm run build && node test/package-e2e.mjs",
     "pack:check": "pnpm pack --dry-run",
     "format": "prettier --write . --log-level warn",
     "format:check": "prettier --check . --log-level warn",

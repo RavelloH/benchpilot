@@ -15,6 +15,7 @@ import {
   Json,
   loadConfig,
   LockManager,
+  isSupportedNodeVersion,
   OperationRunner,
   PathService,
   projectStorageKey,
@@ -414,8 +415,7 @@ export async function main(adapters: Adapter[] = [demoAdapter]) {
       const checks: Json[] = [];
       checks.push({
         id: "node",
-        status:
-          Number(process.versions.node.split(".")[0]) >= 20 ? "pass" : "fail",
+        status: isSupportedNodeVersion(process.versions.node) ? "pass" : "fail",
         message: `Node.js ${process.version}`,
       });
       checks.push({
