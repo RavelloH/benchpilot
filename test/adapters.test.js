@@ -326,3 +326,23 @@ test("environment providers require their type-specific fields", async () => {
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("parser rules require non-empty patterns", async () => {
+  const root = await temporaryAdapter();
+  try {
+    await writeFile(
+      join(root, "parsers.toml"),
+      `schema = "benchpilot.adapter.parsers"\nschema_version = 1\n[parsers.bad]\nmode = "line"\nencoding = "utf8"\nstrip_ansi = true\nsuccess_exit_codes = [0]\n[[parsers.bad.errors]]\nid = "bad"\npriority = 1\nsource = "stderr"\nkind = "BAD"\nretryable = false\nrecovery = []\n`,
+    );
+    const result = await validateAdapter(root);
+    assert.ok(
+      result.diagnostics.some(
+        (item) =>
+          item.code === "ADAPTER_SCHEMA_INVALID" &&
+          item.file === "parsers.toml",
+      ),
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
