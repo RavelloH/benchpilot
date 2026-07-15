@@ -168,3 +168,23 @@ test("render-action cases expand repeat arguments", async () => {
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("platform overlays cannot override capability definitions", async () => {
+  const root = await temporaryAdapter();
+  try {
+    await writeFile(
+      join(root, "platforms", "windows.toml"),
+      `schema = "benchpilot.adapter.platform"\nschema_version = 1\nplatform = "windows"\n[overrides.capabilities.build]\nenabled = true\n`,
+    );
+    const result = await validateAdapter(root);
+    assert.ok(
+      result.diagnostics.some(
+        (item) =>
+          item.code === "ADAPTER_SCHEMA_INVALID" ||
+          item.code === "ADAPTER_PLATFORM_OVERRIDE_INVALID",
+      ),
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
