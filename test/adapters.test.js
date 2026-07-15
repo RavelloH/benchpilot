@@ -306,3 +306,23 @@ test("workflow schemas allow action steps only", async () => {
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("environment providers require their type-specific fields", async () => {
+  const root = await temporaryAdapter();
+  try {
+    await writeFile(
+      join(root, "environments.toml"),
+      `schema = "benchpilot.adapter.environments"\nschema_version = 1\n[environments.bad]\nstrategy = "first-valid"\n[[environments.bad.providers]]\nid = "static"\ntype = "static"\npriority = 1\n`,
+    );
+    const result = await validateAdapter(root);
+    assert.ok(
+      result.diagnostics.some(
+        (item) =>
+          item.code === "ADAPTER_SCHEMA_INVALID" &&
+          item.file === "environments.toml",
+      ),
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

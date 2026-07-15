@@ -6,6 +6,87 @@
   "properties": {
     "schema": { "const": "benchpilot.adapter.environments" },
     "schema_version": { "const": 1 },
-    "environments": { "type": "object" }
+    "environments": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/id" },
+      "additionalProperties": { "$ref": "#/$defs/environment" }
+    }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+    "variableName": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
+    "variables": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/variableName" },
+      "additionalProperties": { "type": "string" }
+    },
+    "active": {
+      "type": "object",
+      "required": ["id", "type", "priority", "required_variables"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "type": { "const": "active" },
+        "priority": { "type": "integer" },
+        "required_variables": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/variableName" }
+        }
+      }
+    },
+    "static": {
+      "type": "object",
+      "required": ["id", "type", "priority", "variables"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "type": { "const": "static" },
+        "priority": { "type": "integer" },
+        "variables": { "$ref": "#/$defs/variables" }
+      }
+    },
+    "capture": {
+      "type": "object",
+      "required": ["id", "type", "priority", "script", "shell"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "type": { "const": "capture-script" },
+        "priority": { "type": "integer" },
+        "script": { "type": "string", "pattern": "^\\$\\{[^}]+\\}$" },
+        "shell": { "enum": ["posix", "powershell", "cmd"] }
+      }
+    },
+    "provider": {
+      "oneOf": [
+        { "$ref": "#/$defs/active" },
+        { "$ref": "#/$defs/static" },
+        { "$ref": "#/$defs/capture" }
+      ]
+    },
+    "environment": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["strategy"],
+          "additionalProperties": false,
+          "properties": { "strategy": { "const": "inherit" } }
+        },
+        {
+          "type": "object",
+          "required": ["strategy", "providers"],
+          "additionalProperties": false,
+          "properties": {
+            "strategy": { "const": "first-valid" },
+            "inherit": { "type": "boolean" },
+            "providers": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "$ref": "#/$defs/provider" }
+            }
+          }
+        }
+      ]
+    }
   }
 }
