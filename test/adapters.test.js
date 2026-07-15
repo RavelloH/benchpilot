@@ -229,3 +229,21 @@ test("device overlays merge into the final platform bundle", async () => {
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("platform filenames and platform declarations must agree", async () => {
+  const root = await temporaryAdapter();
+  try {
+    await writeFile(
+      join(root, "platforms", "windows.toml"),
+      `schema = "benchpilot.adapter.platform"\nschema_version = 1\nplatform = "linux"\n[overrides]\n`,
+    );
+    const result = await validateAdapter(root);
+    assert.ok(
+      result.diagnostics.some(
+        (item) => item.code === "ADAPTER_PLATFORM_OVERRIDE_INVALID",
+      ),
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
