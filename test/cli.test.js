@@ -173,6 +173,7 @@ test("jsonl emits one failed terminal event after cleanup", async () => {
       .map((line) => JSON.parse(line));
     assert.ok(events.some((event) => event.event.type === "stage.failed"));
     assert.ok(events.some((event) => event.event.type === "cleanup.started"));
+    assert.ok(events.some((event) => event.event.type === "cleanup.completed"));
     assert.equal(events.at(-1).event.type, "operation.failed");
     assert.equal(
       events.filter((event) =>

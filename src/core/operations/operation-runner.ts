@@ -441,6 +441,7 @@ export class OperationRunner {
         });
       }
     }
+    emit("cleanup.completed", { errors: cleanupErrors.length });
     if (lock) {
       try {
         await new LockManager(this.s.paths).release(lock);

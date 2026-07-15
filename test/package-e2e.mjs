@@ -59,6 +59,7 @@ try {
       },
     );
   assert.match(run("--version"), /0\.0\.0/);
+  assert.match(run(), /Agent-first device lifecycle CLI/);
   run("init");
   const commands = [
     ["doctor", "--json"],
