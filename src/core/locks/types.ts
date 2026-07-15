@@ -4,6 +4,8 @@ import type { PhysicalResourceIdentity } from "./lock-identity.js";
 export interface LockRecord {
   schema: "benchpilot.lock";
   version: 2;
+  state: "active" | "quarantined";
+  quarantineReason?: LockQuarantineReason;
   lockId: string;
   identity: PhysicalResourceIdentity;
   ownerToken: string;
@@ -15,6 +17,18 @@ export interface LockRecord {
   acquiredAt: string;
   heartbeatAt: string;
   expiresAt: string;
+}
+
+export interface LockQuarantineReason {
+  kind: string;
+  message: string;
+  cleanupErrors: Array<{
+    name: string;
+    critical: boolean;
+    message: string;
+  }>;
+  runId?: string;
+  quarantinedAt: string;
 }
 
 export type LockLiveness = "active" | "stale" | "unknown";

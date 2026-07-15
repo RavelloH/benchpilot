@@ -82,6 +82,8 @@ export class RunManager {
       signal: result.signal,
       timeoutMs: result.timeoutMs,
       lockLoss: result.lockLoss,
+      lockFinalStatus: result.lockFinalStatus,
+      quarantinedLock: result.quarantinedLock,
       approvalFinalStatus: result.approvalFinalStatus,
       dangerousEffectStarted: result.dangerousEffectStarted,
       dangerousEffectStartedAt: result.dangerousEffectStartedAt,

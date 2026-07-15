@@ -59,6 +59,9 @@ export class PathService {
       "locks",
     );
   }
+  guardsRoot() {
+    return path.join(path.dirname(this.runtimeRoot()), "guards");
+  }
   runsRoot(projectKey: string) {
     return this.portable
       ? path.join(this.portable, "runs")

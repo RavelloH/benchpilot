@@ -23,7 +23,19 @@ export type {
   LockLiveness,
   LockManagerHooks,
   LockRecord,
+  LockQuarantineReason,
 } from "./core/locks/types.js";
+export {
+  acquireFileGuard,
+  guardLiveness,
+  withFileGuard,
+} from "./core/concurrency/file-guard.js";
+export type {
+  FileGuard,
+  FileGuardOptions,
+  GuardLiveness,
+  GuardRecord,
+} from "./core/concurrency/file-guard.js";
 export { ApprovalManager } from "./core/approvals/approval-manager.js";
 export type {
   ApprovalLease,

@@ -3,6 +3,7 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { BenchPilotError, fail } from "../errors/benchpilot-error.js";
+import { withFileGuard } from "../concurrency/file-guard.js";
 import { PathService } from "../paths/path-service.js";
 import { atomicJson, readJson } from "../utilities/atomic-json.js";
 import { resolveInside } from "../utilities/resolve-inside.js";
@@ -11,6 +12,7 @@ import type {
   LockLease,
   LockLiveness,
   LockManagerHooks,
+  LockQuarantineReason,
   LockRecord,
 } from "./types.js";
 
@@ -35,31 +37,47 @@ export class LockManager {
     return resolveInside(this.directory(id), "owner.json");
   }
 
-  private updateGuard(id: string) {
-    return resolveInside(this.directory(id), "update.lock");
+  private guard(id: string) {
+    return resolveInside(this.paths.guardsRoot(), `${id}.lock`);
   }
 
   private async withGuard<T>(id: string, action: () => Promise<T>): Promise<T> {
-    const guard = this.updateGuard(id);
-    let handle;
-    for (let attempt = 0; ; attempt += 1) {
-      try {
-        handle = await fs.open(guard, "wx");
-        break;
-      } catch (error: unknown) {
-        const code = (error as NodeJS.ErrnoException).code;
-        if (code === "ENOENT") ownershipLost(id);
-        if (!["EEXIST", "EPERM"].includes(code || "") || attempt >= 200)
-          throw error;
-        await new Promise((resolve) => setTimeout(resolve, 5));
-      }
-    }
+    return withFileGuard(
+      this.guard(id),
+      {
+        resourceType: "lock-update",
+        resourceId: id,
+        busyKind: "LOCK_GUARD_BUSY",
+      },
+      action,
+    );
+  }
+
+  private async clearEmptyDirectory(id: string) {
     try {
-      return await action();
-    } finally {
-      await handle.close().catch(() => {});
-      await fs.unlink(guard).catch(() => {});
+      const entries = await fs.readdir(this.directory(id));
+      if (entries.length === 0) await fs.rmdir(this.directory(id));
+    } catch (error: unknown) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
+  }
+
+  private async recoverCreatingDirectories(id: string) {
+    const prefix = `${id}.creating-`;
+    const entries = await fs
+      .readdir(this.paths.runtimeRoot(), { withFileTypes: true })
+      .catch((error: NodeJS.ErrnoException) =>
+        error.code === "ENOENT" ? [] : Promise.reject(error),
+      );
+    for (const entry of entries)
+      if (entry.isDirectory() && entry.name.startsWith(prefix)) {
+        const directory = resolveInside(this.paths.runtimeRoot(), entry.name);
+        const creating = await readJson<LockRecord>(
+          path.join(directory, "creating.json"),
+        );
+        if (creating && (await this.liveness(creating)) === "stale")
+          await fs.rm(directory, { recursive: true, force: true });
+      }
   }
 
   async acquire(
@@ -74,20 +92,12 @@ export class LockManager {
     session?: string,
   ): Promise<LockRecord> {
     await fs.mkdir(this.paths.runtimeRoot(), { recursive: true });
-    const directory = this.directory(id);
-    try {
-      await fs.mkdir(directory);
-    } catch (error: unknown) {
-      if ((error as NodeJS.ErrnoException).code === "EEXIST") {
-        const holder = await readJson<LockRecord>(this.file(id));
-        fail("DEVICE_BUSY", 4, `Resource ${id} is locked.`, { holder });
-      }
-      throw error;
-    }
+    await this.recoverCreatingDirectories(id);
     const now = new Date();
     const record: LockRecord = {
       schema: "benchpilot.lock",
       version: 2,
+      state: "active",
       lockId: id,
       identity,
       ownerToken: randomBytes(16).toString("hex"),
@@ -100,38 +110,50 @@ export class LockManager {
       heartbeatAt: now.toISOString(),
       expiresAt: new Date(now.getTime() + 30_000).toISOString(),
     };
+    const directory = this.directory(id);
+    const staging = `${directory}.creating-${record.ownerToken}`;
     try {
-      const owner = await fs.open(this.file(id), "wx");
-      try {
-        await owner.writeFile(JSON.stringify(record, null, 2));
-      } finally {
-        await owner.close();
-      }
+      await fs.mkdir(staging);
+      await atomicJson(path.join(staging, "creating.json"), record);
+      await atomicJson(path.join(staging, "owner.json"), record);
+      await fs.rename(staging, directory);
       return record;
-    } catch (error) {
-      await fs.rm(directory, { recursive: true }).catch(() => {});
-      throw error;
+    } catch (error: unknown) {
+      await fs.rm(staging, { recursive: true, force: true }).catch(() => {});
+      if (
+        !(["EEXIST", "EPERM"] as const).includes(
+          (error as NodeJS.ErrnoException).code as "EEXIST" | "EPERM",
+        )
+      )
+        throw error;
+      const holder = await readJson<LockRecord>(this.file(id));
+      if (!holder) {
+        await this.clearEmptyDirectory(id);
+        return this.acquire(id, command, runId, identity, session);
+      }
+      if (holder.state === "quarantined")
+        fail("DEVICE_QUARANTINED", 4, `Resource ${id} is quarantined.`, {
+          lockId: id,
+          quarantineReason: holder.quarantineReason,
+          recovery: [
+            "Confirm that the previous tool process and hardware connection are no longer active.",
+            "Clear the quarantined lock explicitly.",
+          ],
+        });
+      return fail("DEVICE_BUSY", 4, `Resource ${id} is locked.`, { holder });
     }
   }
 
   async heartbeat(lock: LockRecord, leaseMs = 30_000): Promise<LockRecord> {
     return this.withGuard(lock.lockId, async () => {
       const existing = await readJson<LockRecord>(this.file(lock.lockId));
-      if (!existing)
-        throw new BenchPilotError(
-          "LOCK_OWNERSHIP_LOST",
-          4,
-          `Lock ownership lost: ${lock.lockId}`,
-        );
+      if (!existing || existing.state !== "active")
+        return ownershipLost(lock.lockId);
       if (existing.ownerToken !== lock.ownerToken) ownershipLost(lock.lockId);
       await this.hooks.heartbeatRead?.(existing);
       const current = await readJson<LockRecord>(this.file(lock.lockId));
-      if (!current)
-        throw new BenchPilotError(
-          "LOCK_OWNERSHIP_LOST",
-          4,
-          `Lock ownership lost: ${lock.lockId}`,
-        );
+      if (!current || current.state !== "active")
+        return ownershipLost(lock.lockId);
       if (current.ownerToken !== lock.ownerToken) ownershipLost(lock.lockId);
       const now = new Date();
       const updated: LockRecord = {
@@ -215,27 +237,43 @@ export class LockManager {
     }
   }
 
+  async quarantine(
+    lock: LockRecord,
+    reason: Omit<LockQuarantineReason, "quarantinedAt">,
+  ) {
+    return this.withGuard(lock.lockId, async () => {
+      const current = await readJson<LockRecord>(this.file(lock.lockId));
+      if (!current || current.ownerToken !== lock.ownerToken)
+        return ownershipLost(lock.lockId);
+      const quarantined: LockRecord = {
+        ...current,
+        state: "quarantined",
+        quarantineReason: {
+          ...reason,
+          quarantinedAt: new Date().toISOString(),
+        },
+      };
+      await atomicJson(this.file(lock.lockId), quarantined);
+      return quarantined;
+    });
+  }
+
   async release(lock: LockRecord) {
+    let tombstone: string | undefined;
     await this.withGuard(lock.lockId, async () => {
       const existing = await readJson<LockRecord>(this.file(lock.lockId));
       if (!existing) return;
       if (existing.ownerToken !== lock.ownerToken) ownershipLost(lock.lockId);
+      if (existing.state === "quarantined")
+        fail("LOCK_QUARANTINED", 4, `Lock is quarantined: ${lock.lockId}`);
       await this.hooks.releaseRead?.(existing);
       const current = await readJson<LockRecord>(this.file(lock.lockId));
-      if (!current)
-        throw new BenchPilotError(
-          "LOCK_OWNERSHIP_LOST",
-          4,
-          `Lock ownership lost: ${lock.lockId}`,
-        );
-      if (current.ownerToken !== lock.ownerToken) ownershipLost(lock.lockId);
-      await fs.unlink(this.file(lock.lockId));
+      if (!current || current.ownerToken !== lock.ownerToken)
+        ownershipLost(lock.lockId);
+      tombstone = `${this.directory(lock.lockId)}.released-${randomBytes(8).toString("hex")}`;
+      await fs.rename(this.directory(lock.lockId), tombstone);
     });
-    try {
-      await fs.rmdir(this.directory(lock.lockId));
-    } catch (error: unknown) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    }
+    if (tombstone) await fs.rm(tombstone, { recursive: true, force: true });
   }
 
   async list(): Promise<LockRecord[]> {
@@ -245,7 +283,13 @@ export class LockManager {
       });
       const records = await Promise.all(
         entries
-          .filter((entry) => entry.isDirectory())
+          .filter(
+            (entry) =>
+              entry.isDirectory() &&
+              LOCK_ID_PATTERN.test(entry.name) &&
+              !entry.name.includes(".creating-") &&
+              !entry.name.includes(".released-"),
+          )
           .map((entry) => readJson<LockRecord>(this.file(entry.name))),
       );
       return records.filter((record): record is LockRecord => Boolean(record));
@@ -255,14 +299,36 @@ export class LockManager {
     }
   }
 
-  async clear(id: string, dangerous: boolean) {
+  async clear(
+    id: string,
+    options:
+      | boolean
+      | { dangerousActive?: boolean; dangerousQuarantined?: boolean } = false,
+  ) {
+    const dangerousActive =
+      typeof options === "boolean" ? options : Boolean(options.dangerousActive);
+    const dangerousQuarantined =
+      typeof options === "boolean"
+        ? options
+        : Boolean(options.dangerousQuarantined);
     let cleared!: LockRecord;
+    let tombstone: string | undefined;
     await this.withGuard(id, async () => {
       const record = await readJson<LockRecord>(this.file(id));
       if (!record)
         throw new BenchPilotError("LOCK_NOT_FOUND", 3, `Lock not found: ${id}`);
+      if (record.state === "quarantined" && !dangerousQuarantined)
+        fail(
+          "DANGEROUS_CONFIRMATION_REQUIRED",
+          7,
+          "Quarantined lock requires --dangerously-clear-quarantined-lock.",
+        );
       const status = await this.liveness(record);
-      if (status !== "stale" && !dangerous)
+      if (
+        record.state !== "quarantined" &&
+        status !== "stale" &&
+        !dangerousActive
+      )
         fail(
           "DANGEROUS_CONFIRMATION_REQUIRED",
           7,
@@ -272,10 +338,11 @@ export class LockManager {
       const current = await readJson<LockRecord>(this.file(id));
       if (!current || current.ownerToken !== record.ownerToken)
         ownershipLost(id);
-      await fs.unlink(this.file(id));
+      tombstone = `${this.directory(id)}.released-${randomBytes(8).toString("hex")}`;
+      await fs.rename(this.directory(id), tombstone);
       cleared = record;
     });
-    await fs.rmdir(this.directory(id));
+    if (tombstone) await fs.rm(tombstone, { recursive: true, force: true });
     return cleared;
   }
 }

@@ -3,6 +3,7 @@ import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { BenchPilotError, fail } from "../errors/benchpilot-error.js";
+import { withFileGuard } from "../concurrency/file-guard.js";
 import { PathService } from "../paths/path-service.js";
 import { atomicJson, readJson } from "../utilities/atomic-json.js";
 import { resolveInside } from "../utilities/resolve-inside.js";
@@ -42,36 +43,21 @@ export class ApprovalManager {
     return resolveInside(this.paths.approvalsRoot(), `${id}.json`);
   }
 
-  private guard(id: string) {
+  private guardFile(id: string) {
     this.assertId(id);
-    return resolveInside(this.paths.approvalsRoot(), `${id}.lock`);
+    return resolveInside(this.paths.guardsRoot(), `${id}.lock`);
   }
 
   private async withGuard<T>(id: string, action: () => Promise<T>): Promise<T> {
-    await fs.mkdir(this.paths.approvalsRoot(), { recursive: true });
-    const guard = this.guard(id);
-    let handle;
-    for (let attempt = 0; ; attempt += 1) {
-      try {
-        handle = await fs.open(guard, "wx");
-        break;
-      } catch (error: unknown) {
-        if (
-          !["EEXIST", "EPERM"].includes(
-            (error as NodeJS.ErrnoException).code || "",
-          ) ||
-          attempt >= 200
-        )
-          throw error;
-        await new Promise((resolve) => setTimeout(resolve, 5));
-      }
-    }
-    try {
-      return await action();
-    } finally {
-      await handle.close().catch(() => {});
-      await fs.unlink(guard).catch(() => {});
-    }
+    return withFileGuard(
+      this.guardFile(id),
+      {
+        resourceType: "approval-update",
+        resourceId: id,
+        busyKind: "APPROVAL_GUARD_BUSY",
+      },
+      action,
+    );
   }
 
   async request(binding: Json, ttl = 3_600_000): Promise<ApprovalRecord> {

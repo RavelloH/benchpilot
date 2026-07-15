@@ -22,7 +22,7 @@ export interface OperationContext {
   registerCleanup(
     name: string,
     handler: () => Promise<void> | void,
-    options?: { critical?: boolean },
+    options?: { critical?: boolean; holdsPhysicalResource?: boolean },
   ): void;
   readonly dangerousEffect: {
     readonly started: boolean;

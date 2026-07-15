@@ -7,6 +7,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import {
   AdapterRegistry,
+  acquireFileGuard,
   ArtifactRegistry,
   abortPromise,
   ApprovalManager,
@@ -25,6 +26,7 @@ import {
   objectSchema,
   OperationRunner,
   redactResolvedConfig,
+  readJson,
   runProcess,
   setKey,
   stringSchema,
@@ -154,6 +156,36 @@ test("approval claims are exclusive", async () => {
         error instanceof BenchPilotError &&
         error.kind === "INVALID_APPROVAL_ID",
     );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("stale file guards recover without allowing an old owner to delete a replacement", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "benchpilot-file-guard-"));
+  try {
+    const paths = new PathService({ BENCHPILOT_HOME: root });
+    const file = path.join(paths.guardsRoot(), "resource.lock");
+    await mkdir(paths.guardsRoot(), { recursive: true });
+    await atomicJson(file, {
+      schema: "benchpilot.guard",
+      version: 1,
+      token: "crashed-owner",
+      pid: 1,
+      hostname: "another-host",
+      createdAt: new Date(0).toISOString(),
+      expiresAt: new Date(0).toISOString(),
+      resourceType: "lock-update",
+      resourceId: "resource",
+    });
+    const guard = await acquireFileGuard(file, {
+      resourceType: "lock-update",
+      resourceId: "resource",
+    });
+    const replacement = { ...guard.record, token: "replacement" };
+    await atomicJson(file, replacement);
+    await guard.release();
+    assert.equal((await readJson(file)).token, "replacement");
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -884,7 +916,7 @@ test("separate processes cannot acquire the same physical lock", async () => {
   }
 });
 
-test("critical cleanup failure finalizes a failed run after releasing its lock", async () => {
+test("critical cleanup failure quarantines its lock and finalizes a failed run", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "benchpilot-cleanup-"));
   const events = [];
   try {
@@ -944,12 +976,30 @@ test("critical cleanup failure finalizes a failed run after releasing its lock",
       .execute("device", "cleanup", {})
       .catch((cause) => cause);
     assert.equal(error.kind, "CLEANUP_FAILED");
-    assert.equal((await new LockManager(paths).list()).length, 0);
+    const [lock] = await new LockManager(paths).list();
+    assert.equal(lock.state, "quarantined");
+    assert.equal(lock.quarantineReason.kind, "CLEANUP_FAILED");
+    const locks = new LockManager(paths);
+    await assert.rejects(
+      locks.acquire(lock.lockId, "contender"),
+      (cause) =>
+        cause instanceof BenchPilotError && cause.kind === "DEVICE_QUARANTINED",
+    );
+    await assert.rejects(
+      locks.clear(lock.lockId),
+      (cause) =>
+        cause instanceof BenchPilotError &&
+        cause.kind === "DANGEROUS_CONFIRMATION_REQUIRED",
+    );
+    await locks.clear(lock.lockId, { dangerousQuarantined: true });
+    assert.equal((await locks.list()).length, 0);
     assert.equal(error.result.ok, false);
     assert.deepEqual(error.result.cleanupErrors, [
       {
         name: "failing-cleanup",
         critical: true,
+        holdsPhysicalResource: true,
+        timedOut: false,
         message: "cleanup failed",
       },
     ]);

@@ -140,7 +140,7 @@ export async function handleRuntimeCommand({
       const ls = await locks.list();
       const cleared = [];
       for (const l of ls)
-        if (l && (await locks.liveness(l)) === "stale") {
+        if (l.state === "active" && (await locks.liveness(l)) === "stale") {
           await locks.clear(l.lockId, false);
           cleared.push(l.lockId);
         }
@@ -151,19 +151,23 @@ export async function handleRuntimeCommand({
   }
   if (parts[0] === "lock" && parts[1]) {
     if (parts.length === 2) {
-      stdout.write("benchpilot lock <lock-id> — Commands: inspect, clear\n");
+      stdout.write("benchpilot lock <lock-id> — Commands: show, clear\n");
       return true;
     }
     const locks = new LockManager(paths);
-    if (parts[2] === "inspect")
+    if (parts[2] === "show" || parts[2] === "inspect")
       write(await readJson(locks.file(parts[1])), flags);
     else if (parts[2] === "clear")
       write(
         {
-          cleared: await locks.clear(
-            parts[1],
-            Boolean(commandFlags["dangerously-clear-active-lock"]),
-          ),
+          cleared: await locks.clear(parts[1], {
+            dangerousActive: Boolean(
+              commandFlags["dangerously-clear-active-lock"],
+            ),
+            dangerousQuarantined: Boolean(
+              commandFlags["dangerously-clear-quarantined-lock"],
+            ),
+          }),
         },
         flags,
       );

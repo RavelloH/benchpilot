@@ -4,6 +4,8 @@ import type { Json } from "../../core.js";
 export interface CleanupError {
   name: string;
   critical: boolean;
+  holdsPhysicalResource: boolean;
+  timedOut: boolean;
   message: string;
 }
 
@@ -12,4 +14,7 @@ export interface OperationOutcome {
   result: Json;
   primaryError?: BenchPilotError;
   cleanupErrors: CleanupError[];
+  lockFinalStatus:
+    "not-required" | "released" | "quarantined" | "ownership-lost";
+  quarantinedLock?: { lockId: string; reason: Json };
 }

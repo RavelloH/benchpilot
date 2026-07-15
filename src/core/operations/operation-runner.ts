@@ -200,6 +200,7 @@ export class OperationRunner {
     const cleanups: Array<{
       name: string;
       critical: boolean;
+      holdsPhysicalResource: boolean;
       handler: () => Promise<void> | void;
     }> = [];
     const cleanupErrors: CleanupError[] = [];
@@ -209,6 +210,10 @@ export class OperationRunner {
     let dangerousEffectStartedAt: string | undefined;
     let dangerousEffectDetails: Json | undefined;
     let approvalFinalStatus: "released" | "consumed" | undefined;
+    let lockFinalStatus:
+      "not-required" | "released" | "quarantined" | "ownership-lost" =
+      "not-required";
+    let quarantinedLock: { lockId: string; reason: Json } | undefined;
     const controller = new AbortController();
     const timer = setTimeout(() => {
       controller.abort({
@@ -292,6 +297,7 @@ export class OperationRunner {
               name,
               handler,
               critical: options?.critical ?? true,
+              holdsPhysicalResource: options?.holdsPhysicalResource ?? true,
             });
           },
           get dangerousEffect() {
@@ -409,6 +415,8 @@ export class OperationRunner {
         cleanupErrors.push({
           name: cleanup.name,
           critical: cleanup.critical,
+          holdsPhysicalResource: cleanup.holdsPhysicalResource,
+          timedOut: (error as BenchPilotError).kind === "CLEANUP_TIMEOUT",
           message: (error as Error).message,
         });
         emit("cleanup.failed", {
@@ -424,6 +432,8 @@ export class OperationRunner {
         cleanupErrors.push({
           name: "lock-heartbeat",
           critical: true,
+          holdsPhysicalResource: true,
+          timedOut: false,
           message: (error as Error).message,
         });
       }
@@ -435,6 +445,8 @@ export class OperationRunner {
         cleanupErrors.push({
           name: "approval-heartbeat",
           critical: true,
+          holdsPhysicalResource: false,
+          timedOut: false,
           message: (error as Error).message,
         });
       }
@@ -452,19 +464,44 @@ export class OperationRunner {
         cleanupErrors.push({
           name: "approval",
           critical: true,
+          holdsPhysicalResource: false,
+          timedOut: false,
           message: (error as Error).message,
         });
       }
     }
     emit("cleanup.completed", { errors: cleanupErrors.length });
+    const quarantineRequired = cleanupErrors.some(
+      (error) =>
+        error.critical || (error.timedOut && error.holdsPhysicalResource),
+    );
     if (lock) {
       try {
-        await new LockManager(this.s.paths).release(lock);
-        emit("lock.released", { lockId: lock.lockId });
+        const locks = new LockManager(this.s.paths);
+        if (quarantineRequired) {
+          const reason = {
+            kind: "CLEANUP_FAILED",
+            message: "Critical operation cleanup failed or timed out.",
+            cleanupErrors,
+            runId: run?.id,
+          };
+          await locks.quarantine(lock, reason);
+          lockFinalStatus = "quarantined";
+          quarantinedLock = { lockId: lock.lockId, reason };
+          emit("lock.quarantined", { lockId: lock.lockId, reason });
+        } else {
+          await locks.release(lock);
+          lockFinalStatus = "released";
+          emit("lock.released", { lockId: lock.lockId });
+        }
       } catch (error: unknown) {
+        if ((error as BenchPilotError).kind === "LOCK_OWNERSHIP_LOST")
+          lockFinalStatus = "ownership-lost";
         cleanupErrors.push({
           name: "lock-release",
           critical: true,
+          holdsPhysicalResource: true,
+          timedOut: false,
           message: (error as Error).message,
         });
       }
@@ -475,6 +512,8 @@ export class OperationRunner {
       cleanupErrors.push({
         name: "logger-close",
         critical: true,
+        holdsPhysicalResource: false,
+        timedOut: false,
         message: (error as Error).message,
       });
     }
@@ -507,6 +546,8 @@ export class OperationRunner {
       signal,
       timeoutMs: timeout,
       lockLoss,
+      lockFinalStatus,
+      quarantinedLock,
       approvalFinalStatus,
       dangerousEffectStarted,
       dangerousEffectStartedAt,
@@ -551,6 +592,8 @@ export class OperationRunner {
       result,
       primaryError,
       cleanupErrors,
+      lockFinalStatus,
+      quarantinedLock,
     };
     if (run) await runManager.finalize(run, outcome.status, outcome.result);
     if (outcome.primaryError) {
