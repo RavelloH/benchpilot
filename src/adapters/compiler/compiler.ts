@@ -6,7 +6,7 @@ import { validateAdapterLayout } from "./layout.js";
 import { fixedFiles } from "./layout.js";
 import { loadAdapter } from "./loader.js";
 import { mergePlatform } from "./platform-merger.js";
-import { validateSchemas } from "./schema-validator.js";
+import { validateBundle, validateSchemas } from "./schema-validator.js";
 import { validateSemantics } from "./semantic-validator.js";
 import type {
   AdapterDiagnostic,
@@ -167,21 +167,26 @@ export const compileAdapter = async (
       .sort()
       .map(async (file) => [file, await readFile(resolve(root, file), "utf8")]),
   );
-  return {
-    diagnostics,
-    bundle: {
-      schema: "benchpilot.adapter-bundle",
-      schemaVersion: 1,
-      id: adapter.id,
-      sourceHash: sha([source, catalogContent, 1]),
-      manifest: adapter.files["manifest.toml"],
-      capabilityCatalog,
-      capabilityCatalogVersion: 1,
-      capabilityCatalogHash: sha(catalogContent),
-      schemas: adapter.schemas,
-      platforms,
-    },
+  const bundle: CompiledAdapterBundleV1 = {
+    schema: "benchpilot.adapter-bundle",
+    schemaVersion: 1,
+    id: adapter.id,
+    sourceHash: sha([source, catalogContent, 1]),
+    manifest: adapter.files["manifest.toml"],
+    capabilityCatalog,
+    capabilityCatalogVersion: 1,
+    capabilityCatalogHash: sha(catalogContent),
+    schemas: adapter.schemas,
+    platforms,
   };
+  diagnostics.push(
+    ...(await validateBundle(
+      bundle as unknown as JsonObject,
+      schemaRoot,
+      adapter.id,
+    )),
+  );
+  return hasErrors(diagnostics) ? { diagnostics } : { diagnostics, bundle };
 };
 
 export const compileAll = async (output = resolve("dist", "adapters")) => {
