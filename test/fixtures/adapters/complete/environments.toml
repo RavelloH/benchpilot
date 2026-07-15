@@ -1,0 +1,12 @@
+schema = "benchpilot.adapter.environments"
+schema_version = 1
+[environments.inherit]
+strategy = "inherit"
+[environments.static]
+strategy = "first-valid"
+[[environments.static.providers]]
+id = "values"
+type = "static"
+priority = 1
+[environments.static.providers.variables]
+PATH = "${env.PATH}"

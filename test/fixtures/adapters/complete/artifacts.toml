@@ -1,0 +1,5 @@
+schema = "benchpilot.adapter.artifacts"
+schema_version = 1
+[sets.output]
+base = "${device.project}"
+entries = [{ id = "output", kind = "metadata", path = "output.json", required = false, multiple = false }]

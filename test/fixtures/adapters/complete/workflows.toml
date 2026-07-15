@@ -1,0 +1,8 @@
+schema = "benchpilot.adapter.workflows"
+schema_version = 1
+[workflows.deploy]
+timeout = "1m"
+stop_on_failure = true
+[[workflows.deploy.steps]]
+id = "run"
+uses = "action:run"

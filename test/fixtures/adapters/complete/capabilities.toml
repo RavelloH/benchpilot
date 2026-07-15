@@ -1,0 +1,144 @@
+schema = "benchpilot.adapter.capabilities"
+schema_version = 1
+catalog_version = 1
+[capabilities.build]
+enabled = true
+handler = "workflow:deploy"
+input_schema = "build"
+output_schema = "build"
+creates_run = true
+timeout = "1m"
+lock = "none"
+[capabilities.build.safety]
+mode = "normal"
+[capabilities.build.platforms]
+windows = true
+linux = true
+macos = true
+[capabilities.status]
+enabled = false
+reason = "Not included."
+[capabilities.status.platforms]
+windows = false
+linux = false
+macos = false
+
+[capabilities.info]
+enabled = false
+reason = "Not included."
+[capabilities.info.platforms]
+windows = false
+linux = false
+macos = false
+
+[capabilities.clean]
+enabled = false
+reason = "Not included."
+[capabilities.clean.platforms]
+windows = false
+linux = false
+macos = false
+
+[capabilities.fullclean]
+enabled = false
+reason = "Not included."
+[capabilities.fullclean.platforms]
+windows = false
+linux = false
+macos = false
+
+[capabilities.size]
+enabled = false
+reason = "Not included."
+[capabilities.size.platforms]
+windows = false
+linux = false
+macos = false
+
+[capabilities.flash]
+enabled = false
+reason = "Not included."
+[capabilities.flash.platforms]
+windows = false
+linux = false
+macos = false
+
+[capabilities.reset]
+enabled = false
+reason = "Not included."
+[capabilities.reset.platforms]
+windows = false
+linux = false
+macos = false
+
+[capabilities.run]
+enabled = false
+reason = "Not included."
+[capabilities.run.platforms]
+windows = false
+linux = false
+macos = false
+
+[capabilities.stop]
+enabled = false
+reason = "Not included."
+[capabilities.stop.platforms]
+windows = false
+linux = false
+macos = false
+
+[capabilities.logs]
+enabled = false
+reason = "Not included."
+[capabilities.logs.platforms]
+windows = false
+linux = false
+macos = false
+
+[capabilities.capture]
+enabled = false
+reason = "Not included."
+[capabilities.capture.platforms]
+windows = false
+linux = false
+macos = false
+
+[capabilities.sync]
+enabled = false
+reason = "Not included."
+[capabilities.sync.platforms]
+windows = false
+linux = false
+macos = false
+
+[capabilities.test]
+enabled = false
+reason = "Not included."
+[capabilities.test.platforms]
+windows = false
+linux = false
+macos = false
+
+[capabilities.selftest]
+enabled = false
+reason = "Not included."
+[capabilities.selftest.platforms]
+windows = false
+linux = false
+macos = false
+
+[capabilities.deploy]
+enabled = false
+reason = "Not included."
+[capabilities.deploy.platforms]
+windows = false
+linux = false
+macos = false
+
+[capabilities.erase]
+enabled = false
+reason = "Not included."
+[capabilities.erase.platforms]
+windows = false
+linux = false
+macos = false

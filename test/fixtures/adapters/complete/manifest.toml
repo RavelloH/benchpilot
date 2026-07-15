@@ -1,0 +1,11 @@
+schema = "benchpilot.adapter.manifest"
+schema_version = 1
+id = "complete"
+display_name = "Complete Fixture"
+adapter_version = "1.0.0"
+description = "Complete adapter format fixture."
+capability_catalog_version = 1
+minimum_benchpilot_version = "0.1.0"
+status = "experimental"
+deprecated = false
+tags = []

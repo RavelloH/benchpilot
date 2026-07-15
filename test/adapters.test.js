@@ -13,6 +13,13 @@ import { runCases } from "../dist/adapters/compiler/case-runner.js";
 import { loadAdapter } from "../dist/adapters/compiler/loader.js";
 
 const template = join(process.cwd(), "src", "adapters", "_template");
+const complete = join(
+  process.cwd(),
+  "test",
+  "fixtures",
+  "adapters",
+  "complete",
+);
 const temporaryAdapter = async () => {
   const root = await mkdtemp(join(tmpdir(), "benchpilot-adapter-"));
   const adapterRoot = join(root, "template");
@@ -47,6 +54,14 @@ test("bulk compilation excludes the template and writes an empty index", async (
   } finally {
     await rm(output, { recursive: true, force: true });
   }
+});
+
+test("complete adapter fixture validates and compiles", async () => {
+  const validation = await validateAdapter(complete);
+  assert.deepEqual(validation.diagnostics, []);
+  const compiled = await compileAdapter(complete);
+  assert.deepEqual(compiled.diagnostics, []);
+  assert.equal(compiled.bundle.capabilityCatalog.version, 1);
 });
 
 test("layout validation rejects missing and unexpected rule files", async () => {

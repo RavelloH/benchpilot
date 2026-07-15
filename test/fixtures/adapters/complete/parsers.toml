@@ -1,0 +1,7 @@
+schema = "benchpilot.adapter.parsers"
+schema_version = 1
+[parsers.text]
+mode = "line"
+encoding = "utf8"
+strip_ansi = true
+success_exit_codes = [0]

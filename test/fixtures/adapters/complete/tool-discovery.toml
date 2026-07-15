@@ -1,0 +1,22 @@
+schema = "benchpilot.adapter.tool-discovery"
+schema_version = 1
+[discoveries.python]
+strategy = "first-valid"
+[[discoveries.python.candidates]]
+id = "path-python"
+type = "path"
+names = ["python"]
+priority = 1
+[discoveries.python.validation]
+path_type = "file"
+executable = true
+[discoveries.script]
+strategy = "first-valid"
+[[discoveries.script.candidates]]
+id = "fixed-script"
+type = "fixed"
+paths = ["script.py"]
+priority = 1
+[discoveries.script.validation]
+path_type = "file"
+executable = false

@@ -1,0 +1,20 @@
+schema = "benchpilot.adapter.tools"
+schema_version = 1
+[tools.python]
+description = "Python"
+required = true
+discovery = "python"
+[tools.python.launch]
+mode = "direct"
+command = "${discovery.path}"
+prefix_args = []
+environment = "inherit"
+[tools.script]
+description = "Script"
+required = true
+discovery = "script"
+[tools.script.launch]
+mode = "via-tool"
+tool = "python"
+prefix_args = ["${discovery.path}"]
+environment = "static"

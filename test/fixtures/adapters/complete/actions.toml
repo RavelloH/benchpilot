@@ -1,0 +1,7 @@
+schema = "benchpilot.adapter.actions"
+schema_version = 1
+[actions.run]
+type = "process"
+tool = "script"
+cwd = "${device.project}"
+arguments = [{ kind = "literal", value = "build" }]
