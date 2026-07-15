@@ -72,6 +72,11 @@ async function writeExclusive(file: string, record: GuardRecord) {
   }
 }
 
+async function deleteGuardIfToken(file: string, token: string) {
+  const current = await readGuard(file);
+  if (current?.token === token) await fs.unlink(file);
+}
+
 async function recoverStaleGuard(file: string, expected: GuardRecord) {
   const recovery = `${file}.recovery`;
   const record: GuardRecord = {
@@ -85,20 +90,25 @@ async function recoverStaleGuard(file: string, expected: GuardRecord) {
     resourceType: expected.resourceType,
     resourceId: expected.resourceId,
   };
-  try {
-    await writeExclusive(recovery, record);
-  } catch (error: unknown) {
-    if ((error as NodeJS.ErrnoException).code === "EEXIST") return false;
-    throw error;
+  for (;;) {
+    try {
+      await writeExclusive(recovery, record);
+      break;
+    } catch (error: unknown) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+      const currentRecovery = await readGuard(recovery);
+      if (!currentRecovery || guardLiveness(currentRecovery) !== "stale")
+        return false;
+      await deleteGuardIfToken(recovery, currentRecovery.token);
+    }
   }
   try {
     const current = await readGuard(file);
     if (current?.token === expected.token && guardLiveness(current) === "stale")
-      await fs.unlink(file);
+      await deleteGuardIfToken(file, expected.token);
     return true;
   } finally {
-    const currentRecovery = await readGuard(recovery);
-    if (currentRecovery?.token === record.token) await fs.unlink(recovery);
+    await deleteGuardIfToken(recovery, record.token);
   }
 }
 
@@ -136,8 +146,7 @@ export async function acquireFileGuard(
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
       const current = await readGuard(file);
       if (current && guardLiveness(current) === "stale") {
-        await recoverStaleGuard(file, current);
-        continue;
+        if (await recoverStaleGuard(file, current)) continue;
       }
       if (Date.now() - started >= timeoutMs)
         throw new BenchPilotError(

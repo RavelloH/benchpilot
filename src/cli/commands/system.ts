@@ -1,4 +1,9 @@
-import { fail, type Json, type OperationRunner } from "../../core.js";
+import {
+  BenchPilotError,
+  fail,
+  type Json,
+  type OperationRunner,
+} from "../../core.js";
 import { systemCapabilities } from "../help-renderer.js";
 
 export async function systemOperation(
@@ -33,17 +38,36 @@ export async function systemOperation(
     let result: Json;
     if (operation === "info")
       result = { system: name, devices, operations: systemCapabilities };
-    else if (operation === "status")
-      result = {
-        system: name,
-        results: await Promise.all(
-          devices.map(async (device) => ({
-            device,
-            result: await execute(device, "status"),
-          })),
-        ),
-      };
-    else if (operation === "emergency-stop") {
+    else if (operation === "status") {
+      const settled = await Promise.allSettled(
+        devices.map((device) => execute(device, "status")),
+      );
+      const results = settled.map((entry, index) =>
+        entry.status === "fulfilled"
+          ? { device: devices[index], result: entry.value }
+          : {
+              device: devices[index],
+              error: {
+                kind:
+                  entry.reason instanceof BenchPilotError
+                    ? entry.reason.kind
+                    : "INTERNAL_ERROR",
+                message: (entry.reason as Error).message,
+              },
+            },
+      );
+      result = { system: name, results };
+      if (settled.some((entry) => entry.status === "rejected"))
+        throw new BenchPilotError(
+          "SYSTEM_OPERATION_FAILED",
+          5,
+          `System status failed: ${name}`,
+          false,
+          undefined,
+          [],
+          { system: name, results },
+        );
+    } else if (operation === "emergency-stop") {
       const results = [];
       for (const device of devices)
         try {
@@ -68,7 +92,10 @@ export async function systemOperation(
     return result;
   } catch (error) {
     runner.emitSystemEvent("system.operation.failed", {
-      error: { message: (error as Error).message },
+      error:
+        error instanceof BenchPilotError
+          ? { kind: error.kind, message: error.message, details: error.details }
+          : { message: (error as Error).message },
     });
     throw Object.assign(error as Error, { jsonlTerminalEmitted: true });
   }

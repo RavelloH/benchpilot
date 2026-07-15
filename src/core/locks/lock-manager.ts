@@ -38,7 +38,7 @@ export class LockManager {
   }
 
   private guard(id: string) {
-    return resolveInside(this.paths.guardsRoot(), `${id}.lock`);
+    return resolveInside(this.paths.lockGuardsRoot(), `${id}.lock`);
   }
 
   private async withGuard<T>(id: string, action: () => Promise<T>): Promise<T> {
@@ -56,10 +56,28 @@ export class LockManager {
   private async clearEmptyDirectory(id: string) {
     try {
       const entries = await fs.readdir(this.directory(id));
-      if (entries.length === 0) await fs.rmdir(this.directory(id));
+      if (entries.length === 0) {
+        await fs.rmdir(this.directory(id));
+        return true;
+      }
+      return false;
     } catch (error: unknown) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return true;
+      throw error;
     }
+  }
+
+  private async corrupt(id: string): Promise<never> {
+    const directory = this.directory(id);
+    const entries = await fs.readdir(directory).catch(() => []);
+    return fail("LOCK_CORRUPT", 4, `Lock directory is corrupt: ${id}`, {
+      directory,
+      entries,
+      recovery: [
+        "Inspect the lock directory and confirm no hardware operation is active.",
+        "Remove unknown contents only after explicit operator review.",
+      ],
+    });
   }
 
   private async recoverCreatingDirectories(id: string) {
@@ -90,6 +108,7 @@ export class LockManager {
       physicalId: id,
     },
     session?: string,
+    attempts = 0,
   ): Promise<LockRecord> {
     await fs.mkdir(this.paths.runtimeRoot(), { recursive: true });
     await this.recoverCreatingDirectories(id);
@@ -126,10 +145,23 @@ export class LockManager {
         )
       )
         throw error;
-      const holder = await readJson<LockRecord>(this.file(id));
+      let holder: LockRecord | undefined;
+      try {
+        holder = await readJson<LockRecord>(this.file(id));
+      } catch {
+        return this.corrupt(id);
+      }
       if (!holder) {
-        await this.clearEmptyDirectory(id);
-        return this.acquire(id, command, runId, identity, session);
+        if (attempts >= 1 || !(await this.clearEmptyDirectory(id)))
+          return this.corrupt(id);
+        return this.acquire(
+          id,
+          command,
+          runId,
+          identity,
+          session,
+          attempts + 1,
+        );
       }
       if (holder.state === "quarantined")
         fail("DEVICE_QUARANTINED", 4, `Resource ${id} is quarantined.`, {

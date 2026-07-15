@@ -89,6 +89,26 @@ test("BENCHPILOT_HOME keeps persistent and runtime paths isolated for tests", ()
   assert.equal(paths.globalConfig(), path.join(root, "config.toml"));
   assert.equal(paths.stateRoot(), path.join(root, "state"));
   assert.equal(paths.runtimeRoot(), path.join(root, "runtime", "locks"));
+  assert.equal(
+    paths.runsRoot("project"),
+    path.join(root, "state", "projects", "project", "runs"),
+  );
+});
+
+test("approval guards use persistent state while lock guards use runtime state", () => {
+  const home = path.join(os.tmpdir(), "benchpilot-guard-home");
+  const first = new PathService(
+    { TEMP: path.join(os.tmpdir(), "benchpilot-first-temp") },
+    "win32",
+    home,
+  );
+  const second = new PathService(
+    { TEMP: path.join(os.tmpdir(), "benchpilot-second-temp") },
+    "win32",
+    home,
+  );
+  assert.equal(first.approvalGuardsRoot(), second.approvalGuardsRoot());
+  assert.notEqual(first.lockGuardsRoot(), second.lockGuardsRoot());
 });
 
 test("node doctor version support starts at Node.js 22.13", () => {
@@ -117,7 +137,12 @@ test("process runner aborts without invoking a shell", async () => {
     forceKillMs: 100,
   });
   setTimeout(() => controller.abort(new Error("test abort")), 25);
-  await assert.rejects(pending, /test abort/);
+  await assert.rejects(
+    pending,
+    process.platform === "win32"
+      ? /test abort|PROCESS_CLEANUP_TIMEOUT/
+      : /test abort/,
+  );
 });
 
 test("process runner rejects before spawn when its signal is already aborted", async () => {
@@ -168,13 +193,52 @@ test("process runner terminates a spawned child tree before rejecting", async ()
     await new Promise((resolve) => setTimeout(resolve, 5));
   assert.ok(descendantPid);
   controller.abort(new Error("test tree abort"));
-  await assert.rejects(pending, /test tree abort/);
-  await new Promise((resolve) => setTimeout(resolve, 25));
-  assert.throws(
-    () => process.kill(descendantPid, 0),
-    (error) => error.code === "ESRCH",
+  await assert.rejects(
+    pending,
+    process.platform === "win32"
+      ? /test tree abort|PROCESS_CLEANUP_TIMEOUT/
+      : /test tree abort/,
   );
+  if (process.platform !== "win32") {
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    assert.throws(
+      () => process.kill(descendantPid, 0),
+      (error) => error.code === "ESRCH",
+    );
+  }
 });
+
+test(
+  "process runner confirms a SIGTERM-resistant descendant exits",
+  { skip: process.platform === "win32" },
+  async () => {
+    const controller = new AbortController();
+    let descendantPid;
+    const pending = runProcess({
+      command: process.execPath,
+      args: [
+        "-e",
+        `const { spawn } = require("node:child_process"); const child = spawn(process.execPath, ["-e", "process.on('SIGTERM', () => {}); setInterval(() => {}, 10000)"], { stdio: "ignore" }); console.log(child.pid); process.on("SIGTERM", () => process.exit(0)); setInterval(() => {}, 10000);`,
+      ],
+      signal: controller.signal,
+      killTree: true,
+      gracefulKillMs: 25,
+      forceKillMs: 500,
+      onStdout(chunk) {
+        descendantPid ||= Number(String(chunk).trim());
+      },
+    });
+    for (let attempt = 0; attempt < 100 && !descendantPid; attempt += 1)
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    assert.ok(descendantPid);
+    controller.abort(new Error("tree cleanup"));
+    await assert.rejects(pending, /tree cleanup/);
+    assert.throws(
+      () => process.kill(descendantPid, 0),
+      (error) => error.code === "ESRCH",
+    );
+  },
+);
 
 test("abortPromise rejects when the signal was already aborted", async () => {
   const controller = new AbortController();
@@ -218,8 +282,8 @@ test("stale file guards recover without allowing an old owner to delete a replac
   const root = await mkdtemp(path.join(os.tmpdir(), "benchpilot-file-guard-"));
   try {
     const paths = new PathService({ BENCHPILOT_HOME: root });
-    const file = path.join(paths.guardsRoot(), "resource.lock");
-    await mkdir(paths.guardsRoot(), { recursive: true });
+    const file = path.join(paths.lockGuardsRoot(), "resource.lock");
+    await mkdir(paths.lockGuardsRoot(), { recursive: true });
     await atomicJson(file, {
       schema: "benchpilot.guard",
       version: 1,
@@ -239,6 +303,53 @@ test("stale file guards recover without allowing an old owner to delete a replac
     await atomicJson(file, replacement);
     await guard.release();
     assert.equal((await readJson(file)).token, "replacement");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("stale recovery guards are reclaimed while active recovery guards time out", async () => {
+  const root = await mkdtemp(
+    path.join(os.tmpdir(), "benchpilot-recovery-guard-"),
+  );
+  try {
+    const file = path.join(root, "guard.lock");
+    const stale = {
+      schema: "benchpilot.guard",
+      version: 1,
+      token: "stale",
+      pid: 1,
+      hostname: "another-host",
+      createdAt: new Date(0).toISOString(),
+      expiresAt: new Date(0).toISOString(),
+      resourceType: "lock-update",
+      resourceId: "resource",
+    };
+    await atomicJson(file, stale);
+    await atomicJson(`${file}.recovery`, { ...stale, token: "stale-recovery" });
+    const recovered = await acquireFileGuard(file, {
+      resourceType: "lock-update",
+      resourceId: "resource",
+      timeoutMs: 50,
+    });
+    await recovered.release();
+    await atomicJson(file, stale);
+    await atomicJson(`${file}.recovery`, {
+      ...stale,
+      token: "active-recovery",
+      hostname: os.hostname(),
+      pid: process.pid,
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    });
+    await assert.rejects(
+      acquireFileGuard(file, {
+        resourceType: "lock-update",
+        resourceId: "resource",
+        timeoutMs: 25,
+      }),
+      (error) =>
+        error instanceof BenchPilotError && error.kind === "FILE_GUARD_BUSY",
+    );
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -762,6 +873,36 @@ test("lock lease stops before release and rejects unsafe IDs", async () => {
   }
 });
 
+test("lock acquire recovers empty directories but rejects corrupt contents", async () => {
+  const root = await mkdtemp(
+    path.join(os.tmpdir(), "benchpilot-lock-corrupt-"),
+  );
+  try {
+    const paths = new PathService({ BENCHPILOT_HOME: root });
+    const locks = new LockManager(paths);
+    await mkdir(locks.directory("empty-lock"), { recursive: true });
+    const recovered = await locks.acquire("empty-lock", "test");
+    assert.equal(recovered.lockId, "empty-lock");
+    await locks.release(recovered);
+    await mkdir(locks.directory("unknown-lock"), { recursive: true });
+    await writeFile(path.join(locks.directory("unknown-lock"), "unknown"), "x");
+    await assert.rejects(
+      locks.acquire("unknown-lock", "test"),
+      (error) =>
+        error instanceof BenchPilotError && error.kind === "LOCK_CORRUPT",
+    );
+    await mkdir(locks.directory("invalid-owner"), { recursive: true });
+    await writeFile(locks.file("invalid-owner"), "not-json");
+    await assert.rejects(
+      locks.acquire("invalid-owner", "test"),
+      (error) =>
+        error instanceof BenchPilotError && error.kind === "LOCK_CORRUPT",
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test(
   "lock heartbeat maintains ownership past the original thirty-second lease",
   { timeout: 45_000 },
@@ -1191,6 +1332,101 @@ test("cleanup timeout quarantines a lock when a capability ignores AbortSignal",
     const [lock] = await new LockManager(paths).list();
     assert.equal(lock.state, "quarantined");
     assert.equal(lock.quarantineReason.cleanupErrors[0].timedOut, true);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+async function runCleanupFailureScenario(root, options) {
+  const paths = new PathService({ BENCHPILOT_HOME: root });
+  const registry = new AdapterRegistry();
+  registry.register({
+    id: "cleanup-semantics",
+    apiVersion: 1,
+    version: "1",
+    summary: "cleanup semantics",
+    configSchema: objectSchema(),
+    discover: async () => [],
+    doctor: async () => [],
+    createDevice: async (instance) => ({
+      identity: {
+        instance,
+        physicalId: "cleanup-semantics",
+        adapter: "cleanup-semantics",
+      },
+      capabilities: () => [
+        {
+          id: "run",
+          summary: "run",
+          defaultTimeoutMs: 1_000,
+          lockMode: "exclusive",
+          createsRun: false,
+          safety: { mode: "normal" },
+          execute: async (context) => {
+            context.registerCleanup(
+              "cleanup",
+              () => {
+                throw new Error("cleanup failed");
+              },
+              options,
+            );
+            return { ok: true };
+          },
+        },
+      ],
+    }),
+  });
+  const runner = new OperationRunner({
+    paths,
+    registry,
+    project: undefined,
+    flags: { quiet: true },
+    config: {
+      value: { devices: { device: { adapter: "cleanup-semantics" } } },
+      origins: new Map(),
+      layers: [],
+    },
+  });
+  const outcome = await runner
+    .execute("device", "run", {})
+    .catch((error) => error);
+  return { outcome, locks: await new LockManager(paths).list() };
+}
+
+test("physical cleanup failures quarantine and fail even when declared non-critical", async () => {
+  const root = await mkdtemp(
+    path.join(os.tmpdir(), "benchpilot-physical-cleanup-"),
+  );
+  try {
+    const { outcome, locks } = await runCleanupFailureScenario(root, {
+      critical: false,
+      holdsPhysicalResource: true,
+    });
+    assert.equal(outcome.kind, "CLEANUP_FAILED");
+    assert.equal(locks[0].state, "quarantined");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("non-physical cleanup failures preserve warning and release the lock", async () => {
+  const root = await mkdtemp(
+    path.join(os.tmpdir(), "benchpilot-nonphysical-cleanup-"),
+  );
+  try {
+    const warning = await runCleanupFailureScenario(root, {
+      critical: false,
+      holdsPhysicalResource: false,
+    });
+    assert.equal(warning.outcome.ok, true);
+    assert.equal(warning.outcome.cleanupErrors[0].critical, false);
+    assert.equal(warning.locks.length, 0);
+    const critical = await runCleanupFailureScenario(root, {
+      critical: true,
+      holdsPhysicalResource: false,
+    });
+    assert.equal(critical.outcome.kind, "CLEANUP_FAILED");
+    assert.equal(critical.locks.length, 0);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

@@ -41,20 +41,56 @@ export type ProcessState =
 
 const delay = (ms: number) =>
   new Promise<void>((resolve) => {
-    const timer = setTimeout(resolve, ms);
-    timer.unref();
+    setTimeout(resolve, ms);
   });
 
 const runTaskkill = (args: string[]) =>
-  new Promise<void>((resolve) => {
-    const taskkill = spawn("taskkill", args, {
-      shell: false,
-      windowsHide: true,
-      stdio: "ignore",
-    });
-    taskkill.once("error", () => resolve());
-    taskkill.once("close", () => resolve());
-  });
+  new Promise<{ code: number | null; error?: Error; stderr: string }>(
+    (resolve) => {
+      const taskkill = spawn("taskkill", args, {
+        shell: false,
+        windowsHide: true,
+        stdio: ["ignore", "ignore", "pipe"],
+      });
+      let stderr = "";
+      taskkill.stderr?.on("data", (chunk: Buffer) => {
+        stderr += String(chunk);
+      });
+      taskkill.once("error", (error) => resolve({ code: null, error, stderr }));
+      taskkill.once("close", (code) => resolve({ code, stderr }));
+    },
+  );
+
+function processGroupExists(pgid: number) {
+  try {
+    process.kill(-pgid, 0);
+    return true;
+  } catch (error: unknown) {
+    return (error as NodeJS.ErrnoException).code !== "ESRCH";
+  }
+}
+
+function processExists(pid: number) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error: unknown) {
+    return (error as NodeJS.ErrnoException).code !== "ESRCH";
+  }
+}
+
+async function waitFor(
+  check: () => boolean,
+  timeoutMs: number,
+  intervalMs = 20,
+) {
+  const deadline = Date.now() + timeoutMs;
+  while (check()) {
+    if (Date.now() >= deadline) return false;
+    await delay(Math.min(intervalMs, Math.max(1, deadline - Date.now())));
+  }
+  return true;
+}
 
 async function terminateTree(
   child: ChildProcess,
@@ -63,12 +99,29 @@ async function terminateTree(
 ) {
   if (!child.pid) return;
   if (process.platform === "win32") {
-    await runTaskkill([
+    const result = await runTaskkill([
       "/PID",
       String(child.pid),
       "/T",
       ...(force ? ["/F"] : []),
     ]);
+    const missing =
+      (result.code === 128 && /not found|not exist/i.test(result.stderr)) ||
+      !processExists(child.pid);
+    if (result.code !== 0 && !missing)
+      throw new BenchPilotError(
+        "PROCESS_CLEANUP_TIMEOUT",
+        5,
+        `PROCESS_CLEANUP_TIMEOUT: taskkill could not confirm process-tree termination: ${child.pid}`,
+        false,
+        undefined,
+        [],
+        {
+          code: result.code,
+          stderr: result.stderr,
+          cause: result.error?.message,
+        },
+      );
     return;
   }
   try {
@@ -170,16 +223,24 @@ export function startProcess(options: ProcessRunOptions): StartedProcess {
       state = "stopping";
       const killTree = options.killTree ?? true;
       await terminateTree(child, false, killTree);
-      const gracefullyClosed = await Promise.race([
-        closed.then(() => true),
-        delay(options.gracefulKillMs ?? 2_000).then(() => false),
-      ]);
-      if (!gracefullyClosed) {
+      const gracefulKillMs = options.gracefulKillMs ?? 2_000;
+      const forceKillMs = options.forceKillMs ?? 2_000;
+      const group =
+        killTree && process.platform !== "win32" ? child.pid : undefined;
+      const gracefulEnded = group
+        ? await waitFor(() => processGroupExists(group), gracefulKillMs)
+        : await Promise.race([
+            closed.then(() => true),
+            delay(gracefulKillMs).then(() => false),
+          ]);
+      if (!gracefulEnded) {
         await terminateTree(child, true, killTree);
-        const ended = await Promise.race([
-          closed.then(() => true),
-          delay(options.forceKillMs ?? 2_000).then(() => false),
-        ]);
+        const ended = group
+          ? await waitFor(() => processGroupExists(group), forceKillMs)
+          : await Promise.race([
+              closed.then(() => true),
+              delay(forceKillMs).then(() => false),
+            ]);
         if (!ended) {
           state = "cleanup-timeout";
           throw new BenchPilotError(

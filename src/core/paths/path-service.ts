@@ -32,16 +32,17 @@ export class PathService {
       "locks",
     );
   }
-  guardsRoot() {
+  lockGuardsRoot() {
     return path.join(path.dirname(this.runtimeRoot()), "guards");
   }
   runsRoot(projectKey: string) {
-    return this.portable
-      ? path.join(this.portable, "runs")
-      : path.join(this.stateRoot(), "projects", projectKey, "runs");
+    return path.join(this.stateRoot(), "projects", projectKey, "runs");
   }
   approvalsRoot() {
     return path.join(this.stateRoot(), "approvals");
+  }
+  approvalGuardsRoot() {
+    return path.join(this.stateRoot(), "approval-guards");
   }
   async project(start = process.cwd(), explicit?: string) {
     if (explicit)

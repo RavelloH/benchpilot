@@ -45,7 +45,7 @@ export class ApprovalManager {
 
   private guardFile(id: string) {
     this.assertId(id);
-    return resolveInside(this.paths.guardsRoot(), `${id}.lock`);
+    return resolveInside(this.paths.approvalGuardsRoot(), `${id}.lock`);
   }
 
   private async withGuard<T>(id: string, action: () => Promise<T>): Promise<T> {

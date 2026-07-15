@@ -487,14 +487,16 @@ export class OperationRunner {
       }
     }
     emit("cleanup.completed", { errors: cleanupErrors.length });
-    const quarantineRequired = cleanupErrors.some(
-      (error) =>
-        error.critical || (error.timedOut && error.holdsPhysicalResource),
+    const physicalCleanupUnsafe = cleanupErrors.some(
+      (error) => error.holdsPhysicalResource,
+    );
+    const operationCleanupFailed = cleanupErrors.some(
+      (error) => error.critical || error.holdsPhysicalResource,
     );
     if (lock) {
       try {
         const locks = new LockManager(this.s.paths);
-        if (quarantineRequired) {
+        if (physicalCleanupUnsafe) {
           const reason = {
             kind: "CLEANUP_FAILED",
             message: "Critical operation cleanup failed or timed out.",
@@ -533,10 +535,7 @@ export class OperationRunner {
         message: (error as Error).message,
       });
     }
-    const criticalCleanupFailed = cleanupErrors.some(
-      (error) => error.critical === true,
-    );
-    if (!primaryError && criticalCleanupFailed)
+    if (!primaryError && operationCleanupFailed)
       primaryError = new BenchPilotError(
         "CLEANUP_FAILED",
         5,
