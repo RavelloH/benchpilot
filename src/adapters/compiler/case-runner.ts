@@ -46,6 +46,28 @@ const active = (when: unknown, context: JsonObject) => {
       return false;
   }
 };
+const sourceText = (source: unknown, stdout: string, stderr: string) =>
+  source === "stderr"
+    ? stderr
+    : source === "both"
+      ? `${stdout}\n${stderr}`
+      : stdout;
+const cast = (value: string, kind: unknown): unknown => {
+  if (kind === "integer") return Number.parseInt(value, 10);
+  if (kind === "number") return Number(value);
+  if (kind === "boolean") return value === "true";
+  if (kind === "json") return JSON.parse(value);
+  return value;
+};
+const pointer = (value: unknown, path: string) =>
+  path
+    .slice(1)
+    .split("/")
+    .reduce<unknown>(
+      (current, part) =>
+        object(current)[part.replace(/~1/g, "/").replace(/~0/g, "~")],
+      value,
+    );
 
 export const runCases = async (
   adapter: LoadedAdapter,
@@ -177,12 +199,26 @@ export const runCases = async (
             ),
           );
         else {
-          const output = await readFile(
-            resolve(adapter.root, "tests", fixture),
-            "utf8",
-          );
-          const source = test.stderr_fixture ? output : "";
-          const both = `${source}\n${test.stdout_fixture ? output : ""}`;
+          const stdout =
+            typeof test.stdout_fixture === "string"
+              ? await readFile(
+                  resolve(adapter.root, "tests", test.stdout_fixture),
+                  "utf8",
+                )
+              : "";
+          const stderr =
+            typeof test.stderr_fixture === "string"
+              ? await readFile(
+                  resolve(adapter.root, "tests", test.stderr_fixture),
+                  "utf8",
+                )
+              : "";
+          const normalized = (value: string) =>
+            parser.strip_ansi
+              ? value.replace(/\u001B\[[0-?]*[ -\/]*[@-~]/g, "")
+              : value;
+          const output = normalized(stdout),
+            errorOutput = normalized(stderr);
           const matches = (Array.isArray(parser.errors) ? parser.errors : [])
             .map(object)
             .sort(
@@ -190,12 +226,7 @@ export const runCases = async (
                 Number(right.priority ?? 0) - Number(left.priority ?? 0),
             )
             .find((rule) => {
-              const text =
-                rule.source === "stderr"
-                  ? source
-                  : rule.source === "stdout"
-                    ? output
-                    : both;
+              const text = sourceText(rule.source, output, errorOutput);
               try {
                 return new RegExp(String(rule.pattern)).test(text);
               } catch {
@@ -214,6 +245,106 @@ export const runCases = async (
                 "ADAPTER_CASE_INVALID",
                 "tests/cases.toml",
                 `Parser result differs for ${target}`,
+                undefined,
+                adapter.id,
+              ),
+            );
+          const result: JsonObject = {};
+          for (const rawRule of Array.isArray(parser.extract)
+            ? parser.extract
+            : []) {
+            const rule = object(rawRule);
+            let extracted: unknown;
+            try {
+              if (rule.type === "json-pointer")
+                extracted = pointer(
+                  JSON.parse(sourceText(rule.source, output, errorOutput)),
+                  String(rule.pointer),
+                );
+              else {
+                const match = new RegExp(String(rule.pattern)).exec(
+                  sourceText(rule.source, output, errorOutput),
+                );
+                extracted =
+                  match?.groups?.[String(rule.group)] ??
+                  match?.[Number(rule.group)];
+                if (extracted !== undefined)
+                  extracted = cast(String(extracted), rule.cast);
+              }
+            } catch {
+              extracted = undefined;
+            }
+            if (extracted === undefined && rule.required)
+              errors.push(
+                diagnostic(
+                  "ADAPTER_CASE_INVALID",
+                  "tests/cases.toml",
+                  `Required extract missing: ${String(rule.id)}`,
+                  undefined,
+                  adapter.id,
+                ),
+              );
+            if (extracted !== undefined)
+              result[String(rule.target)] = extracted;
+          }
+          const progress = (
+            Array.isArray(parser.progress) ? parser.progress : []
+          ).flatMap((rawRule) => {
+            const rule = object(rawRule);
+            const match = new RegExp(String(rule.pattern), "g").exec(
+              sourceText(rule.source, output, errorOutput),
+            );
+            return match
+              ? [
+                  Object.fromEntries(
+                    Object.entries(object(rule.fields)).map(([name, kind]) => [
+                      name,
+                      cast(match.groups?.[name] ?? "", kind),
+                    ]),
+                  ),
+                ]
+              : [];
+          });
+          if (
+            expect.result !== undefined &&
+            JSON.stringify(result) !== JSON.stringify(expect.result)
+          )
+            errors.push(
+              diagnostic(
+                "ADAPTER_CASE_INVALID",
+                "tests/cases.toml",
+                `Parser result differs for ${target}`,
+                undefined,
+                adapter.id,
+              ),
+            );
+          if (
+            expect.progress !== undefined &&
+            JSON.stringify(progress) !== JSON.stringify(expect.progress)
+          )
+            errors.push(
+              diagnostic(
+                "ADAPTER_CASE_INVALID",
+                "tests/cases.toml",
+                `Parser progress differs for ${target}`,
+                undefined,
+                adapter.id,
+              ),
+            );
+          if (
+            expect.success !== undefined &&
+            Boolean(
+              !matches &&
+              (parser.success_exit_codes as unknown[] | undefined)?.includes(
+                test.exit_code,
+              ),
+            ) !== expect.success
+          )
+            errors.push(
+              diagnostic(
+                "ADAPTER_CASE_INVALID",
+                "tests/cases.toml",
+                `Parser success differs for ${target}`,
                 undefined,
                 adapter.id,
               ),
