@@ -15,15 +15,18 @@ export const executeCopy = async (
   const from = path.resolve(plan.from);
   const to = path.resolve(plan.to);
   const source = await realpath(from).catch(() => undefined);
-  if (
-    !source ||
-    !allowedRoots.some((root) => inside(path.resolve(root), source))
-  )
+  const roots = await Promise.all(
+    allowedRoots.map(async (root) => ({
+      resolved: path.resolve(root),
+      real: await realpath(root).catch(() => undefined),
+    })),
+  );
+  if (!source || !roots.some((root) => root.real && inside(root.real, source)))
     throw new AdapterRuntimeError(
       "ADAPTER_ARTIFACT_UNSAFE",
       "Copy source is outside the allowed roots.",
     );
-  if (!allowedRoots.some((root) => inside(path.resolve(root), to)))
+  if (!roots.some((root) => inside(root.resolved, to)))
     throw new AdapterRuntimeError(
       "ADAPTER_ARTIFACT_UNSAFE",
       "Copy destination is outside the allowed roots.",
