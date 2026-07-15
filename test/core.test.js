@@ -1091,7 +1091,7 @@ test("critical cleanup failure quarantines its lock and finalizes a failed run",
   }
 });
 
-test("timeout returns even when a capability ignores AbortSignal and runs cleanup", async () => {
+test("cleanup timeout quarantines a lock when a capability ignores AbortSignal", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "benchpilot-timeout-"));
   let cleaned = false;
   try {
@@ -1120,9 +1120,14 @@ test("timeout returns even when a capability ignores AbortSignal and runs cleanu
             createsRun: true,
             safety: { mode: "normal" },
             execute: async (context) => {
-              context.registerCleanup("cleanup", () => {
-                cleaned = true;
-              });
+              context.registerCleanup(
+                "cleanup",
+                () => {
+                  cleaned = true;
+                  return new Promise(() => {});
+                },
+                { timeoutMs: 10 },
+              );
               return new Promise(() => {});
             },
           },
@@ -1145,7 +1150,9 @@ test("timeout returns even when a capability ignores AbortSignal and runs cleanu
       .catch((cause) => cause);
     assert.equal(error.kind, "OPERATION_TIMEOUT");
     assert.equal(cleaned, true);
-    assert.equal((await new LockManager(paths).list()).length, 0);
+    const [lock] = await new LockManager(paths).list();
+    assert.equal(lock.state, "quarantined");
+    assert.equal(lock.quarantineReason.cleanupErrors[0].timedOut, true);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

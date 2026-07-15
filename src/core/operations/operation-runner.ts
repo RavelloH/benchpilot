@@ -211,6 +211,7 @@ export class OperationRunner {
       name: string;
       critical: boolean;
       holdsPhysicalResource: boolean;
+      timeoutMs?: number;
       handler: () => Promise<void> | void;
     }> = [];
     const cleanupErrors: CleanupError[] = [];
@@ -308,6 +309,7 @@ export class OperationRunner {
               handler,
               critical: options?.critical ?? true,
               holdsPhysicalResource: options?.holdsPhysicalResource ?? true,
+              timeoutMs: options?.timeoutMs,
             });
           },
           get dangerousEffect() {
@@ -419,7 +421,11 @@ export class OperationRunner {
     emit("cleanup.started");
     for (const cleanup of cleanups.reverse()) {
       try {
-        await runCleanupWithGrace(cleanup.handler, cleanup.name);
+        await runCleanupWithGrace(
+          cleanup.handler,
+          cleanup.name,
+          cleanup.timeoutMs,
+        );
         emit("cleanup.completed", { name: cleanup.name });
       } catch (error: unknown) {
         cleanupErrors.push({
