@@ -11,6 +11,7 @@ import type {
 } from "../../core.js";
 import {
   atomicJson,
+  abortPromise,
   BenchPilotError,
   duration,
   durationSchema,
@@ -19,26 +20,17 @@ import {
   sha,
 } from "../../core.js";
 
-const wait = (ms: number, signal: AbortSignal) =>
-  new Promise<void>((resolve, reject) => {
-    if (signal.aborted) {
-      reject(
-        new BenchPilotError("OPERATION_ABORTED", 6, "Operation cancelled."),
-      );
-      return;
-    }
-    const onAbort = () => {
-      clearTimeout(t);
-      reject(
-        new BenchPilotError("OPERATION_ABORTED", 6, "Operation cancelled."),
-      );
-    };
-    const t = setTimeout(() => {
-      signal.removeEventListener("abort", onAbort);
-      resolve();
-    }, ms);
-    signal.addEventListener("abort", onAbort, { once: true });
+const wait = (ms: number, signal: AbortSignal) => {
+  let timer: NodeJS.Timeout | undefined;
+  return Promise.race([
+    new Promise<void>((resolve) => {
+      timer = setTimeout(resolve, ms);
+    }),
+    abortPromise(signal),
+  ]).finally(() => {
+    if (timer) clearTimeout(timer);
   });
+};
 function settings(ctx: OperationContext) {
   return ((ctx.config.adapters as Json | undefined)?.demo || {}) as Json;
 }
@@ -267,13 +259,13 @@ class DemoDevice implements DeviceRuntime {
       basic(
         "burn-fuse",
         "Simulate an irreversible fuse burn",
-        async (ctx) => {
-          ctx.markDangerousEffectStarted();
-          return this.delayed(ctx, "burn-fuse", {
-            burned: true,
-            simulated: true,
-          });
-        },
+        async (ctx) =>
+          this.delayed(
+            ctx,
+            "burn-fuse",
+            { burned: true, simulated: true },
+            () => ctx.markDangerousEffectStarted(),
+          ),
         {
           safety: {
             mode: "human-approval",
@@ -285,7 +277,12 @@ class DemoDevice implements DeviceRuntime {
       ),
     ];
   }
-  private async delayed(ctx: OperationContext, stage: string, value: Json) {
+  private async delayed(
+    ctx: OperationContext,
+    stage: string,
+    value: Json,
+    beforeEffect?: () => void,
+  ) {
     if (stage !== "build" && !this.connected(ctx))
       throw new BenchPilotError(
         "DEVICE_NOT_CONNECTED",
@@ -308,6 +305,7 @@ class DemoDevice implements DeviceRuntime {
         50,
     );
     ctx.logger.event("stage.started", { stage, simulated: true });
+    ctx.emitEvent("stage.started", { stage, simulated: true });
     await wait(ms, ctx.signal);
     if (
       settings(ctx).fail_stage === stage ||
@@ -321,7 +319,9 @@ class DemoDevice implements DeviceRuntime {
         true,
         stage,
       );
+    beforeEffect?.();
     ctx.logger.event("stage.completed", { stage, simulated: true });
+    ctx.emitEvent("stage.completed", { stage, simulated: true });
     return value;
   }
   private async buildArtifact(ctx: OperationContext): Promise<Json> {

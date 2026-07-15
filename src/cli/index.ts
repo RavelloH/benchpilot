@@ -9,6 +9,7 @@ import {
   BenchPilotError,
   deleteKey,
   duration,
+  EventWriter,
   fail,
   getKey,
   Json,
@@ -331,6 +332,7 @@ export async function main(adapters: Adapter[] = [demoAdapter]) {
       config,
       project,
       flags,
+      eventWriter: flags.jsonl ? new EventWriter(stdout) : undefined,
     });
     if (parts[0] === "config") {
       if (parts.length === 1) {
@@ -819,9 +821,13 @@ export async function main(adapters: Adapter[] = [demoAdapter]) {
       details: err.details,
     };
     if (flags.json) stdout.write(`${JSON.stringify(result)}\n`);
-    else if (flags.jsonl)
+    else if (
+      flags.jsonl &&
+      !(err as BenchPilotError & { jsonlTerminalEmitted?: boolean })
+        .jsonlTerminalEmitted
+    )
       stdout.write(
-        `${JSON.stringify({ schema: "benchpilot.event", version: 1, event: { type: "operation.failed", timestamp: new Date().toISOString() }, error: result })}\n`,
+        `${JSON.stringify({ schema: "benchpilot.event", version: 1, event: { type: "operation.failed", timestamp: new Date().toISOString() }, context: {}, data: { error: result } })}\n`,
       );
     else process.stderr.write(`${err.kind}: ${err.message}\n`);
     process.exitCode = err.exitCode;

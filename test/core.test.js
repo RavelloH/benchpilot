@@ -14,6 +14,8 @@ import {
   enumSchema,
   BenchPilotError,
   PathService,
+  projectStorageKey,
+  RunManager,
   lockIdentity,
   LockManager,
   OperationRunner,
@@ -456,6 +458,7 @@ test("separate processes cannot acquire the same physical lock", async () => {
 
 test("critical cleanup failure finalizes a failed run after releasing its lock", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "benchpilot-cleanup-"));
+  const events = [];
   try {
     const paths = new PathService({ BENCHPILOT_HOME: root });
     const registry = new AdapterRegistry();
@@ -490,6 +493,17 @@ test("critical cleanup failure finalizes a failed run after releasing its lock",
       registry,
       project: undefined,
       flags: { quiet: true },
+      eventWriter: {
+        emit(type, data) {
+          events.push({ type, data });
+        },
+        completed(result) {
+          events.push({ type: "operation.completed", result });
+        },
+        failed(error) {
+          events.push({ type: "operation.failed", error });
+        },
+      },
       config: {
         value: { devices: { device: { adapter: "test" } } },
         origins: new Map(),
@@ -502,6 +516,24 @@ test("critical cleanup failure finalizes a failed run after releasing its lock",
     assert.equal(error.kind, "CLEANUP_FAILED");
     assert.equal((await new LockManager(paths).list()).length, 0);
     assert.equal(error.result.ok, false);
+    assert.deepEqual(error.result.cleanupErrors, [
+      {
+        name: "failing-cleanup",
+        critical: true,
+        message: "cleanup failed",
+      },
+    ]);
+    assert.deepEqual(
+      events.map((event) => event.type).at(-1),
+      "operation.failed",
+    );
+    assert.equal(
+      events.filter((event) => /operation\.(completed|failed)/.test(event.type))
+        .length,
+      1,
+    );
+    const runs = await new RunManager(paths, projectStorageKey({})).list();
+    assert.equal(runs[0].manifest.status, "failed");
   } finally {
     await rm(root, { recursive: true, force: true });
   }

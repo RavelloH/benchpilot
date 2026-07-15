@@ -11,11 +11,16 @@ import { LockManager } from "./core/locks/lock-manager.js";
 import type { LockLease, LockRecord } from "./core/locks/types.js";
 import { ApprovalManager } from "./core/approvals/approval-manager.js";
 import type { ApprovalLease, ApprovalRecord } from "./core/approvals/types.js";
+import type { BenchPilotEventWriter } from "./core/events/types.js";
 import {
   abortPromise,
   abortReasonToError,
   type OperationAbortReason,
 } from "./core/operations/abort.js";
+import type {
+  CleanupError,
+  OperationOutcome,
+} from "./core/operations/operation-outcome.js";
 import { PathService } from "./core/paths/path-service.js";
 import { atomicJson, readJson } from "./core/utilities/atomic-json.js";
 import { sha, stable } from "./core/utilities/stable-json.js";
@@ -73,6 +78,15 @@ export type {
   ApprovalLiveness,
   ApprovalRecord,
 } from "./core/approvals/types.js";
+export { EventWriter } from "./core/events/event-writer.js";
+export type {
+  BenchPilotEvent,
+  BenchPilotEventWriter,
+} from "./core/events/types.js";
+export type {
+  CleanupError,
+  OperationOutcome,
+} from "./core/operations/operation-outcome.js";
 export {
   abortPromise,
   abortReasonToError,
@@ -576,7 +590,13 @@ export interface OperationContext {
     handler: () => Promise<void> | void,
     options?: { critical?: boolean },
   ): void;
-  markDangerousEffectStarted(): void;
+  readonly dangerousEffect: {
+    readonly started: boolean;
+    readonly startedAt?: string;
+    readonly details?: Json;
+  };
+  markDangerousEffectStarted(details?: Json): void;
+  emitEvent(type: string, data?: Json): void;
   registerArtifact(record: ArtifactRecord): void;
 }
 export interface OperationServices {
@@ -587,6 +607,7 @@ export interface OperationServices {
   flags: Json;
   lockHeartbeatIntervalMs?: number;
   lockLeaseMs?: number;
+  eventWriter?: BenchPilotEventWriter;
 }
 export class OperationRunner {
   constructor(private s: OperationServices) {}
@@ -725,6 +746,14 @@ export class OperationRunner {
       },
       fileErrorPolicy: "throw",
     });
+    const emit = (
+      type: string,
+      data: Json = {},
+      options?: { level?: "error" | "warn" | "info" | "debug" },
+    ) => {
+      logger.event(type, data, options);
+      this.s.eventWriter?.emit(type, data);
+    };
     let lock: LockRecord | undefined;
     let lease: LockLease | undefined;
     let claimedApproval: ApprovalRecord | undefined;
@@ -734,9 +763,12 @@ export class OperationRunner {
       critical: boolean;
       handler: () => Promise<void> | void;
     }> = [];
-    const cleanupErrors: Json[] = [];
+    const cleanupErrors: CleanupError[] = [];
     const artifacts: Json[] = [];
     let dangerousEffectStarted = false;
+    let dangerousEffectStartedAt: string | undefined;
+    let dangerousEffectDetails: Json | undefined;
+    let approvalFinalStatus: "released" | "consumed" | undefined;
     const controller = new AbortController();
     const timer = setTimeout(() => {
       controller.abort({
@@ -760,9 +792,9 @@ export class OperationRunner {
     let primaryError: BenchPilotError | undefined;
     let approvalLoss = new Promise<never>(() => {});
     try {
-      logger.event("operation.started", { command });
+      emit("operation.started", { command, runId: run?.id });
       if (capability.lockMode === "exclusive") {
-        logger.event("lock.acquiring", { lockId });
+        emit("lock.acquiring", { lockId });
         lock = await new LockManager(this.s.paths).acquire(
           lockId,
           command,
@@ -779,7 +811,7 @@ export class OperationRunner {
           this.s.lockHeartbeatIntervalMs,
           this.s.lockLeaseMs,
         );
-        logger.event("lock.acquired", { lockId });
+        emit("lock.acquired", { lockId });
       }
       if (safety.mode === "human-approval") {
         claimedApproval = await new ApprovalManager(this.s.paths).claim(
@@ -803,7 +835,7 @@ export class OperationRunner {
           throw error;
         });
       }
-      logger.event("stage.started", { stage: capability.id });
+      emit("stage.started", { stage: capability.id });
       const execution = capability.execute(
         {
           signal: controller.signal,
@@ -819,8 +851,20 @@ export class OperationRunner {
               critical: options?.critical ?? true,
             });
           },
-          markDangerousEffectStarted() {
+          get dangerousEffect() {
+            return {
+              started: dangerousEffectStarted,
+              startedAt: dangerousEffectStartedAt,
+              details: dangerousEffectDetails,
+            };
+          },
+          markDangerousEffectStarted(details) {
             dangerousEffectStarted = true;
+            dangerousEffectStartedAt ||= new Date().toISOString();
+            dangerousEffectDetails ||= details;
+          },
+          emitEvent(type, eventData = {}) {
+            emit(type, eventData);
           },
           registerArtifact(record) {
             if (!run) fail("INVALID_ARTIFACT", 5, "Artifacts require a Run.");
@@ -865,7 +909,7 @@ export class OperationRunner {
         if (error instanceof BenchPilotError) throw error;
         fail("INVALID_CAPABILITY_OUTPUT", 5, (error as Error).message);
       }
-      logger.event("stage.completed", { stage: capability.id });
+      emit("stage.completed", { stage: capability.id });
     } catch (e: unknown) {
       primaryError =
         e instanceof BenchPilotError
@@ -945,10 +989,13 @@ export class OperationRunner {
     }
     if (claimedApproval) {
       try {
-        if (dangerousEffectStarted && (data || primaryError))
+        if (dangerousEffectStarted && (data || primaryError)) {
           await new ApprovalManager(this.s.paths).consumeClaim(claimedApproval);
-        else
+          approvalFinalStatus = "consumed";
+        } else {
           await new ApprovalManager(this.s.paths).releaseClaim(claimedApproval);
+          approvalFinalStatus = "released";
+        }
       } catch (error: unknown) {
         cleanupErrors.push({
           name: "approval",
@@ -960,7 +1007,7 @@ export class OperationRunner {
     if (lock) {
       try {
         await new LockManager(this.s.paths).release(lock);
-        logger.event("lock.released", { lockId: lock.lockId });
+        emit("lock.released", { lockId: lock.lockId });
       } catch (error: unknown) {
         cleanupErrors.push({
           name: "lock-release",
@@ -969,17 +1016,6 @@ export class OperationRunner {
         });
       }
     }
-    if (primaryError)
-      logger.event(
-        "operation.failed",
-        {
-          kind: primaryError.kind,
-          message: primaryError.message,
-          cleanupErrors,
-        },
-        { level: "error" },
-      );
-    else logger.event("operation.completed", { runId: run?.id, cleanupErrors });
     try {
       await logger.close();
     } catch (error: unknown) {
@@ -1005,6 +1041,26 @@ export class OperationRunner {
         { cleanupErrors },
       );
     const ok = !primaryError;
+    const abortReason = controller.signal.aborted
+      ? (controller.signal.reason as Json)
+      : undefined;
+    const signal =
+      abortReason?.kind === "signal" ? String(abortReason.signal) : undefined;
+    const lockLoss =
+      abortReason?.kind === "lock-ownership-lost"
+        ? { lockId: abortReason.lockId }
+        : undefined;
+    const outcomeFields = {
+      cleanupErrors,
+      abortReason,
+      signal,
+      timeoutMs: timeout,
+      lockLoss,
+      approvalFinalStatus,
+      dangerousEffectStarted,
+      dangerousEffectStartedAt,
+      dangerousEffectDetails,
+    };
     const result: Json = ok
       ? {
           schema: "benchpilot.result",
@@ -1015,7 +1071,7 @@ export class OperationRunner {
           durationMs: Date.now() - started,
           data,
           artifacts,
-          cleanupErrors,
+          ...outcomeFields,
         }
       : {
           schema: "benchpilot.result",
@@ -1029,20 +1085,31 @@ export class OperationRunner {
           retryable: primaryError!.retryable,
           stage: primaryError!.stage,
           recovery: primaryError!.recovery,
+          ...outcomeFields,
           details: { ...primaryError!.details, cleanupErrors },
         };
-    if (run)
-      await runManager.finalize(
-        run,
-        primaryError?.kind === "OPERATION_TIMEOUT" ||
-          primaryError?.kind === "OPERATION_ABORTED"
-          ? "aborted"
-          : ok
-            ? "succeeded"
-            : "failed",
-        result,
-      );
-    if (primaryError) throw Object.assign(primaryError, { result });
-    return result;
+    const status: OperationOutcome["status"] =
+      primaryError?.kind === "OPERATION_TIMEOUT" ||
+      primaryError?.kind === "OPERATION_ABORTED"
+        ? "aborted"
+        : ok
+          ? "succeeded"
+          : "failed";
+    const outcome: OperationOutcome = {
+      status,
+      result,
+      primaryError,
+      cleanupErrors,
+    };
+    if (run) await runManager.finalize(run, outcome.status, outcome.result);
+    if (outcome.primaryError) {
+      this.s.eventWriter?.failed(outcome.result);
+      throw Object.assign(outcome.primaryError, {
+        result: outcome.result,
+        jsonlTerminalEmitted: Boolean(this.s.eventWriter),
+      });
+    }
+    this.s.eventWriter?.completed(outcome.result);
+    return outcome.result;
   }
 }

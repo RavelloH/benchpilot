@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -45,6 +45,13 @@ test("installed CLI surface initializes and runs the demo", async () => {
       ),
     );
     assert.equal(events.at(-1).event.type, "operation.completed");
+    assert.equal(
+      events.filter((event) =>
+        /operation\.(completed|failed)/.test(event.event.type),
+      ).length,
+      1,
+    );
+    assert.ok(events.some((event) => event.event.type === "stage.started"));
     const commandJsonl = await run(dir, "config", "validate", "--jsonl");
     const commandEvent = JSON.parse(commandJsonl.stdout);
     assert.equal(commandEvent.schema, "benchpilot.event");
@@ -60,6 +67,53 @@ test("installed CLI surface initializes and runs the demo", async () => {
       JSON.parse(safe.stdout).kind,
       "DANGEROUS_CONFIRMATION_REQUIRED",
     );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("jsonl streams operation events before a delayed operation finishes", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "benchpilot-jsonl-stream-"));
+  try {
+    await writeFile(
+      path.join(dir, "benchpilot.toml"),
+      [
+        "version = 1",
+        "[devices.demo]",
+        'adapter = "demo"',
+        "[adapters.demo]",
+        "operation_delay_ms = 150",
+      ].join("\n"),
+    );
+    const child = spawn(
+      process.execPath,
+      [cli, "device", "demo", "deploy", "--jsonl"],
+      {
+        cwd: dir,
+        env: { ...process.env, BENCHPILOT_HOME: path.join(dir, "home") },
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
+    let exited = false;
+    child.once("exit", () => {
+      exited = true;
+    });
+    const firstOutput = await new Promise((resolve, reject) => {
+      const timeout = setTimeout(
+        () => reject(new Error("JSONL did not stream an initial event.")),
+        2_000,
+      );
+      child.stdout.once("data", (chunk) => {
+        clearTimeout(timeout);
+        resolve(String(chunk));
+      });
+      child.once("error", reject);
+    });
+    assert.match(firstOutput, /operation\.started/);
+    assert.equal(exited, false);
+    await new Promise((resolve, reject) => {
+      child.once("exit", (code) => (code === 0 ? resolve() : reject(code)));
+    });
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

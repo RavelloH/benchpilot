@@ -56,8 +56,19 @@ export class RunManager {
     });
     return { id, dir, started, command };
   }
-  async finalize(run: Run, status: string, result: Json) {
+  async finalize(
+    run: Run,
+    status: "succeeded" | "failed" | "aborted",
+    result: Json,
+  ) {
     const durationMs = Date.now() - run.started;
+    const finalizing = path.join(run.dir, "finalizing.json");
+    await atomicJson(finalizing, {
+      schema: "benchpilot.run-finalizing",
+      version: 1,
+      runId: run.id,
+      startedAt: new Date().toISOString(),
+    });
     await atomicJson(path.join(run.dir, "result.json"), result);
     const manifest =
       (await readJson<Json>(path.join(run.dir, "manifest.json"))) || {};
@@ -67,15 +78,22 @@ export class RunManager {
       endedAt: new Date().toISOString(),
       durationMs,
       cleanupErrors: result.cleanupErrors || [],
-      abortReason:
-        result.kind === "OPERATION_TIMEOUT"
-          ? "timeout"
-          : result.kind === "OPERATION_ABORTED"
-            ? "signal"
-            : undefined,
+      abortReason: result.abortReason,
+      signal: result.signal,
+      timeoutMs: result.timeoutMs,
+      lockLoss: result.lockLoss,
+      approvalFinalStatus: result.approvalFinalStatus,
+      dangerousEffectStarted: result.dangerousEffectStarted,
+      dangerousEffectStartedAt: result.dangerousEffectStartedAt,
+      dangerousEffectDetails: result.dangerousEffectDetails,
     });
+    await fs.unlink(finalizing).catch(() => {});
   }
-  async finish(run: Run, status: string, result: Json) {
+  async finish(
+    run: Run,
+    status: "succeeded" | "failed" | "aborted",
+    result: Json,
+  ) {
     await this.finalize(run, status, result);
   }
   async list() {
@@ -100,6 +118,7 @@ export class RunManager {
       dir,
       manifest: await readJson<Json>(path.join(dir, "manifest.json")),
       result: await readJson<Json>(path.join(dir, "result.json")),
+      finalizing: await readJson<Json>(path.join(dir, "finalizing.json")),
     };
   }
 }

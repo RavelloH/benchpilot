@@ -11,7 +11,9 @@ export function write(value: unknown, flags: Flags, plain?: string) {
     flags.json
       ? `${JSON.stringify(value)}\n`
       : flags.jsonl
-        ? `${JSON.stringify({ schema: "benchpilot.event", version: 1, event: { type: operation ? "operation.completed" : "command.result", timestamp: new Date().toISOString() }, result: value })}\n`
+        ? operation
+          ? ""
+          : `${JSON.stringify({ schema: "benchpilot.event", version: 1, event: { type: "command.result", timestamp: new Date().toISOString() }, context: {}, data: { result: value } })}\n`
         : (plain ?? `${JSON.stringify(value, null, 2)}\n`),
   );
 }
