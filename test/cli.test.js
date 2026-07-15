@@ -240,6 +240,60 @@ test("system JSONL emits child device events and one system terminal event", asy
   }
 });
 
+test("a failed system status waits for every child before its terminal event", async () => {
+  const dir = await mkdtemp(
+    path.join(os.tmpdir(), "benchpilot-system-failure-"),
+  );
+  try {
+    await writeFile(
+      path.join(dir, "benchpilot.toml"),
+      [
+        "version = 1",
+        "[devices.fast]",
+        'adapter = "test"',
+        "[devices.slow]",
+        'adapter = "test"',
+        "[systems.test]",
+        'devices = ["fast", "slow"]',
+      ].join("\n"),
+    );
+    const module = path.resolve("dist/cli/index.js").replaceAll("\\", "/");
+    const script = `import { main } from ${JSON.stringify(`file:///${module}`)}; const adapter = { id: "test", apiVersion: 1, version: "1", summary: "test adapter", configSchema: { parse: (value) => value, describe: () => ({ type: "object" }) }, discover: async () => [], doctor: async () => [], createDevice: async (instance) => ({ identity: { instance, physicalId: instance, adapter: "test" }, capabilities: () => [{ id: "status", summary: "status", defaultTimeoutMs: 1000, lockMode: "none", createsRun: false, safety: { mode: "normal" }, execute: async () => { if (instance === "fast") throw new Error("fast failed"); await new Promise((resolve) => setTimeout(resolve, 40)); return { state: "ready" }; } }] }) }; process.argv = [process.execPath, "benchpilot", "system", "test", "status", "--jsonl"]; await main([adapter]);`;
+    const output = await exec(
+      process.execPath,
+      ["--input-type=module", "-e", script],
+      {
+        cwd: dir,
+        env: {
+          ...process.env,
+          BENCHPILOT_HOME: path.join(dir, "home"),
+          BENCHPILOT_NO_AUTORUN: "1",
+        },
+        encoding: "utf8",
+      },
+    ).catch((error) => error);
+    const events = output.stdout
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    assert.equal(events.at(-1).event.type, "system.operation.failed");
+    assert.equal(
+      events.filter((event) => event.event.type === "system.operation.failed")
+        .length,
+      1,
+    );
+    const slowCompleted = events.findIndex(
+      (event) =>
+        event.event.type === "device.operation.completed" &&
+        event.context.device === "slow",
+    );
+    assert.ok(slowCompleted >= 0);
+    assert.ok(slowCompleted < events.length - 1);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("injected adapter executes through the dynamic CLI route", async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "benchpilot-injected-"));
   try {

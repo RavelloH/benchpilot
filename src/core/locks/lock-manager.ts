@@ -80,6 +80,20 @@ export class LockManager {
     });
   }
 
+  private isRecord(value: unknown): value is LockRecord {
+    if (!value || typeof value !== "object") return false;
+    const record = value as Partial<LockRecord>;
+    return (
+      record.schema === "benchpilot.lock" &&
+      record.version === 2 &&
+      (record.state === "active" || record.state === "quarantined") &&
+      typeof record.lockId === "string" &&
+      typeof record.ownerToken === "string" &&
+      typeof record.pid === "number" &&
+      typeof record.hostname === "string"
+    );
+  }
+
   private async recoverCreatingDirectories(id: string) {
     const prefix = `${id}.creating-`;
     const entries = await fs
@@ -163,6 +177,7 @@ export class LockManager {
           attempts + 1,
         );
       }
+      if (!this.isRecord(holder)) return this.corrupt(id);
       if (holder.state === "quarantined")
         fail("DEVICE_QUARANTINED", 4, `Resource ${id} is quarantined.`, {
           lockId: id,

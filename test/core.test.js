@@ -355,6 +355,30 @@ test("stale recovery guards are reclaimed while active recovery guards time out"
   }
 });
 
+test("an old recovery guard release cannot delete its replacement", async () => {
+  const root = await mkdtemp(
+    path.join(os.tmpdir(), "benchpilot-recovery-replacement-"),
+  );
+  try {
+    const file = path.join(root, "guard.lock");
+    const recovery = await acquireFileGuard(`${file}.recovery`, {
+      resourceType: "lock-update",
+      resourceId: "resource",
+    });
+    await atomicJson(`${file}.recovery`, {
+      ...recovery.record,
+      token: "replacement-recovery",
+    });
+    await recovery.release();
+    assert.equal(
+      (await readJson(`${file}.recovery`)).token,
+      "replacement-recovery",
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("approval claim is exclusive across processes", async () => {
   const root = await mkdtemp(
     path.join(os.tmpdir(), "benchpilot-approval-process-"),
@@ -895,6 +919,13 @@ test("lock acquire recovers empty directories but rejects corrupt contents", asy
     await writeFile(locks.file("invalid-owner"), "not-json");
     await assert.rejects(
       locks.acquire("invalid-owner", "test"),
+      (error) =>
+        error instanceof BenchPilotError && error.kind === "LOCK_CORRUPT",
+    );
+    await mkdir(locks.directory("incomplete-owner"), { recursive: true });
+    await writeFile(locks.file("incomplete-owner"), "{}");
+    await assert.rejects(
+      locks.acquire("incomplete-owner", "test"),
       (error) =>
         error instanceof BenchPilotError && error.kind === "LOCK_CORRUPT",
     );

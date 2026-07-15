@@ -490,9 +490,6 @@ export class OperationRunner {
     const physicalCleanupUnsafe = cleanupErrors.some(
       (error) => error.holdsPhysicalResource,
     );
-    const operationCleanupFailed = cleanupErrors.some(
-      (error) => error.critical || error.holdsPhysicalResource,
-    );
     if (lock) {
       try {
         const locks = new LockManager(this.s.paths);
@@ -535,6 +532,9 @@ export class OperationRunner {
         message: (error as Error).message,
       });
     }
+    const operationCleanupFailed = cleanupErrors.some(
+      (error) => error.critical || error.holdsPhysicalResource,
+    );
     if (!primaryError && operationCleanupFailed)
       primaryError = new BenchPilotError(
         "CLEANUP_FAILED",

@@ -45,34 +45,29 @@ const delay = (ms: number) =>
   });
 
 const runTaskkill = (args: string[]) =>
-  new Promise<{ code: number | null; error?: Error; stderr: string }>(
-    (resolve) => {
-      const taskkill = spawn("taskkill", args, {
-        shell: false,
-        windowsHide: true,
-        stdio: ["ignore", "ignore", "pipe"],
-      });
-      let stderr = "";
-      taskkill.stderr?.on("data", (chunk: Buffer) => {
-        stderr += String(chunk);
-      });
-      taskkill.once("error", (error) => resolve({ code: null, error, stderr }));
-      taskkill.once("close", (code) => resolve({ code, stderr }));
-    },
-  );
+  new Promise<{
+    code: number | null;
+    error?: Error;
+    output: string;
+  }>((resolve) => {
+    const taskkill = spawn("taskkill", args, {
+      shell: false,
+      windowsHide: true,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let output = "";
+    const capture = (chunk: Buffer) => {
+      output += String(chunk);
+    };
+    taskkill.stdout?.on("data", capture);
+    taskkill.stderr?.on("data", capture);
+    taskkill.once("error", (error) => resolve({ code: null, error, output }));
+    taskkill.once("close", (code) => resolve({ code, output }));
+  });
 
 function processGroupExists(pgid: number) {
   try {
     process.kill(-pgid, 0);
-    return true;
-  } catch (error: unknown) {
-    return (error as NodeJS.ErrnoException).code !== "ESRCH";
-  }
-}
-
-function processExists(pid: number) {
-  try {
-    process.kill(pid, 0);
     return true;
   } catch (error: unknown) {
     return (error as NodeJS.ErrnoException).code !== "ESRCH";
@@ -92,12 +87,22 @@ async function waitFor(
   return true;
 }
 
+interface TerminationAttempt {
+  confirmed: boolean;
+  taskkill?: {
+    force: boolean;
+    code: number | null;
+    output: string;
+    cause?: string;
+  };
+}
+
 async function terminateTree(
   child: ChildProcess,
   force: boolean,
   killTree: boolean,
-) {
-  if (!child.pid) return;
+): Promise<TerminationAttempt> {
+  if (!child.pid) return { confirmed: true };
   if (process.platform === "win32") {
     const result = await runTaskkill([
       "/PID",
@@ -106,23 +111,16 @@ async function terminateTree(
       ...(force ? ["/F"] : []),
     ]);
     const missing =
-      (result.code === 128 && /not found|not exist/i.test(result.stderr)) ||
-      !processExists(child.pid);
-    if (result.code !== 0 && !missing)
-      throw new BenchPilotError(
-        "PROCESS_CLEANUP_TIMEOUT",
-        5,
-        `PROCESS_CLEANUP_TIMEOUT: taskkill could not confirm process-tree termination: ${child.pid}`,
-        false,
-        undefined,
-        [],
-        {
-          code: result.code,
-          stderr: result.stderr,
-          cause: result.error?.message,
-        },
-      );
-    return;
+      result.code !== 0 && /not found|not exist/i.test(result.output);
+    return {
+      confirmed: result.code === 0 || missing,
+      taskkill: {
+        force,
+        code: result.code,
+        output: result.output,
+        cause: result.error?.message,
+      },
+    };
   }
   try {
     if (killTree) process.kill(-child.pid, force ? "SIGKILL" : "SIGTERM");
@@ -133,6 +131,7 @@ async function terminateTree(
     )
       throw error;
   }
+  return { confirmed: true };
 }
 
 /**
@@ -222,31 +221,44 @@ export function startProcess(options: ProcessRunOptions): StartedProcess {
     stopped = (async () => {
       state = "stopping";
       const killTree = options.killTree ?? true;
-      await terminateTree(child, false, killTree);
+      const taskkillAttempts: NonNullable<TerminationAttempt["taskkill"]>[] =
+        [];
+      const gracefulAttempt = await terminateTree(child, false, killTree);
+      if (gracefulAttempt.taskkill)
+        taskkillAttempts.push(gracefulAttempt.taskkill);
       const gracefulKillMs = options.gracefulKillMs ?? 2_000;
       const forceKillMs = options.forceKillMs ?? 2_000;
       const group =
         killTree && process.platform !== "win32" ? child.pid : undefined;
-      const gracefulEnded = group
-        ? await waitFor(() => processGroupExists(group), gracefulKillMs)
-        : await Promise.race([
-            closed.then(() => true),
-            delay(gracefulKillMs).then(() => false),
-          ]);
-      if (!gracefulEnded) {
-        await terminateTree(child, true, killTree);
-        const ended = group
-          ? await waitFor(() => processGroupExists(group), forceKillMs)
+      const gracefulEnded =
+        gracefulAttempt.confirmed &&
+        (group
+          ? await waitFor(() => processGroupExists(group), gracefulKillMs)
           : await Promise.race([
               closed.then(() => true),
-              delay(forceKillMs).then(() => false),
-            ]);
+              delay(gracefulKillMs).then(() => false),
+            ]));
+      if (!gracefulEnded) {
+        const forceAttempt = await terminateTree(child, true, killTree);
+        if (forceAttempt.taskkill) taskkillAttempts.push(forceAttempt.taskkill);
+        const ended =
+          forceAttempt.confirmed &&
+          (group
+            ? await waitFor(() => processGroupExists(group), forceKillMs)
+            : await Promise.race([
+                closed.then(() => true),
+                delay(forceKillMs).then(() => false),
+              ]));
         if (!ended) {
           state = "cleanup-timeout";
           throw new BenchPilotError(
             "PROCESS_CLEANUP_TIMEOUT",
             5,
             `Process tree did not exit: ${options.command}`,
+            false,
+            undefined,
+            [],
+            taskkillAttempts.length ? { taskkillAttempts } : undefined,
           );
         }
       }
