@@ -387,3 +387,27 @@ test("discovery candidates require their type-specific fields", async () => {
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("disabled capabilities cannot enable a platform", async () => {
+  const root = await temporaryAdapter();
+  try {
+    const capabilities = await readFile(
+      join(root, "capabilities.toml"),
+      "utf8",
+    );
+    await writeFile(
+      join(root, "capabilities.toml"),
+      capabilities.replace("windows = false", "windows = true"),
+    );
+    const result = await validateAdapter(root);
+    assert.ok(
+      result.diagnostics.some(
+        (item) =>
+          item.code === "ADAPTER_SCHEMA_INVALID" &&
+          item.file === "capabilities.toml",
+      ),
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

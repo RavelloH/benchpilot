@@ -86,7 +86,18 @@
           "then": {
             "required": ["handler", "creates_run", "timeout", "lock", "safety"]
           },
-          "else": { "required": ["reason"] }
+          "else": {
+            "required": ["reason"],
+            "properties": {
+              "platforms": {
+                "properties": {
+                  "windows": { "const": false },
+                  "linux": { "const": false },
+                  "macos": { "const": false }
+                }
+              }
+            }
+          }
         }
       ]
     }
