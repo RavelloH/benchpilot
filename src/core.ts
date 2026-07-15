@@ -9,6 +9,8 @@ import type { RuntimeSchema } from "./core/adapters/schemas.js";
 import { lockIdentity } from "./core/locks/lock-identity.js";
 import { LockManager } from "./core/locks/lock-manager.js";
 import type { LockLease, LockRecord } from "./core/locks/types.js";
+import { ApprovalManager } from "./core/approvals/approval-manager.js";
+import type { ApprovalLease, ApprovalRecord } from "./core/approvals/types.js";
 import {
   abortPromise,
   abortReasonToError,
@@ -65,6 +67,12 @@ export type {
   LockManagerHooks,
   LockRecord,
 } from "./core/locks/types.js";
+export { ApprovalManager } from "./core/approvals/approval-manager.js";
+export type {
+  ApprovalLease,
+  ApprovalLiveness,
+  ApprovalRecord,
+} from "./core/approvals/types.js";
 export {
   abortPromise,
   abortReasonToError,
@@ -80,7 +88,6 @@ export {
   type ArtifactRecord,
   type Run,
 } from "./core/runs/run-manager.js";
-const APPROVAL_ID_PATTERN = /^approval-[a-f0-9]+$/;
 export function projectStorageKey(project: {
   id?: string;
   root?: string;
@@ -345,7 +352,9 @@ export class AdapterRegistry {
   }
 }
 
-export class ApprovalManager {
+const APPROVAL_ID_PATTERN = /^approval-[a-f0-9]+$/;
+
+class LegacyApprovalManager {
   constructor(private paths: PathService) {}
   private assertId(id: string) {
     if (!APPROVAL_ID_PATTERN.test(id))
@@ -661,14 +670,12 @@ export class OperationRunner {
         approvalRequired: safety.mode === "human-approval",
       };
     if (safety.mode === "human-approval") {
-      const existing = await new ApprovalManager(
-        this.s.paths,
-      ).findMatchingApproval(binding);
+      const approvals = new ApprovalManager(this.s.paths);
+      const existing =
+        (await approvals.findMatchingApproval(binding)) ||
+        (await approvals.recoverMatchingStaleClaim(binding));
       if (!existing) {
-        const req = await new ApprovalManager(this.s.paths).request(
-          binding,
-          safety.approvalTtlMs,
-        );
+        const req = await approvals.request(binding, safety.approvalTtlMs);
         fail(
           "HUMAN_APPROVAL_REQUIRED",
           7,
@@ -720,7 +727,8 @@ export class OperationRunner {
     });
     let lock: LockRecord | undefined;
     let lease: LockLease | undefined;
-    let claimedApproval: Json | undefined;
+    let claimedApproval: ApprovalRecord | undefined;
+    let approvalLease: ApprovalLease | undefined;
     const cleanups: Array<{
       name: string;
       critical: boolean;
@@ -750,6 +758,7 @@ export class OperationRunner {
     const started = Date.now();
     let data: Json | undefined;
     let primaryError: BenchPilotError | undefined;
+    let approvalLoss = new Promise<never>(() => {});
     try {
       logger.event("operation.started", { command });
       if (capability.lockMode === "exclusive") {
@@ -777,11 +786,22 @@ export class OperationRunner {
           binding,
         );
         if (!claimedApproval)
-          fail(
+          throw new BenchPilotError(
             "APPROVAL_ALREADY_CLAIMED",
             7,
             "Matching approval is no longer available.",
           );
+        approvalLease = new ApprovalManager(this.s.paths).startClaimLease(
+          claimedApproval,
+        );
+        approvalLoss = approvalLease.lost.then((error) => {
+          if (!controller.signal.aborted)
+            controller.abort({
+              kind: "manual",
+              message: `Approval ownership lost: ${error.message}`,
+            } satisfies OperationAbortReason);
+          throw error;
+        });
       }
       logger.event("stage.started", { stage: capability.id });
       const execution = capability.execute(
@@ -835,6 +855,7 @@ export class OperationRunner {
         execution,
         abortPromise(controller.signal),
         lockLoss,
+        approvalLoss,
       ]);
       if (controller.signal.aborted)
         throw abortReasonToError(controller.signal.reason);
@@ -906,6 +927,17 @@ export class OperationRunner {
       } catch (error: unknown) {
         cleanupErrors.push({
           name: "lock-heartbeat",
+          critical: true,
+          message: (error as Error).message,
+        });
+      }
+    }
+    if (approvalLease) {
+      try {
+        await approvalLease.stop();
+      } catch (error: unknown) {
+        cleanupErrors.push({
+          name: "approval-heartbeat",
           critical: true,
           message: (error as Error).message,
         });

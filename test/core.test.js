@@ -141,11 +141,136 @@ test("expired approval claim is recovered before a new claim", async () => {
     const first = await manager.claim(binding);
     await atomicJson(path.join(paths.approvalsRoot(), `${request.id}.json`), {
       ...first,
+      claimedBy: "unreachable-host:999999",
       claimExpiresAt: new Date(0).toISOString(),
     });
     const recovered = await manager.claim(binding);
     assert.ok(recovered);
     assert.notEqual(recovered.claimToken, first.claimToken);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("an expired approval claim remains active while its local PID is alive", async () => {
+  const root = await mkdtemp(
+    path.join(os.tmpdir(), "benchpilot-approval-active-pid-"),
+  );
+  try {
+    const manager = new ApprovalManager(
+      new PathService({ BENCHPILOT_HOME: root }),
+    );
+    const binding = { command: "device.burn", device: "demo" };
+    const request = await manager.request(binding);
+    await manager.change(request.id, "approved");
+    const claim = await manager.claim(binding);
+    await atomicJson(
+      path.join(root, "state", "approvals", `${request.id}.json`),
+      { ...claim, claimExpiresAt: new Date(0).toISOString() },
+    );
+    const active = await manager.get(request.id);
+    assert.equal(manager.approvalLiveness(active), "active");
+    assert.equal(await manager.claim(binding), undefined);
+    await manager.releaseClaim(active);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("approval lease renews an active claim", async () => {
+  const root = await mkdtemp(
+    path.join(os.tmpdir(), "benchpilot-approval-lease-"),
+  );
+  try {
+    const manager = new ApprovalManager(
+      new PathService({ BENCHPILOT_HOME: root }),
+    );
+    const binding = { command: "device.burn", device: "demo" };
+    const request = await manager.request(binding);
+    await manager.change(request.id, "approved");
+    const claim = await manager.claim(binding);
+    assert.ok(claim);
+    const lease = manager.startClaimLease(claim, 5, 30);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const renewed = await manager.get(request.id);
+    assert.ok(
+      Date.parse(renewed.claimHeartbeatAt) > Date.parse(claim.claimHeartbeatAt),
+    );
+    await lease.stop();
+    await manager.releaseClaim(claim);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("a normal operation recovers and reuses a stale approval claim", async () => {
+  const root = await mkdtemp(
+    path.join(os.tmpdir(), "benchpilot-approval-runner-recovery-"),
+  );
+  try {
+    const paths = new PathService({ BENCHPILOT_HOME: root });
+    const registry = new AdapterRegistry();
+    registry.register({
+      id: "approval-recovery",
+      version: "1",
+      summary: "approval recovery test",
+      discover: async () => [],
+      doctor: async () => [],
+      createDevice: async (instance) => ({
+        identity: {
+          instance,
+          physicalId: "approval-recovery-device",
+          adapter: "approval-recovery",
+        },
+        capabilities: () => [
+          {
+            id: "burn",
+            summary: "burn",
+            defaultTimeoutMs: 1_000,
+            lockMode: "none",
+            createsRun: false,
+            safety: { mode: "human-approval", flag: "danger" },
+            execute: async () => ({ recovered: true }),
+          },
+        ],
+      }),
+    });
+    const config = {
+      value: { devices: { device: { adapter: "approval-recovery" } } },
+      origins: new Map(),
+      layers: [],
+    };
+    const binding = {
+      command: "device.burn",
+      device: {
+        instance: "device",
+        physicalId: "approval-recovery-device",
+        adapter: "approval-recovery",
+      },
+      input: {},
+      project: "outside-project",
+      configDigest: (await import("../dist/index.js")).sha(config.value),
+    };
+    const approvals = new ApprovalManager(paths);
+    const request = await approvals.request(binding);
+    await approvals.change(request.id, "approved");
+    const claim = await approvals.claim(binding);
+    await atomicJson(path.join(paths.approvalsRoot(), `${request.id}.json`), {
+      ...claim,
+      claimedBy: "dead-host:1",
+      claimExpiresAt: new Date(0).toISOString(),
+    });
+    const runner = new OperationRunner({
+      paths,
+      registry,
+      project: undefined,
+      flags: { quiet: true, danger: true },
+      config,
+    });
+    const result = await runner.execute("device", "burn", {});
+    assert.equal(result.ok, true);
+    assert.equal((await approvals.list()).length, 1);
+    assert.equal((await approvals.get(request.id)).status, "approved");
   } finally {
     await rm(root, { recursive: true, force: true });
   }
