@@ -18,7 +18,7 @@
   "properties": {
     "schema": { "const": "benchpilot.adapter.manifest" },
     "schema_version": { "const": 1 },
-    "id": { "pattern": "^[a-z][a-z0-9-]*$" },
+    "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
     "display_name": { "type": "string" },
     "adapter_version": { "type": "string" },
     "vendor": { "type": "string" },
@@ -32,6 +32,6 @@
     "homepage": { "type": "string" },
     "documentation": { "type": "string" },
     "license": { "type": "string" },
-    "replacement": { "pattern": "^[a-z][a-z0-9-]*$" }
+    "replacement": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" }
   }
 }

@@ -4,6 +4,7 @@ schema_version = 1
 type = "process"
 tool = "script"
 cwd = "${device.project}"
+env = { BUILD_TARGET = "${input.target}" }
 arguments = [
   { kind = "literal", value = "build" },
   { kind = "value", value = "${input.target}" },

@@ -101,6 +101,7 @@ export const validateSemantics = async (
     sets = obj(file("artifacts.toml").sets);
   const catalog = obj(parseToml(await readFile(catalogPath, "utf8")))
     .capabilities as JsonObject;
+  const declaredSafetyFlags = new Map<string, string>();
   if (manifest.id !== adapter.id)
     errors.push(
       diagnostic(
@@ -298,15 +299,25 @@ export const validateSemantics = async (
           adapter.id,
         ),
       );
-    for (const schema of ["input_schema", "output_schema"] as const)
-      if (
-        item[schema] &&
+    for (const schema of ["input_schema", "output_schema"] as const) {
+      if (enabled && typeof item[schema] !== "string")
+        errors.push(
+          diagnostic(
+            "ADAPTER_CAPABILITY_INVALID",
+            "capabilities.toml",
+            `Enabled capability ${key} requires ${schema}`,
+            undefined,
+            adapter.id,
+          ),
+        );
+      else if (
+        typeof item[schema] === "string" &&
         !Object.hasOwn(
           obj(
             adapter.schemas[schema === "input_schema" ? "inputs" : "outputs"]
               .$defs,
           ),
-          item[schema] as string,
+          item[schema],
         )
       )
         errors.push(
@@ -318,6 +329,7 @@ export const validateSemantics = async (
             adapter.id,
           ),
         );
+    }
     const safety = obj(item.safety);
     if (
       safety.mode &&
@@ -359,6 +371,24 @@ export const validateSemantics = async (
           adapter.id,
         ),
       );
+    if (
+      enabled &&
+      ["danger-flag", "human-approval"].includes(String(safety.mode)) &&
+      typeof safety.flag === "string"
+    ) {
+      const existing = declaredSafetyFlags.get(safety.flag);
+      if (existing)
+        errors.push(
+          diagnostic(
+            "ADAPTER_CAPABILITY_INVALID",
+            "capabilities.toml",
+            `Safety flag ${safety.flag} conflicts with ${existing}`,
+            undefined,
+            adapter.id,
+          ),
+        );
+      else declaredSafetyFlags.set(safety.flag, key);
+    }
   }
   if (manifest.status === "disabled")
     for (const [key, item] of [
@@ -677,6 +707,24 @@ export const validateSemantics = async (
       }
       try {
         new RegExp(item.pattern);
+        if (
+          item.type === "regex" &&
+          typeof item.group === "string" &&
+          !/^\d+$/.test(item.group) &&
+          !Array.from(
+            String(item.pattern).matchAll(/\(\?<([A-Za-z][A-Za-z0-9_]*)>/g),
+            (match) => match[1],
+          ).includes(item.group)
+        )
+          errors.push(
+            diagnostic(
+              "ADAPTER_REGEX_INVALID",
+              "parsers.toml",
+              `Parser ${key} extract group does not exist: ${item.group}`,
+              undefined,
+              adapter.id,
+            ),
+          );
       } catch {
         errors.push(
           diagnostic(

@@ -84,7 +84,15 @@
         {
           "if": { "properties": { "enabled": { "const": true } } },
           "then": {
-            "required": ["handler", "creates_run", "timeout", "lock", "safety"]
+            "required": [
+              "handler",
+              "input_schema",
+              "output_schema",
+              "creates_run",
+              "timeout",
+              "lock",
+              "safety"
+            ]
           },
           "else": {
             "required": ["reason"],

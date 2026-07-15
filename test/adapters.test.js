@@ -63,6 +63,11 @@ test("complete adapter fixture validates, compiles, and exercises all case types
   const compiled = await compileAdapter(complete);
   assert.deepEqual(compiled.diagnostics, []);
   assert.equal(compiled.bundle.capabilityCatalog.version, 1);
+  assert.equal(compiled.bundle.platforms.windows.actions.run.cwd, "C:/project");
+  assert.deepEqual(
+    compiled.bundle.platforms.macos.tools.python.launch.prefix_args,
+    ["-E"],
+  );
   assert.deepEqual(await runCases(validation.adapter), []);
 });
 
@@ -270,6 +275,102 @@ test("embedded adapter schemas must compile", async () => {
   }
 });
 
+test("adapter data schemas reject invalid roots, metaschemas, extensions, and properties", async () => {
+  const invalidSchemas = [
+    { type: "array", $defs: {} },
+    {
+      $schema: "https://example.invalid/not-a-json-schema",
+      type: "object",
+      $defs: {},
+    },
+    {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      type: "object",
+    },
+    {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      type: "object",
+      properties: "invalid",
+      $defs: {},
+    },
+    {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      type: "object",
+      properties: {
+        value: {
+          "x-benchpilot-cli": { flag: 1 },
+        },
+      },
+      $defs: {},
+    },
+    {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      type: "object",
+      properties: { constructor: { type: "string" } },
+      $defs: {},
+    },
+  ];
+  for (const schema of invalidSchemas) {
+    const root = await temporaryAdapter();
+    try {
+      await writeFile(
+        join(root, "schemas", "inputs.schema.json"),
+        JSON.stringify(schema),
+      );
+      const result = await validateAdapter(root);
+      assert.ok(
+        result.diagnostics.some(
+          (item) =>
+            item.code === "ADAPTER_SCHEMA_INVALID" &&
+            item.file === "schemas/inputs.schema.json",
+        ),
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  }
+});
+
+test("enabled capabilities require input and output schemas", async () => {
+  const root = await mkdtemp(join(tmpdir(), "benchpilot-adapter-"));
+  const adapterRoot = join(root, "complete");
+  try {
+    await cp(complete, adapterRoot, { recursive: true });
+    const capabilities = await readFile(
+      join(adapterRoot, "capabilities.toml"),
+      "utf8",
+    );
+    await writeFile(
+      join(adapterRoot, "capabilities.toml"),
+      capabilities
+        .replace('input_schema = "build"\n', "")
+        .replace('output_schema = "build"\n', ""),
+    );
+    const result = await validateAdapter(adapterRoot);
+    assert.ok(
+      result.diagnostics.some((item) => item.code === "ADAPTER_SCHEMA_INVALID"),
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("parser regex extracts require an existing named group", async () => {
+  const root = await temporaryAdapter();
+  try {
+    await writeFile(
+      join(root, "parsers.toml"),
+      `schema = "benchpilot.adapter.parsers"\nschema_version = 1\n[parsers.bad]\nmode = "line"\nencoding = "utf8"\nstrip_ansi = true\nsuccess_exit_codes = [0]\n[[parsers.bad.extract]]\nid = "value"\nsource = "stdout"\ntype = "regex"\npattern = "(?<actual>value)"\ntarget = "value"\ngroup = "missing"\ncast = "string"\nrequired = true\n`,
+    );
+    const result = await validateAdapter(root);
+    assert.ok(
+      result.diagnostics.some((item) => item.code === "ADAPTER_REGEX_INVALID"),
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("device overlays merge into the final platform bundle", async () => {
   const root = await temporaryAdapter();
   try {
@@ -282,6 +383,34 @@ test("device overlays merge into the final platform bundle", async () => {
     assert.deepEqual(result.bundle.platforms.windows.devices.identity.fields, [
       "device.serial",
     ]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("platform overlays reject new rule IDs and forbidden roots", async () => {
+  const root = await temporaryAdapter();
+  try {
+    await writeFile(
+      join(root, "platforms", "windows.toml"),
+      `schema = "benchpilot.adapter.platform"\nschema_version = 1\nplatform = "windows"\n[overrides.actions.new]\ncwd = "project"\n`,
+    );
+    const newId = await validateAdapter(root);
+    assert.ok(
+      newId.diagnostics.some(
+        (item) => item.code === "ADAPTER_PLATFORM_OVERRIDE_INVALID",
+      ),
+    );
+    await writeFile(
+      join(root, "platforms", "windows.toml"),
+      `schema = "benchpilot.adapter.platform"\nschema_version = 1\nplatform = "windows"\n[overrides.manifest]\nid = "forbidden"\n`,
+    );
+    const forbidden = await validateAdapter(root);
+    assert.ok(
+      forbidden.diagnostics.some(
+        (item) => item.code === "ADAPTER_SCHEMA_INVALID",
+      ),
+    );
   } finally {
     await rm(root, { recursive: true, force: true });
   }

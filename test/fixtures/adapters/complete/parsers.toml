@@ -37,3 +37,17 @@ pattern = "error"
 kind = "ERROR"
 retryable = true
 recovery = ["Retry"]
+
+[parsers.json]
+mode = "json"
+encoding = "utf8"
+strip_ansi = false
+success_exit_codes = [0]
+[[parsers.json.extract]]
+id = "first-item"
+source = "stdout"
+type = "json-pointer"
+pointer = "/items/0/name"
+target = "name"
+cast = "string"
+required = true

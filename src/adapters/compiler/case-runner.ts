@@ -21,6 +21,18 @@ const render = (value: unknown, context: JsonObject): unknown => {
     String(lookup(context, path) ?? ""),
   );
 };
+const renderDeep = (value: unknown, context: JsonObject): unknown => {
+  if (Array.isArray(value))
+    return value.map((item) => renderDeep(item, context));
+  if (value && typeof value === "object")
+    return Object.fromEntries(
+      Object.entries(value as JsonObject).map(([key, item]) => [
+        key,
+        renderDeep(item, context),
+      ]),
+    );
+  return render(value, context);
+};
 const active = (when: unknown, context: JsonObject) => {
   if (!when) return true;
   const item = object(when),
@@ -35,13 +47,19 @@ const active = (when: unknown, context: JsonObject) => {
     case "falsy":
       return !actual;
     case "equals":
-      return actual === item.value;
+      return actual === renderDeep(item.value, context);
     case "not-equals":
-      return actual !== item.value;
+      return actual !== renderDeep(item.value, context);
     case "in":
-      return Array.isArray(item.value) && item.value.includes(actual);
+      return (
+        Array.isArray(item.value) &&
+        (renderDeep(item.value, context) as unknown[]).includes(actual)
+      );
     case "not-in":
-      return Array.isArray(item.value) && !item.value.includes(actual);
+      return (
+        Array.isArray(item.value) &&
+        !(renderDeep(item.value, context) as unknown[]).includes(actual)
+      );
     default:
       return false;
   }
@@ -63,11 +81,12 @@ const pointer = (value: unknown, path: string) =>
   path
     .slice(1)
     .split("/")
-    .reduce<unknown>(
-      (current, part) =>
-        object(current)[part.replace(/~1/g, "/").replace(/~0/g, "~")],
-      value,
-    );
+    .reduce<unknown>((current, part) => {
+      const key = part.replace(/~1/g, "/").replace(/~0/g, "~");
+      if (Array.isArray(current))
+        return /^(0|[1-9][0-9]*)$/.test(key) ? current[Number(key)] : undefined;
+      return object(current)[key];
+    }, value);
 
 export const runCases = async (
   adapter: LoadedAdapter,
@@ -163,6 +182,25 @@ export const runCases = async (
               adapter.id,
             ),
           );
+        const environment = Object.fromEntries(
+          Object.entries(object(action.env)).map(([key, value]) => [
+            key,
+            renderDeep(value, context),
+          ]),
+        );
+        if (
+          expect.environment !== undefined &&
+          JSON.stringify(environment) !== JSON.stringify(expect.environment)
+        )
+          errors.push(
+            diagnostic(
+              "ADAPTER_CASE_INVALID",
+              "tests/cases.toml",
+              `Rendered environment differs for ${target}`,
+              undefined,
+              adapter.id,
+            ),
+          );
       }
     } else if (test.type === "plan-workflow") {
       const flow = object(object(rules.workflows)[target]);
@@ -176,7 +214,7 @@ export const runCases = async (
             with: Object.fromEntries(
               Object.entries(object(value.with)).map(([key, item]) => [
                 key,
-                render(item, context),
+                renderDeep(item, context),
               ]),
             ),
             continue_on_error: value.continue_on_error === true,
@@ -209,173 +247,196 @@ export const runCases = async (
             adapter.id,
           ),
         );
-      const fixture = test.stderr_fixture ?? test.stdout_fixture;
-      if (typeof fixture === "string") {
-        if (
-          !fixture.startsWith("fixtures/") ||
-          !ensureInside(resolve(adapter.root, "tests"), fixture)
+      const fixtures = [test.stdout_fixture, test.stderr_fixture].filter(
+        (fixture): fixture is string => typeof fixture === "string",
+      );
+      if (
+        !fixtures.length ||
+        fixtures.some(
+          (fixture) =>
+            !fixture.startsWith("fixtures/") ||
+            !ensureInside(resolve(adapter.root, "tests"), fixture),
         )
-          errors.push(
-            diagnostic(
-              "ADAPTER_CASE_INVALID",
-              "tests/cases.toml",
-              "Fixture path escapes tests/fixtures",
-              undefined,
-              adapter.id,
-            ),
-          );
-        else {
-          const stdout =
+      )
+        errors.push(
+          diagnostic(
+            "ADAPTER_CASE_INVALID",
+            "tests/cases.toml",
+            "Fixture path escapes tests/fixtures",
+            undefined,
+            adapter.id,
+          ),
+        );
+      else {
+        let stdout = "";
+        let stderr = "";
+        try {
+          stdout =
             typeof test.stdout_fixture === "string"
               ? await readFile(
                   resolve(adapter.root, "tests", test.stdout_fixture),
                   "utf8",
                 )
               : "";
-          const stderr =
+          stderr =
             typeof test.stderr_fixture === "string"
               ? await readFile(
                   resolve(adapter.root, "tests", test.stderr_fixture),
                   "utf8",
                 )
               : "";
-          const normalized = (value: string) =>
-            parser.strip_ansi
-              ? value.replace(/\u001B\[[0-?]*[ -\/]*[@-~]/g, "")
-              : value;
-          const output = normalized(stdout),
-            errorOutput = normalized(stderr);
-          const matches = (Array.isArray(parser.errors) ? parser.errors : [])
-            .map(object)
-            .sort(
-              (left, right) =>
-                Number(right.priority ?? 0) - Number(left.priority ?? 0),
-            )
-            .find((rule) => {
-              const text = sourceText(rule.source, output, errorOutput);
-              try {
-                return new RegExp(String(rule.pattern)).test(text);
-              } catch {
-                return false;
-              }
-            });
-          const expectedError = object(expect.error);
-          if (
-            Object.keys(expectedError).length &&
-            (!matches ||
-              matches.kind !== expectedError.kind ||
-              matches.retryable !== expectedError.retryable)
-          )
-            errors.push(
-              diagnostic(
-                "ADAPTER_CASE_INVALID",
-                "tests/cases.toml",
-                `Parser result differs for ${target}`,
-                undefined,
-                adapter.id,
-              ),
-            );
-          const result: JsonObject = {};
-          for (const rawRule of Array.isArray(parser.extract)
-            ? parser.extract
-            : []) {
-            const rule = object(rawRule);
-            let extracted: unknown;
-            try {
-              if (rule.type === "json-pointer")
-                extracted = pointer(
-                  JSON.parse(sourceText(rule.source, output, errorOutput)),
-                  String(rule.pointer),
-                );
-              else {
-                const match = new RegExp(String(rule.pattern)).exec(
-                  sourceText(rule.source, output, errorOutput),
-                );
-                extracted =
-                  match?.groups?.[String(rule.group)] ??
-                  match?.[Number(rule.group)];
-                if (extracted !== undefined)
-                  extracted = cast(String(extracted), rule.cast);
-              }
-            } catch {
-              extracted = undefined;
-            }
-            if (extracted === undefined && rule.required)
-              errors.push(
-                diagnostic(
-                  "ADAPTER_CASE_INVALID",
-                  "tests/cases.toml",
-                  `Required extract missing: ${String(rule.id)}`,
-                  undefined,
-                  adapter.id,
-                ),
-              );
-            if (extracted !== undefined)
-              result[String(rule.target)] = extracted;
-          }
-          const progress = (
-            Array.isArray(parser.progress) ? parser.progress : []
-          ).flatMap((rawRule) => {
-            const rule = object(rawRule);
-            const match = new RegExp(String(rule.pattern), "g").exec(
-              sourceText(rule.source, output, errorOutput),
-            );
-            return match
-              ? [
-                  Object.fromEntries(
-                    Object.entries(object(rule.fields)).map(([name, kind]) => [
-                      name,
-                      cast(match.groups?.[name] ?? "", kind),
-                    ]),
-                  ),
-                ]
-              : [];
-          });
-          if (
-            expect.result !== undefined &&
-            JSON.stringify(result) !== JSON.stringify(expect.result)
-          )
-            errors.push(
-              diagnostic(
-                "ADAPTER_CASE_INVALID",
-                "tests/cases.toml",
-                `Parser result differs for ${target}`,
-                undefined,
-                adapter.id,
-              ),
-            );
-          if (
-            expect.progress !== undefined &&
-            JSON.stringify(progress) !== JSON.stringify(expect.progress)
-          )
-            errors.push(
-              diagnostic(
-                "ADAPTER_CASE_INVALID",
-                "tests/cases.toml",
-                `Parser progress differs for ${target}`,
-                undefined,
-                adapter.id,
-              ),
-            );
-          if (
-            expect.success !== undefined &&
-            Boolean(
-              !matches &&
-              (parser.success_exit_codes as unknown[] | undefined)?.includes(
-                test.exit_code,
-              ),
-            ) !== expect.success
-          )
-            errors.push(
-              diagnostic(
-                "ADAPTER_CASE_INVALID",
-                "tests/cases.toml",
-                `Parser success differs for ${target}`,
-                undefined,
-                adapter.id,
-              ),
-            );
+        } catch {
+          errors.push(
+            diagnostic(
+              "ADAPTER_CASE_INVALID",
+              "tests/cases.toml",
+              "Fixture file does not exist",
+              undefined,
+              adapter.id,
+            ),
+          );
+          continue;
         }
+        const normalized = (value: string) =>
+          parser.strip_ansi
+            ? value.replace(/\u001B\[[0-?]*[ -\/]*[@-~]/g, "")
+            : value;
+        const output = normalized(stdout),
+          errorOutput = normalized(stderr);
+        const matches = (Array.isArray(parser.errors) ? parser.errors : [])
+          .map((rule, index) => ({ rule: object(rule), index }))
+          .sort(
+            (left, right) =>
+              Number(right.rule.priority ?? 0) -
+                Number(left.rule.priority ?? 0) || left.index - right.index,
+          )
+          .map(({ rule }) => rule)
+          .find((rule) => {
+            const text = sourceText(rule.source, output, errorOutput);
+            try {
+              return new RegExp(String(rule.pattern)).test(text);
+            } catch {
+              return false;
+            }
+          });
+        const expectedError = object(expect.error);
+        if (
+          Object.keys(expectedError).length &&
+          (!matches ||
+            matches.kind !== expectedError.kind ||
+            matches.retryable !== expectedError.retryable)
+        )
+          errors.push(
+            diagnostic(
+              "ADAPTER_CASE_INVALID",
+              "tests/cases.toml",
+              `Parser result differs for ${target}`,
+              undefined,
+              adapter.id,
+            ),
+          );
+        const result: JsonObject = {};
+        for (const rawRule of Array.isArray(parser.extract)
+          ? parser.extract
+          : []) {
+          const rule = object(rawRule);
+          let extracted: unknown;
+          try {
+            if (rule.type === "json-pointer")
+              extracted = pointer(
+                JSON.parse(sourceText(rule.source, output, errorOutput)),
+                String(rule.pointer),
+              );
+            else {
+              const match = new RegExp(String(rule.pattern)).exec(
+                sourceText(rule.source, output, errorOutput),
+              );
+              extracted =
+                match?.groups?.[String(rule.group)] ??
+                match?.[Number(rule.group)];
+              if (extracted !== undefined)
+                extracted = cast(String(extracted), rule.cast);
+            }
+          } catch {
+            extracted = undefined;
+          }
+          if (extracted === undefined && rule.required)
+            errors.push(
+              diagnostic(
+                "ADAPTER_CASE_INVALID",
+                "tests/cases.toml",
+                `Required extract missing: ${String(rule.id)}`,
+                undefined,
+                adapter.id,
+              ),
+            );
+          if (extracted !== undefined) result[String(rule.target)] = extracted;
+        }
+        const progress = (
+          Array.isArray(parser.progress) ? parser.progress : []
+        ).flatMap((rawRule) => {
+          const rule = object(rawRule);
+          try {
+            return Array.from(
+              sourceText(rule.source, output, errorOutput).matchAll(
+                new RegExp(String(rule.pattern), "g"),
+              ),
+              (match) =>
+                Object.fromEntries(
+                  Object.entries(object(rule.fields)).map(([name, kind]) => [
+                    name,
+                    cast(match.groups?.[name] ?? "", kind),
+                  ]),
+                ),
+            );
+          } catch {
+            return [];
+          }
+        });
+        if (
+          expect.result !== undefined &&
+          JSON.stringify(result) !== JSON.stringify(expect.result)
+        )
+          errors.push(
+            diagnostic(
+              "ADAPTER_CASE_INVALID",
+              "tests/cases.toml",
+              `Parser result differs for ${target}`,
+              undefined,
+              adapter.id,
+            ),
+          );
+        if (
+          expect.progress !== undefined &&
+          JSON.stringify(progress) !== JSON.stringify(expect.progress)
+        )
+          errors.push(
+            diagnostic(
+              "ADAPTER_CASE_INVALID",
+              "tests/cases.toml",
+              `Parser progress differs for ${target}`,
+              undefined,
+              adapter.id,
+            ),
+          );
+        if (
+          expect.success !== undefined &&
+          Boolean(
+            !matches &&
+            (parser.success_exit_codes as unknown[] | undefined)?.includes(
+              test.exit_code,
+            ),
+          ) !== expect.success
+        )
+          errors.push(
+            diagnostic(
+              "ADAPTER_CASE_INVALID",
+              "tests/cases.toml",
+              `Parser success differs for ${target}`,
+              undefined,
+              adapter.id,
+            ),
+          );
       }
     } else if (test.type === "resolve-artifacts") {
       const set = object(object(rules.artifacts)[target]);

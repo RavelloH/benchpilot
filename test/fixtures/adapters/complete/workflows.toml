@@ -6,3 +6,5 @@ stop_on_failure = true
 [[workflows.deploy.steps]]
 id = "run"
 uses = "action:run"
+with = { target = "${input.target}" }
+continue_on_error = true

@@ -16,6 +16,7 @@ tags = ["one", "two"]
 tool = "script"
 cwd = "project"
 args = ["build", "app", "--port", "COM1", "--verbose", "--tag", "one", "--tag", "two"]
+environment = { BUILD_TARGET = "app" }
 
 [[cases]]
 id = "parse-text"
@@ -32,13 +33,26 @@ result = { version = 3 }
 progress = [{ current = 2 }]
 
 [[cases]]
+id = "parse-json"
+type = "parse-output"
+platform = "linux"
+target = "json"
+stdout_fixture = "fixtures/output.json"
+exit_code = 0
+[cases.context]
+[cases.expect]
+success = true
+result = { name = "first" }
+
+[[cases]]
 id = "plan-deploy"
 type = "plan-workflow"
 platform = "linux"
 target = "deploy"
-[cases.context]
+[cases.context.input]
+target = "app"
 [cases.expect]
-steps = ["run"]
+steps = [{ id = "run", uses = "action:run", with = { target = "app" }, continue_on_error = true }]
 
 [[cases]]
 id = "plan-artifacts"

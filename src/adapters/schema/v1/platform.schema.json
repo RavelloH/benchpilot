@@ -11,25 +11,37 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "tools": { "type": "object" },
-        "discoveries": { "type": "object" },
-        "environments": { "type": "object" },
-        "devices": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "discovery": { "type": "object" },
-            "identity": { "type": "object" },
-            "connections": { "type": "object" },
-            "probe": { "type": "object" }
-          }
-        },
-        "actions": { "type": "object" },
-        "workflows": { "type": "object" },
-        "parsers": { "type": "object" },
-        "artifacts": { "type": "object" }
+        "tools": { "$ref": "#/$defs/ruleMap" },
+        "discoveries": { "$ref": "#/$defs/ruleMap" },
+        "environments": { "$ref": "#/$defs/ruleMap" },
+        "devices": { "$ref": "#/$defs/devices" },
+        "actions": { "$ref": "#/$defs/ruleMap" },
+        "workflows": { "$ref": "#/$defs/ruleMap" },
+        "parsers": { "$ref": "#/$defs/ruleMap" },
+        "artifacts": { "$ref": "#/$defs/ruleMap" }
       }
     }
   },
-  "$defs": {}
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+    "partialRule": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "ruleMap": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/id" },
+      "additionalProperties": { "$ref": "#/$defs/partialRule" }
+    },
+    "devices": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "discovery": { "$ref": "#/$defs/partialRule" },
+        "identity": { "$ref": "#/$defs/partialRule" },
+        "connections": { "$ref": "#/$defs/ruleMap" },
+        "probe": { "$ref": "#/$defs/partialRule" }
+      }
+    }
+  }
 }
