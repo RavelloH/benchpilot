@@ -1,0 +1,6 @@
+{
+  "file": "tools.toml",
+  "search": "command = \"${discovery.path}\"",
+  "replace": "command = \"${discovery.path}\"\ntool = \"script\"",
+  "code": "ADAPTER_SCHEMA_INVALID"
+}

@@ -1,0 +1,6 @@
+{
+  "file": "platforms/windows.toml",
+  "search": "[overrides]\n",
+  "replace": "[overrides]\n[overrides.capabilities.build]\nenabled = true\n",
+  "code": "ADAPTER_SCHEMA_INVALID"
+}

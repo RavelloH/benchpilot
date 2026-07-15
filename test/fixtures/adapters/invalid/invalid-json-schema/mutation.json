@@ -1,0 +1,6 @@
+{
+  "file": "schemas/inputs.schema.json",
+  "search": "https://json-schema.org/draft/2020-12/schema",
+  "replace": "https://example.invalid/not-a-json-schema",
+  "code": "ADAPTER_SCHEMA_INVALID"
+}

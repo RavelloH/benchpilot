@@ -1,0 +1,6 @@
+{
+  "file": "parsers.toml",
+  "search": "pattern = \"version=(?<value>\\\\d+)\"",
+  "replace": "pattern = \"\"",
+  "code": "ADAPTER_SCHEMA_INVALID"
+}

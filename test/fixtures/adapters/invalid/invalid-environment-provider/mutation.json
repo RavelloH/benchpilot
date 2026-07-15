@@ -1,0 +1,6 @@
+{
+  "file": "environments.toml",
+  "search": "script = \"${config.export_script}\"\n",
+  "replace": "",
+  "code": "ADAPTER_SCHEMA_INVALID"
+}

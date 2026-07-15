@@ -1,0 +1,6 @@
+{
+  "file": "tool-discovery.toml",
+  "search": "names = [\"python\"]\n",
+  "replace": "",
+  "code": "ADAPTER_SCHEMA_INVALID"
+}

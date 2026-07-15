@@ -20,6 +20,7 @@ const complete = join(
   "adapters",
   "complete",
 );
+const invalid = join(process.cwd(), "test", "fixtures", "adapters", "invalid");
 const temporaryAdapter = async () => {
   const root = await mkdtemp(join(tmpdir(), "benchpilot-adapter-"));
   const adapterRoot = join(root, "template");
@@ -63,6 +64,61 @@ test("complete adapter fixture validates, compiles, and exercises all case types
   assert.deepEqual(compiled.diagnostics, []);
   assert.equal(compiled.bundle.capabilityCatalog.version, 1);
   assert.deepEqual(await runCases(validation.adapter), []);
+});
+
+test("invalid declaration fixtures report stable diagnostics", async () => {
+  const fixtureNames = [
+    "unknown-action-field",
+    "invalid-tool-launch",
+    "invalid-discovery-candidate",
+    "invalid-environment-provider",
+    "invalid-parser-rule",
+    "unsafe-platform-capability-override",
+    "invalid-json-schema",
+    "invalid-case",
+  ];
+  for (const name of fixtureNames) {
+    const mutation = JSON.parse(
+      await readFile(join(invalid, name, "mutation.json"), "utf8"),
+    );
+    const root = await mkdtemp(join(tmpdir(), "benchpilot-invalid-adapter-"));
+    const adapterRoot = join(root, "adapter");
+    try {
+      await cp(complete, adapterRoot, { recursive: true });
+      const file = join(adapterRoot, mutation.file);
+      const source = await readFile(file, "utf8");
+      assert.notEqual(source.indexOf(mutation.search), -1, name);
+      await writeFile(file, source.replace(mutation.search, mutation.replace));
+      const result = await validateAdapter(adapterRoot);
+      assert.ok(
+        result.diagnostics.some((item) => item.code === mutation.code),
+        name,
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  }
+});
+
+test("template compilation boundary fixture requires an empty builtin index", async () => {
+  const fixture = JSON.parse(
+    await readFile(
+      join(invalid, "template-compiled-as-adapter", "mutation.json"),
+      "utf8",
+    ),
+  );
+  const output = await mkdtemp(join(tmpdir(), "benchpilot-adapter-output-"));
+  try {
+    const result = await compileAll(output);
+    assert.deepEqual(result.diagnostics, []);
+    assert.equal(
+      await readFile(join(output, "index.json"), "utf8"),
+      fixture.index,
+    );
+    await assert.rejects(readFile(join(output, fixture.absent), "utf8"));
+  } finally {
+    await rm(output, { recursive: true, force: true });
+  }
 });
 
 test("layout validation rejects missing and unexpected rule files", async () => {

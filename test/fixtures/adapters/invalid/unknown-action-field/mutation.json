@@ -1,0 +1,6 @@
+{
+  "file": "actions.toml",
+  "search": "overwrite = true",
+  "replace": "overwrite = true\nshell = true",
+  "code": "ADAPTER_SCHEMA_INVALID"
+}

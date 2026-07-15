@@ -280,15 +280,24 @@ export const validateSchemas = async (
         file,
         "Input and output schemas require $defs",
       );
-    if (!ajv.validateSchema(schema))
-      for (const error of ajv.errors ?? [])
-        schemaError(
-          diagnostics,
-          adapter,
-          file,
-          error.message ?? "Invalid JSON Schema",
-          error.instancePath,
-        );
+    try {
+      if (!ajv.validateSchema(schema))
+        for (const error of ajv.errors ?? [])
+          schemaError(
+            diagnostics,
+            adapter,
+            file,
+            error.message ?? "Invalid JSON Schema",
+            error.instancePath,
+          );
+    } catch (error) {
+      schemaError(
+        diagnostics,
+        adapter,
+        file,
+        `Schema meta-validation failed: ${(error as Error).message}`,
+      );
+    }
     try {
       ajv.compile(schema);
     } catch (error) {

@@ -2,3 +2,5 @@ schema = "benchpilot.adapter.platform"
 schema_version = 1
 platform = "macos"
 [overrides]
+[overrides.tools.python.launch]
+prefix_args = ["-E"]

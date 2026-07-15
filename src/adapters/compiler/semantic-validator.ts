@@ -501,7 +501,7 @@ export const validateSemantics = async (
   const visiting = new Set<string>(),
     visited = new Set<string>();
   const visit = (key: string) => {
-    if (visiting.has(key))
+    if (visiting.has(key)) {
       errors.push(
         diagnostic(
           "ADAPTER_TOOL_CYCLE",
@@ -511,6 +511,8 @@ export const validateSemantics = async (
           adapter.id,
         ),
       );
+      return;
+    }
     if (visited.has(key)) return;
     visiting.add(key);
     const target = obj(obj(tools[key]).launch).tool;

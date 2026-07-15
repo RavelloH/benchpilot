@@ -16,3 +16,9 @@ Format v1 is schema-closed: JSON Schema checks fixed structure and primitive
 types, while semantic validation checks cross-file references, tool cycles,
 capability safety and template paths. `_template` is validated as documentation,
 but is never compiled or published as an adapter bundle.
+
+`test/fixtures/adapters/complete` is a separate, executable conformance fixture:
+it exercises every v1 declaration category and all case-runner types, but is not
+a builtin adapter and is never published. The existing TypeScript Demo remains
+the CLI and package-test default until the declarative runtime is implemented.
+Neither that runtime nor an ESP-IDF adapter is part of Format v1.

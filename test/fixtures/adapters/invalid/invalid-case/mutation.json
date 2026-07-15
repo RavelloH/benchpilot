@@ -1,0 +1,6 @@
+{
+  "file": "tests/cases.toml",
+  "search": "args = [\"build\", \"app\", \"--port\", \"COM1\", \"--verbose\", \"--tag\", \"one\", \"--tag\", \"two\"]",
+  "replace": "args = [\"build\", \"app\", \"--port\", \"COM1\", \"--verbose\", \"--tag\", \"one\", \"--tag\", \"two\"]\nunexpected = true",
+  "code": "ADAPTER_SCHEMA_INVALID"
+}
