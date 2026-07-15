@@ -34,6 +34,17 @@ export interface FileGuardOptions {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/** A competing holder may have created its exclusive file but not finished its
+ * first write yet. Treat that brief initialization window as busy. */
+async function readGuard(file: string): Promise<GuardRecord | undefined> {
+  try {
+    return await readJson<GuardRecord>(file);
+  } catch (error) {
+    if (error instanceof SyntaxError) return undefined;
+    throw error;
+  }
+}
+
 export function guardLiveness(
   record: GuardRecord,
   now = Date.now(),
@@ -81,12 +92,12 @@ async function recoverStaleGuard(file: string, expected: GuardRecord) {
     throw error;
   }
   try {
-    const current = await readJson<GuardRecord>(file);
+    const current = await readGuard(file);
     if (current?.token === expected.token && guardLiveness(current) === "stale")
       await fs.unlink(file);
     return true;
   } finally {
-    const currentRecovery = await readJson<GuardRecord>(recovery);
+    const currentRecovery = await readGuard(recovery);
     if (currentRecovery?.token === record.token) await fs.unlink(recovery);
   }
 }
@@ -117,13 +128,13 @@ export async function acquireFileGuard(
       return {
         record,
         async release() {
-          const current = await readJson<GuardRecord>(file);
+          const current = await readGuard(file);
           if (current?.token === record.token) await fs.unlink(file);
         },
       };
     } catch (error: unknown) {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-      const current = await readJson<GuardRecord>(file);
+      const current = await readGuard(file);
       if (current && guardLiveness(current) === "stale") {
         await recoverStaleGuard(file, current);
         continue;
