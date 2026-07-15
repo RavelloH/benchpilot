@@ -5,6 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 import {
   compileAdapter,
+  compileAll,
   validateAdapter,
 } from "../dist/adapters/compiler/compiler.js";
 import { mergePlatform } from "../dist/adapters/compiler/platform-merger.js";
@@ -31,6 +32,18 @@ test("the adapter template validates and compiles deterministically", async () =
     ]);
   } finally {
     await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("bulk compilation excludes the template and writes an empty index", async () => {
+  const output = await mkdtemp(join(tmpdir(), "benchpilot-adapter-output-"));
+  try {
+    const result = await compileAll(output);
+    assert.deepEqual(result.diagnostics, []);
+    assert.equal(await readFile(join(output, "index.json"), "utf8"), "[]\n");
+    await assert.rejects(readFile(join(output, "template.json"), "utf8"));
+  } finally {
+    await rm(output, { recursive: true, force: true });
   }
 });
 
