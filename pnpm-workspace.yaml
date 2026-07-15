@@ -1,2 +1,5 @@
+allowBuilds:
+  esbuild: true
+
 minimumReleaseAgeExclude:
   - rlog-js@3.0.0
