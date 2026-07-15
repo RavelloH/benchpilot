@@ -1,5 +1,7 @@
 # CLI
 
+Global color flags use a positive internal value: `--color` enables color and `--no-color` disables it. Lock inspection uses `benchpilot lock <id> show`; clearing a quarantined Lock requires `--dangerously-clear-quarantined-lock`.
+
 `benchpilot device <instance> <capability> --help` derives its safety and schema
 details from the resolved capability. `--jsonl` is an event stream rather than a
 mix of logs and result objects; each emitted line uses the `benchpilot.event`

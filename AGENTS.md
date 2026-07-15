@@ -13,6 +13,8 @@
   do not document it as a requirement for npm package users.
 - Preserve the operation cleanup order: capability cleanup, lock lease stop, approval
   finalization, lock release, log close, then Run finalization.
+- Critical cleanup failures or timeouts that may retain physical access must quarantine,
+  rather than release, the Lock.
 
 ## Commit messages
 
