@@ -24,14 +24,11 @@ import {
 } from "./help-renderer.js";
 import { parse } from "./parser.js";
 import { editConfig } from "./commands/config-editor.js";
+import { handleDeviceCommand } from "./commands/device.js";
 import { initProject } from "./commands/init.js";
 import { handleRuntimeCommand } from "./commands/runtime.js";
 import { systemOperation } from "./commands/system.js";
-import {
-  capabilityInput,
-  commandOptionFlags,
-  optionEnabled,
-} from "./option-parser.js";
+import { commandOptionFlags } from "./option-parser.js";
 import { write } from "./output-renderer.js";
 
 const version = "0.0.0";
@@ -292,74 +289,17 @@ export async function main(adapters: Adapter[] = [demoAdapter]) {
         return;
       }
     }
-    if (parts[0] === "device" && parts[1]) {
-      const rawDevice = (config.value.devices as Json | undefined)?.[parts[1]];
-      if (!rawDevice || typeof rawDevice !== "object")
-        fail("DEVICE_NOT_FOUND", 3, `Device not found: ${parts[1]}`);
-      const adapter = registry.get(String((rawDevice as Json).adapter));
-      const runtime = await registry.createDevice(
-        adapter,
-        parts[1],
-        rawDevice as Json,
-        config.value,
-      );
-      if (parts.length === 2) {
-        stdout.write(
-          `benchpilot device ${parts[1]} — ${adapter.summary}\n\nCommands:\n${runtime
-            .capabilities()
-            .map((x) => `  ${x.id.padEnd(17)} ${x.summary}`)
-            .join("\n")}\n`,
-        );
-        return;
-      }
-      const capability = parts[2];
-      if (!runtime.capabilities().some((item) => item.id === capability))
-        fail(
-          "UNSUPPORTED_CAPABILITY",
-          3,
-          `Device ${parts[1]} does not support ${capability}.`,
-        );
-      const definition = runtime
-        .capabilities()
-        .find((item) => item.id === capability)!;
-      if (flags.help) {
-        const help = {
-          schema: "benchpilot.help",
-          version: 1,
-          path: parts,
-          summary: definition.summary,
-          description: definition.description || definition.summary,
-          options: definition.options || [],
-          inputSchema: definition.inputSchema?.describe() || { type: "object" },
-          outputSchema: definition.outputSchema?.describe() || {
-            type: "object",
-          },
-          safety: definition.safety,
-        };
-        write(help, flags, `${definition.id} — ${definition.summary}\n`);
-        return;
-      }
-      const input = capabilityInput(
-        rawOptions,
-        definition.options || [],
-        definition.safety.flag,
-      );
-      if (definition.safety.mode !== "normal" && definition.safety.flag)
-        flags[definition.safety.flag] = optionEnabled(
-          rawOptions,
-          definition.safety.flag,
-        );
-      const result = await runner.execute(parts[1], capability, input);
-      const r = result as Json;
-      write(
-        result,
+    if (
+      await handleDeviceCommand({
+        parts,
         flags,
-        r.dryRun
-          ? `${capability} dry-run plan created.`
-          : `${capability} completed${r.runId ? ` (run ${String(r.runId)})` : ""}.`,
-      );
+        rawOptions,
+        registry,
+        runner,
+        config,
+      })
+    )
       return;
-    }
     if (parts[0] === "systems" && parts[1] === "list") {
       write(
         {
