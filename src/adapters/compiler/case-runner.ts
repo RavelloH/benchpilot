@@ -158,9 +158,27 @@ export const runCases = async (
       }
     } else if (test.type === "plan-workflow") {
       const flow = object(object(rules.workflows)[target]);
-      const steps = (Array.isArray(flow.steps) ? flow.steps : [])
+      const plans = (Array.isArray(flow.steps) ? flow.steps : [])
         .filter((step) => active(object(step).when, context))
-        .map((step) => object(step).id);
+        .map((step) => {
+          const value = object(step);
+          return {
+            id: value.id,
+            uses: value.uses,
+            with: Object.fromEntries(
+              Object.entries(object(value.with)).map(([key, item]) => [
+                key,
+                render(item, context),
+              ]),
+            ),
+            continue_on_error: value.continue_on_error === true,
+          };
+        });
+      const steps =
+        Array.isArray(expect.steps) &&
+        expect.steps.every((item) => typeof item === "string")
+          ? plans.map((plan) => plan.id)
+          : plans;
       if (JSON.stringify(steps) !== JSON.stringify(expect.steps))
         errors.push(
           diagnostic(
@@ -363,12 +381,28 @@ export const runCases = async (
             adapter.id,
           ),
         );
-      for (const entry of Array.isArray(set.entries) ? set.entries : []) {
-        const path = render(object(entry).path, context);
-        if (
-          typeof path === "string" &&
-          (path.startsWith("/") || path.split(/[\\/]/).includes(".."))
-        )
+      const base = String(render(set.base, context) ?? "");
+      const plans = (Array.isArray(set.entries) ? set.entries : []).map(
+        (entry) => {
+          const value = object(entry);
+          const relative = value.path ?? value.glob;
+          return {
+            id: value.id,
+            path:
+              relative === undefined
+                ? undefined
+                : `${base}/${String(render(relative, context) ?? "")}`.replace(
+                    /\\/g,
+                    "/",
+                  ),
+            required: value.required,
+            multiple: value.multiple,
+          };
+        },
+      );
+      for (const entry of plans) {
+        const path = entry.path;
+        if (typeof path === "string" && path.split(/[\\/]/).includes(".."))
           errors.push(
             diagnostic(
               "ADAPTER_CASE_INVALID",
@@ -379,6 +413,19 @@ export const runCases = async (
             ),
           );
       }
+      if (
+        expect.entries !== undefined &&
+        JSON.stringify(plans) !== JSON.stringify(expect.entries)
+      )
+        errors.push(
+          diagnostic(
+            "ADAPTER_CASE_INVALID",
+            "tests/cases.toml",
+            `Artifact plan differs for ${target}`,
+            undefined,
+            adapter.id,
+          ),
+        );
     } else
       errors.push(
         diagnostic(
