@@ -33,6 +33,8 @@ export type ValidationKind = "config" | "device" | "input" | "output";
 
 export class AdapterDataValidator {
   private readonly ajv: Ajv;
+  private readonly validators = new Map<string, Validator>();
+  private readonly definitionRoots = new Set<string>();
 
   constructor(private readonly bundle: Readonly<CompiledAdapterBundleV1>) {
     this.ajv = new Ajv2020({
@@ -47,12 +49,12 @@ export class AdapterDataValidator {
 
   validate(
     kind: ValidationKind,
-    value: JsonObject,
+    value: unknown,
     capabilityId?: string,
     definition?: string,
   ): JsonObject {
     const validator = this.compile(kind, definition);
-    if (validator(value)) return value;
+    if (validator(value)) return value as JsonObject;
     const error = validator.errors?.[0];
     const code: Record<ValidationKind, AdapterRuntimeErrorCode> = {
       config: "ADAPTER_CONFIG_INVALID",
@@ -75,6 +77,9 @@ export class AdapterDataValidator {
   }
 
   private compile(kind: ValidationKind, definition?: string): Validator {
+    const cacheKey = `${kind}:${definition ?? ""}`;
+    const cached = this.validators.get(cacheKey);
+    if (cached) return cached;
     const schemaName =
       kind === "input" ? "inputs" : kind === "output" ? "outputs" : kind;
     const schema = this.bundle.schemas[schemaName];
@@ -83,17 +88,26 @@ export class AdapterDataValidator {
         "ADAPTER_BUNDLE_INVALID",
         `Bundle has no ${schemaName} schema.`,
       );
-    if (!definition) return this.ajv.compile(schema);
+    if (!definition) {
+      const validator = this.ajv.compile(schema);
+      this.validators.set(cacheKey, validator);
+      return validator;
+    }
     const schemaId =
       typeof schema.$id === "string"
         ? schema.$id
         : `benchpilot://adapter/${this.bundle.id}/${schemaName}`;
-    const rootSchema = { ...schema, $id: schemaId };
-    this.ajv.compile(rootSchema);
-    return this.ajv.compile({
+    if (!this.definitionRoots.has(schemaName)) {
+      const rootSchema = { ...schema, $id: schemaId };
+      this.ajv.compile(rootSchema);
+      this.definitionRoots.add(schemaName);
+    }
+    const validator = this.ajv.compile({
       $schema: "https://json-schema.org/draft/2020-12/schema",
       $ref: `${schemaId}#/$defs/${escapePointer(definition)}`,
     });
+    this.validators.set(cacheKey, validator);
+    return validator;
   }
 }
 

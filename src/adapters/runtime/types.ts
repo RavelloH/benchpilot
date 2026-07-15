@@ -30,6 +30,7 @@ export interface AdapterRuntimeContext {
   home: string;
   temp: string;
   env: NodeJS.ProcessEnv;
+  run?: { dir: string; id: string };
   tool: Record<string, JsonObject>;
   discovery: Record<string, JsonObject>;
   environment: Record<string, NodeJS.ProcessEnv>;

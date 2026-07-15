@@ -68,16 +68,19 @@ export class OperationRunner {
         `Device ${instance} does not support ${capabilityId}.`,
       );
     const capability = cap!;
-    const definedOptions = capability.options || [];
-    const allowedOptions = new Set(definedOptions.map((option) => option.name));
-    for (const name of Object.keys(input))
-      if (!allowedOptions.has(name))
-        fail(
-          "INVALID_CAPABILITY_INPUT",
-          2,
-          `Unknown option for ${capability.id}: ${name}.`,
-        );
-    for (const option of definedOptions) {
+    const definedOptions = capability.options;
+    const allowedOptions = new Set(
+      (definedOptions ?? []).map((option) => option.name),
+    );
+    if (definedOptions)
+      for (const name of Object.keys(input))
+        if (!allowedOptions.has(name))
+          fail(
+            "INVALID_CAPABILITY_INPUT",
+            2,
+            `Unknown option for ${capability.id}: ${name}.`,
+          );
+    for (const option of definedOptions ?? []) {
       if (option.required && input[option.name] === undefined)
         fail(
           "INVALID_CAPABILITY_INPUT",
@@ -175,11 +178,25 @@ export class OperationRunner {
           nodeVersion: process.version,
         })
       : undefined;
-    if (run)
-      await atomicJson(
-        path.join(run.dir, "resolved-config.json"),
-        redactResolvedConfig(this.s.config.value),
+    if (run) {
+      const snapshot = redactResolvedConfig(this.s.config.value);
+      const adapterConfig = this.s.registry.configFor(
+        adapter,
+        this.s.config.value,
       );
+      if (adapter.redactConfig && object(snapshot.adapters))
+        (snapshot.adapters as Json)[adapter.id] =
+          adapter.redactConfig(adapterConfig);
+      if (adapter.redactDeviceConfig && object(snapshot.devices)) {
+        const device = { ...d };
+        delete device.adapter;
+        (snapshot.devices as Json)[instance] = {
+          adapter: d.adapter,
+          ...adapter.redactDeviceConfig(device),
+        };
+      }
+      await atomicJson(path.join(run.dir, "resolved-config.json"), snapshot);
+    }
     const logger = new Rlog({
       logFilePath: run && path.join(run.dir, "benchpilot.log"),
       jsonlFilePath: run && path.join(run.dir, "events.jsonl"),
@@ -301,6 +318,7 @@ export class OperationRunner {
           logger,
           run,
           stateRoot: this.s.paths.stateRoot(),
+          project: this.s.project,
           config: this.s.config.value,
           device: runtime,
           registerCleanup(name, handler, options) {

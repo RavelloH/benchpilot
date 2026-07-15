@@ -1,7 +1,10 @@
 import { cp, mkdir, realpath, stat } from "node:fs/promises";
 import { glob } from "node:fs/promises";
 import path from "node:path";
-import type { ArtifactRegistry } from "../../../core/artifacts/artifact-registry.js";
+import type {
+  ArtifactRecord,
+  ArtifactRegistration,
+} from "../../../core/artifacts/types.js";
 import type { Run } from "../../../core/runs/run-manager.js";
 import { AdapterRuntimeError } from "../errors.js";
 import { planArtifacts, type ArtifactPlan } from "./artifacts.js";
@@ -12,10 +15,11 @@ const inside = (root: string, candidate: string) => {
   return !relative.startsWith("..") && !path.isAbsolute(relative);
 };
 
-const sourcesFor = async (plan: ArtifactPlan) => {
-  if ("path" in plan) return [plan.path];
+const sourcesFor = async (plan: ArtifactPlan, baseRoot: string) => {
+  if ("path" in plan) return [path.resolve(baseRoot, plan.path)];
   const matches: string[] = [];
-  for await (const match of glob(plan.glob)) matches.push(path.resolve(match));
+  for await (const match of glob(path.resolve(baseRoot, plan.glob)))
+    matches.push(path.resolve(match));
   return matches.sort((left, right) => left.localeCompare(right));
 };
 
@@ -23,8 +27,11 @@ export const collectArtifacts = async (
   set: RuleObject,
   context: RuleObject,
   run: Run,
-  registry: ArtifactRegistry,
+  registry: {
+    register(record: ArtifactRegistration): Promise<ArtifactRecord>;
+  },
   allowedRoots: string[],
+  baseRoot = process.cwd(),
 ) => {
   const { plans, unsafe } = planArtifacts(set, context);
   if (unsafe)
@@ -36,7 +43,7 @@ export const collectArtifacts = async (
   await mkdir(targetRoot, { recursive: true });
   const artifacts = [];
   for (const plan of plans) {
-    const matches = await sourcesFor(plan);
+    const matches = await sourcesFor(plan, baseRoot);
     if (!matches.length && plan.required)
       throw new AdapterRuntimeError(
         "ADAPTER_ARTIFACT_MISSING",

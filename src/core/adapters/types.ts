@@ -18,6 +18,8 @@ export interface Adapter {
   description?: string;
   configSchema: RuntimeSchema<Json>;
   deviceConfigSchema?: RuntimeSchema<Json>;
+  redactConfig?(config: Json): Json;
+  redactDeviceConfig?(config: Json): Json;
   discover(context: AdapterContext): Promise<Json[]>;
   doctor(context: AdapterContext): Promise<Json[]>;
   createDevice(

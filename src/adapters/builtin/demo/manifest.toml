@@ -1,0 +1,12 @@
+schema = "benchpilot.adapter.manifest"
+schema_version = 1
+id = "demo"
+display_name = "BenchPilot Demo"
+adapter_version = "1.0.0"
+vendor = "BenchPilot"
+description = "A declarative, software-only adapter for exercising BenchPilot."
+capability_catalog_version = 1
+minimum_benchpilot_version = "0.1.0"
+status = "stable"
+deprecated = false
+tags = ["demo", "simulated"]

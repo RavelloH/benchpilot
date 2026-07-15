@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "benchpilot://adapter/demo/config",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "connected": { "type": "boolean", "default": true },
+    "device_id": { "type": "string", "default": "demo-device-01" },
+    "operation_delay_ms": { "type": "integer", "minimum": 0, "default": 50 },
+    "fail_stage": { "type": "string", "default": "" }
+  }
+}

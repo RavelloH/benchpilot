@@ -1,0 +1,32 @@
+schema = "benchpilot.adapter.parsers"
+schema_version = 1
+[parsers.kind]
+mode = "line"
+encoding = "utf8"
+strip_ansi = true
+success_exit_codes = [0]
+[[parsers.kind.extract]]
+id = "kind"
+source = "stdout"
+type = "regex"
+pattern = "kind=(?<kind>[a-z]+)"
+target = "kind"
+group = "kind"
+cast = "string"
+required = true
+[[parsers.kind.extract]]
+id = "telemetry"
+source = "stdout"
+type = "regex"
+pattern = "demo telemetry=(?<telemetry>\\d+)"
+target = "telemetry"
+group = "telemetry"
+cast = "integer"
+required = false
+[[parsers.kind.progress]]
+id = "progress"
+source = "stdout"
+pattern = "progress=(?<current>\\d+)"
+event = "demo.progress"
+[parsers.kind.progress.fields]
+current = "integer"

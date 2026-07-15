@@ -33,3 +33,9 @@ Every progress match retains its declared event and puts captured fields in
 
 Matches are ordered by parser declaration order, then by text match order for
 each rule.
+
+In the production runtime, Process Runner chunks are decoded with
+`TextDecoder` and progress events are emitted as output arrives, before process
+exit. Final parser validation still uses bounded stdout and stderr buffers, so
+required extracts, error priority and success exit codes have the same shared
+semantics as declaration cases.

@@ -1,0 +1,61 @@
+schema = "benchpilot.adapter.actions"
+schema_version = 1
+[actions.info]
+type = "process"
+tool = "node"
+cwd = "${project.root}"
+arguments = [
+  { kind = "literal", value = "-e" },
+  { kind = "literal", value = "console.log('kind=info')" }
+]
+parser = "kind"
+[actions.status]
+type = "process"
+tool = "node"
+cwd = "${project.root}"
+arguments = [
+  { kind = "literal", value = "-e" },
+  { kind = "literal", value = "console.log('kind=status')" }
+]
+parser = "kind"
+[actions.build]
+type = "process"
+tool = "node"
+cwd = "${run.dir}"
+env = { BENCHPILOT_DEMO_DELAY_MS = "${config.operation_delay_ms}", BENCHPILOT_DEMO_FAIL_STAGE = "${config.fail_stage}" }
+arguments = [
+  { kind = "literal", value = "-e" },
+  { kind = "literal", value = "const fs=require('node:fs'); const d=Number(process.env.BENCHPILOT_DEMO_DELAY_MS||0); console.log('progress=1'); setTimeout(()=>{ if(process.env.BENCHPILOT_DEMO_FAIL_STAGE==='build') process.exit(1); fs.writeFileSync('demo-firmware.bin','benchpilot demo firmware\\n'); console.log('progress=2'); console.log('kind=build'); },d)" }
+]
+parser = "kind"
+artifact_set = "build"
+[actions.flash]
+type = "process"
+tool = "node"
+cwd = "${run.dir}"
+env = { BENCHPILOT_DEMO_DELAY_MS = "${config.operation_delay_ms}", BENCHPILOT_DEMO_FAIL_STAGE = "${config.fail_stage}" }
+arguments = [
+  { kind = "literal", value = "-e" },
+  { kind = "literal", value = "const d=Number(process.env.BENCHPILOT_DEMO_DELAY_MS||0); console.log('progress=1'); setTimeout(()=>{ if(process.env.BENCHPILOT_DEMO_FAIL_STAGE==='flash') process.exit(1); console.log('progress=2'); console.log('kind=flash'); },d)" }
+]
+parser = "kind"
+[actions.reset]
+type = "process"
+tool = "node"
+cwd = "${run.dir}"
+env = { BENCHPILOT_DEMO_DELAY_MS = "${config.operation_delay_ms}", BENCHPILOT_DEMO_FAIL_STAGE = "${config.fail_stage}" }
+arguments = [
+  { kind = "literal", value = "-e" },
+  { kind = "literal", value = "const d=Number(process.env.BENCHPILOT_DEMO_DELAY_MS||0); setTimeout(()=>{ if(process.env.BENCHPILOT_DEMO_FAIL_STAGE==='reset') process.exit(1); console.log('kind=reset'); },d)" }
+]
+parser = "kind"
+[actions.capture]
+type = "process"
+tool = "node"
+cwd = "${run.dir}"
+env = { BENCHPILOT_DEMO_DELAY_MS = "${config.operation_delay_ms}", BENCHPILOT_DEMO_FAIL_STAGE = "${config.fail_stage}" }
+arguments = [
+  { kind = "literal", value = "-e" },
+  { kind = "literal", value = "const d=Number(process.env.BENCHPILOT_DEMO_DELAY_MS||0); console.log('\\u001b[32mdemo boot handshake\\u001b[0m'); setTimeout(()=>{ if(process.env.BENCHPILOT_DEMO_FAIL_STAGE==='capture') process.exit(1); console.log('demo telemetry=42'); console.log('kind=capture'); },d)" }
+]
+parser = "kind"

@@ -16,3 +16,8 @@ Platform overlays may modify tools, discovery, environments, devices, actions,
 workflows, parsers and artifacts. They cannot modify the manifest, schemas,
 catalog, or capability definitions; platform capability support is declared
 only in `capabilities.toml`.
+
+Runtime templates never evaluate expressions or code. In execution-critical
+fields such as process arguments, working directories, tool paths, environment
+variables and capture scripts, a missing `${namespace.path}` fails with
+`ADAPTER_TEMPLATE_VALUE_MISSING`; it is not converted to an empty string.

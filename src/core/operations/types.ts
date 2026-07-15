@@ -17,6 +17,7 @@ export interface OperationContext {
   logger: InstanceType<typeof Rlog>;
   run?: Run;
   stateRoot: string;
+  project?: { root: string; config: string };
   config: Json;
   device: DeviceRuntime;
   registerCleanup(

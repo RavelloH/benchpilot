@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "benchpilot://adapter/demo/device",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "device_id": { "type": "string", "default": "demo-device-01" },
+    "connected": { "type": "boolean", "default": true }
+  }
+}

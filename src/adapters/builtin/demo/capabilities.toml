@@ -1,0 +1,179 @@
+schema = "benchpilot.adapter.capabilities"
+schema_version = 1
+catalog_version = 1
+
+[capabilities.info]
+enabled = true
+handler = "action:info"
+input_schema = "empty"
+output_schema = "info"
+creates_run = false
+timeout = "10s"
+lock = "none"
+[capabilities.info.safety]
+mode = "normal"
+[capabilities.info.platforms]
+windows = true
+linux = true
+macos = true
+
+[capabilities.status]
+enabled = true
+handler = "action:status"
+input_schema = "empty"
+output_schema = "status"
+creates_run = false
+timeout = "10s"
+lock = "none"
+[capabilities.status.safety]
+mode = "normal"
+[capabilities.status.platforms]
+windows = true
+linux = true
+macos = true
+
+[capabilities.build]
+enabled = true
+handler = "action:build"
+input_schema = "build"
+output_schema = "build"
+creates_run = true
+timeout = "30s"
+lock = "none"
+[capabilities.build.safety]
+mode = "normal"
+[capabilities.build.platforms]
+windows = true
+linux = true
+macos = true
+
+[capabilities.flash]
+enabled = true
+handler = "action:flash"
+input_schema = "empty"
+output_schema = "flash"
+creates_run = true
+timeout = "30s"
+lock = "device"
+[capabilities.flash.safety]
+mode = "normal"
+[capabilities.flash.platforms]
+windows = true
+linux = true
+macos = true
+
+[capabilities.reset]
+enabled = true
+handler = "action:reset"
+input_schema = "empty"
+output_schema = "reset"
+creates_run = true
+timeout = "30s"
+lock = "device"
+[capabilities.reset.safety]
+mode = "normal"
+[capabilities.reset.platforms]
+windows = true
+linux = true
+macos = true
+
+[capabilities.capture]
+enabled = true
+handler = "action:capture"
+input_schema = "empty"
+output_schema = "capture"
+creates_run = true
+timeout = "30s"
+lock = "none"
+[capabilities.capture.safety]
+mode = "normal"
+[capabilities.capture.platforms]
+windows = true
+linux = true
+macos = true
+
+[capabilities.deploy]
+enabled = true
+handler = "workflow:deploy"
+input_schema = "empty"
+output_schema = "deploy"
+creates_run = true
+timeout = "1m"
+lock = "device"
+[capabilities.deploy.safety]
+mode = "normal"
+[capabilities.deploy.platforms]
+windows = true
+linux = true
+macos = true
+
+[capabilities.clean]
+enabled = false
+reason = "Not implemented by the declarative demo."
+[capabilities.clean.platforms]
+windows = false
+linux = false
+macos = false
+[capabilities.fullclean]
+enabled = false
+reason = "Not implemented by the declarative demo."
+[capabilities.fullclean.platforms]
+windows = false
+linux = false
+macos = false
+[capabilities.size]
+enabled = false
+reason = "Not implemented by the declarative demo."
+[capabilities.size.platforms]
+windows = false
+linux = false
+macos = false
+[capabilities.run]
+enabled = false
+reason = "Not implemented by the declarative demo."
+[capabilities.run.platforms]
+windows = false
+linux = false
+macos = false
+[capabilities.stop]
+enabled = false
+reason = "Not implemented by the declarative demo."
+[capabilities.stop.platforms]
+windows = false
+linux = false
+macos = false
+[capabilities.logs]
+enabled = false
+reason = "Not implemented by the declarative demo."
+[capabilities.logs.platforms]
+windows = false
+linux = false
+macos = false
+[capabilities.sync]
+enabled = false
+reason = "Not implemented by the declarative demo."
+[capabilities.sync.platforms]
+windows = false
+linux = false
+macos = false
+[capabilities.test]
+enabled = false
+reason = "Not implemented by the declarative demo."
+[capabilities.test.platforms]
+windows = false
+linux = false
+macos = false
+[capabilities.selftest]
+enabled = false
+reason = "Not implemented by the declarative demo."
+[capabilities.selftest.platforms]
+windows = false
+linux = false
+macos = false
+[capabilities.erase]
+enabled = false
+reason = "Not implemented by the declarative demo."
+[capabilities.erase.platforms]
+windows = false
+linux = false
+macos = false

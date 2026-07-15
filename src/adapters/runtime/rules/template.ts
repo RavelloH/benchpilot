@@ -22,6 +22,32 @@ export const renderTemplate = (
   );
 };
 
+/** Renders an execution-critical template without erasing missing data. */
+export const renderRequiredTemplate = (
+  value: unknown,
+  context: RuleObject,
+  field = "template",
+): unknown => {
+  if (typeof value !== "string") return value;
+  const resolve = (path: string) => {
+    const resolved = lookup(context, path);
+    if (resolved === undefined)
+      throw new AdapterRuntimeError(
+        "ADAPTER_TEMPLATE_VALUE_MISSING",
+        `Missing ${field} template value: ${path}`,
+        false,
+        [],
+        { field, path },
+      );
+    return resolved;
+  };
+  const exact = /^\$\{([^}]+)\}$/.exec(value);
+  if (exact) return resolve(exact[1]);
+  return value.replace(/\$\{([^}]+)\}/g, (_match, path: string) =>
+    String(resolve(path)),
+  );
+};
+
 export const renderDeep = (value: unknown, context: RuleObject): unknown => {
   if (Array.isArray(value))
     return value.map((item) => renderDeep(item, context));
@@ -33,6 +59,23 @@ export const renderDeep = (value: unknown, context: RuleObject): unknown => {
       ]),
     );
   return renderTemplate(value, context);
+};
+
+export const renderRequiredDeep = (
+  value: unknown,
+  context: RuleObject,
+  field = "template",
+): unknown => {
+  if (Array.isArray(value))
+    return value.map((item) => renderRequiredDeep(item, context, field));
+  if (value && typeof value === "object")
+    return Object.fromEntries(
+      Object.entries(value as RuleObject).map(([key, item]) => [
+        key,
+        renderRequiredDeep(item, context, field),
+      ]),
+    );
+  return renderRequiredTemplate(value, context, field);
 };
 
 export const evaluateCondition = (when: unknown, context: RuleObject) => {
@@ -66,3 +109,4 @@ export const evaluateCondition = (when: unknown, context: RuleObject) => {
       return false;
   }
 };
+import { AdapterRuntimeError } from "../errors.js";

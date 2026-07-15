@@ -2,7 +2,7 @@
 
 Core owns physical-resource safety. Capabilities execute through the Operation Runner, which acquires Locks, claims approvals, records cleanup, and finalizes the Run. Cleanup runs before lock-lease stop, approval finalization, Lock release or quarantine, log close, and Run finalization. Adapters are explicit registrations and receive validated configuration services rather than selecting behavior by board model in Core.
 
-The CLI resolves command input and configuration, then selects an adapter through `AdapterRegistry`. A runtime exposes declarative capabilities; `OperationRunner` applies safety, creates the Run, configures RLog, acquires a physical-identity lock, executes with cancellation/timeout, persists a result, and releases resources in `finally`. A lock ownership loss aborts the same signal supplied to the Capability. Demo code is isolated under `src/adapters/demo`.
+The CLI resolves command input and configuration, then selects an adapter through `AdapterRegistry`. Built-in adapters are loaded from compiled Bundle v1 files, and the declarative runtime exposes their capabilities. `OperationRunner` applies safety, creates the Run, configures RLog, acquires a physical-identity lock, executes with cancellation/timeout, persists a result, and releases resources in `finally`. A lock ownership loss aborts the same signal supplied to the Capability.
 
 Core operations now run registered cleanup handlers before stopping the `LockLease`
 and releasing the physical-resource lock. Runs are finalized only after critical

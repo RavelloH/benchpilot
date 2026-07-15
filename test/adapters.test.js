@@ -78,14 +78,19 @@ test("catalog content contributes to bundle hashes without absolute paths", asyn
   }
 });
 
-test("bulk compilation excludes the template and writes an empty index", async () => {
+test("bulk compilation excludes the template and writes the builtin index", async () => {
   const output = await mkdtemp(join(tmpdir(), "benchpilot-adapter-output-"));
   try {
     await writeFile(join(output, "stale.json"), "stale\n");
     await writeFile(join(output, "keep.txt"), "keep\n");
     const result = await compileAll(output);
     assert.deepEqual(result.diagnostics, []);
-    assert.equal(await readFile(join(output, "index.json"), "utf8"), "[]\n");
+    assert.deepEqual(
+      JSON.parse(await readFile(join(output, "index.json"), "utf8")).map(
+        (entry) => entry.id,
+      ),
+      ["demo"],
+    );
     await assert.rejects(readFile(join(output, "template.json"), "utf8"));
     await assert.rejects(readFile(join(output, "stale.json"), "utf8"));
     assert.equal(await readFile(join(output, "keep.txt"), "utf8"), "keep\n");
@@ -363,7 +368,7 @@ test("invalid declaration fixtures report stable diagnostics", async () => {
   }
 });
 
-test("template compilation boundary fixture requires an empty builtin index", async () => {
+test("template compilation boundary fixture excludes the template bundle", async () => {
   const fixture = JSON.parse(
     await readFile(
       join(invalid, "template-compiled-as-adapter", "mutation.json"),
@@ -374,9 +379,11 @@ test("template compilation boundary fixture requires an empty builtin index", as
   try {
     const result = await compileAll(output);
     assert.deepEqual(result.diagnostics, []);
-    assert.equal(
-      await readFile(join(output, "index.json"), "utf8"),
-      fixture.index,
+    assert.deepEqual(
+      JSON.parse(await readFile(join(output, "index.json"), "utf8")).map(
+        (entry) => entry.id,
+      ),
+      ["demo"],
     );
     await assert.rejects(readFile(join(output, fixture.absent), "utf8"));
   } finally {

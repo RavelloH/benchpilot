@@ -1,0 +1,18 @@
+schema = "benchpilot.adapter.workflows"
+schema_version = 1
+[workflows]
+[workflows.deploy]
+timeout = "1m"
+stop_on_failure = true
+[[workflows.deploy.steps]]
+id = "build"
+uses = "action:build"
+with = {}
+[[workflows.deploy.steps]]
+id = "flash"
+uses = "action:flash"
+with = {}
+[[workflows.deploy.steps]]
+id = "reset"
+uses = "action:reset"
+with = {}

@@ -12,7 +12,7 @@ import {
   OperationRunner,
   PathService,
 } from "../core.js";
-import { demoAdapter } from "../adapters/demo/adapter.js";
+import { loadBuiltinAdapters } from "../adapters/runtime/builtin-adapters.js";
 import { createBenchPilotApplication } from "./application.js";
 import {
   brief,
@@ -32,7 +32,7 @@ import { commandOptionFlags } from "./option-parser.js";
 import { write } from "./output-renderer.js";
 
 const version = "0.0.0";
-export async function main(adapters: Adapter[] = [demoAdapter]) {
+export async function main(adapters?: Adapter[]) {
   let parsed;
   try {
     parsed = parse(process.argv.slice(2));
@@ -85,7 +85,8 @@ export async function main(adapters: Adapter[] = [demoAdapter]) {
       project,
       flags.config as string | undefined,
     );
-    const { registry } = createBenchPilotApplication(adapters);
+    const declared = adapters ?? (await loadBuiltinAdapters());
+    const { registry } = createBenchPilotApplication(declared);
     const runner = new OperationRunner({
       paths,
       registry,

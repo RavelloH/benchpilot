@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "benchpilot://adapter/demo/outputs",
+  "type": "object",
+  "$defs": {
+    "info": {
+      "type": "object",
+      "properties": { "kind": { "const": "info" } },
+      "required": ["kind"],
+      "additionalProperties": false
+    },
+    "status": {
+      "type": "object",
+      "properties": { "kind": { "const": "status" } },
+      "required": ["kind"],
+      "additionalProperties": false
+    },
+    "build": {
+      "type": "object",
+      "properties": { "kind": { "const": "build" } },
+      "required": ["kind"],
+      "additionalProperties": false
+    },
+    "flash": {
+      "type": "object",
+      "properties": { "kind": { "const": "flash" } },
+      "required": ["kind"],
+      "additionalProperties": false
+    },
+    "reset": {
+      "type": "object",
+      "properties": { "kind": { "const": "reset" } },
+      "required": ["kind"],
+      "additionalProperties": false
+    },
+    "capture": {
+      "type": "object",
+      "properties": {
+        "kind": { "const": "capture" },
+        "telemetry": { "const": 42 }
+      },
+      "required": ["kind", "telemetry"],
+      "additionalProperties": false
+    },
+    "deploy": {
+      "type": "object",
+      "required": ["build", "flash", "reset"],
+      "additionalProperties": false,
+      "properties": {
+        "build": { "$ref": "#/$defs/build" },
+        "flash": { "$ref": "#/$defs/flash" },
+        "reset": { "$ref": "#/$defs/reset" }
+      }
+    }
+  }
+}

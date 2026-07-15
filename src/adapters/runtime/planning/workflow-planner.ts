@@ -2,10 +2,15 @@ import {
   evaluateCondition,
   object,
   renderDeep,
+  renderRequiredDeep,
   type RuleObject,
 } from "../rules/template.js";
 
-export const planWorkflow = (workflow: RuleObject, context: RuleObject) =>
+export const planWorkflow = (
+  workflow: RuleObject,
+  context: RuleObject,
+  strict = false,
+) =>
   (Array.isArray(workflow.steps) ? workflow.steps : [])
     .filter((step) => evaluateCondition(object(step).when, context))
     .map((step) => {
@@ -16,7 +21,9 @@ export const planWorkflow = (workflow: RuleObject, context: RuleObject) =>
         with: Object.fromEntries(
           Object.entries(object(value.with)).map(([key, item]) => [
             key,
-            renderDeep(item, context),
+            strict
+              ? renderRequiredDeep(item, context, "workflow input")
+              : renderDeep(item, context),
           ]),
         ),
         continue_on_error: value.continue_on_error === true,

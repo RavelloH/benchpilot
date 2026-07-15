@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "benchpilot://adapter/demo/inputs",
+  "type": "object",
+  "$defs": {
+    "empty": { "type": "object", "additionalProperties": false },
+    "build": { "type": "object", "additionalProperties": false }
+  }
+}

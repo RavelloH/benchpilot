@@ -1,0 +1,11 @@
+schema = "benchpilot.adapter.tools"
+schema_version = 1
+[tools.node]
+description = "Node.js runtime used by the simulated adapter."
+required = true
+discovery = "node"
+[tools.node.launch]
+mode = "direct"
+command = "node"
+prefix_args = []
+environment = "inherit"

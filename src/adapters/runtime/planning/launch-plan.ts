@@ -3,7 +3,11 @@ import {
   planActionArguments,
   planActionEnvironment,
 } from "./action-planner.js";
-import { object, renderTemplate, type RuleObject } from "../rules/template.js";
+import {
+  object,
+  renderRequiredTemplate,
+  type RuleObject,
+} from "../rules/template.js";
 
 export interface ProcessLaunchPlan {
   kind: "process";
@@ -30,6 +34,9 @@ export interface CopyLaunchPlan {
 export interface SerialLaunchPlan {
   kind: "serial";
   actionType: "serial-read" | "serial-write";
+  timeoutMs: number;
+  parserId?: string;
+  artifactSetId?: string;
 }
 
 export type LaunchPlan = ProcessLaunchPlan | CopyLaunchPlan | SerialLaunchPlan;
@@ -59,7 +66,7 @@ export const planLaunch = (
           String(argument),
         ),
       ],
-      cwd: String(renderTemplate(action.cwd, context) ?? ""),
+      cwd: String(renderRequiredTemplate(action.cwd, context, "cwd") ?? ""),
       env: {
         ...environment,
         ...Object.fromEntries(
@@ -79,8 +86,10 @@ export const planLaunch = (
   if (action.type === "copy")
     return {
       kind: "copy",
-      from: String(renderTemplate(action.from, context) ?? ""),
-      to: String(renderTemplate(action.to, context) ?? ""),
+      from: String(
+        renderRequiredTemplate(action.from, context, "copy.from") ?? "",
+      ),
+      to: String(renderRequiredTemplate(action.to, context, "copy.to") ?? ""),
       recursive: action.recursive === true,
       overwrite: action.overwrite === true,
       timeoutMs: durationMs(action.timeout),
@@ -92,6 +101,15 @@ export const planLaunch = (
     };
   const type = String(action.type);
   if (type === "serial-read" || type === "serial-write")
-    return { kind: "serial", actionType: type };
+    return {
+      kind: "serial",
+      actionType: type,
+      timeoutMs: durationMs(action.timeout),
+      parserId: typeof action.parser === "string" ? action.parser : undefined,
+      artifactSetId:
+        typeof action.artifact_set === "string"
+          ? action.artifact_set
+          : undefined,
+    };
   throw new Error(`Unsupported action type: ${type}`);
 };

@@ -18,7 +18,11 @@ The command tree covers configuration, adapters/devices, systems, runs, locks an
 
 Configuration is merged in this order: CLI input, `BENCHPILOT_*`, `--config`, project-local, project `benchpilot.toml`, global config, defaults. Unsafe key segments (`__proto__`, `prototype`, and `constructor`) are rejected; run snapshots redact common credential keys. Global config and persistent state use `~/.benchpilot/` on every platform. `benchpilot init` creates the minimal demo project without placing logs in the project. Locks and Guards live in the system runtime/temp area and use a hashed physical-resource identity rather than raw device IDs in file names.
 
-Dangerous demo reset requires `--dangerously-reset-demo-state`. The simulated `burn-fuse` operation additionally creates a local approval request and can only consume a matching interactive approval. This is a local workflow guard, not a defense against an attacker with filesystem control.
+The bundled Demo Adapter is declarative. It simulates `status`, `info`,
+`build`, `flash`, `reset`, `capture`, and `deploy` through fixed Node scripts
+with `shell: false`; it never contacts hardware or the network. `build` writes
+its simulated firmware only inside the current Run and registers it as an
+Artifact.
 
 See [architecture](docs/architecture.md), [CLI](docs/cli.md), [configuration](docs/config.md), [adapters](docs/adapters.md), [declarative adapter format](docs/adapter-format.md), [runs](docs/logging-and-runs.md), [locks](docs/locks.md), [safety](docs/safety.md), and [process runner](docs/process-runner.md).
 

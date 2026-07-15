@@ -1,8 +1,8 @@
 import {
   evaluateCondition,
   object,
-  renderDeep,
-  renderTemplate,
+  renderRequiredDeep,
+  renderRequiredTemplate,
   type RuleObject,
 } from "../rules/template.js";
 
@@ -15,17 +15,27 @@ export const planActionArguments = (action: RuleObject, context: RuleObject) =>
       if (argument.kind === "option")
         return [
           argument.flag,
-          String(renderTemplate(argument.value, context) ?? ""),
+          String(
+            renderRequiredTemplate(argument.value, context, "argument") ?? "",
+          ),
         ];
       if (argument.kind === "repeat") {
-        const values = renderTemplate(argument.values, context);
+        const values = renderRequiredTemplate(
+          argument.values,
+          context,
+          "argument",
+        );
         const prefix =
           argument.prefix === undefined ? [] : [String(argument.prefix)];
         return Array.isArray(values)
           ? values.flatMap((value) => [...prefix, String(value)])
           : [];
       }
-      return [String(renderTemplate(argument.value, context) ?? "")];
+      return [
+        String(
+          renderRequiredTemplate(argument.value, context, "argument") ?? "",
+        ),
+      ];
     });
 
 export const planActionEnvironment = (
@@ -35,6 +45,6 @@ export const planActionEnvironment = (
   Object.fromEntries(
     Object.entries(object(action.env)).map(([key, value]) => [
       key,
-      renderDeep(value, context),
+      renderRequiredDeep(value, context, "environment"),
     ]),
   );

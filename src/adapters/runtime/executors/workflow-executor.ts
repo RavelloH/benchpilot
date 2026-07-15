@@ -7,7 +7,11 @@ export const executeWorkflow = async (
   workflow: RuleObject,
   context: RuleObject,
   signal: AbortSignal,
-  executeAction: (id: string, input: RuleObject) => Promise<RuleObject>,
+  executeAction: (
+    id: string,
+    input: RuleObject,
+    signal: AbortSignal,
+  ) => Promise<RuleObject>,
   emit?: (event: string, data: RuleObject) => void,
 ) => {
   const controller = new AbortController();
@@ -20,7 +24,7 @@ export const executeWorkflow = async (
   const results: RuleObject[] = [];
   try {
     emit?.("adapter.workflow.started", {});
-    for (const step of planWorkflow(workflow, context)) {
+    for (const step of planWorkflow(workflow, context, true)) {
       if (controller.signal.aborted)
         throw new AdapterRuntimeError(
           "ADAPTER_ACTION_FAILED",
@@ -29,7 +33,11 @@ export const executeWorkflow = async (
       const actionId = String(step.uses).replace(/^action:/, "");
       emit?.("adapter.workflow.step.started", { id: step.id, actionId });
       try {
-        const result = await executeAction(actionId, object(step.with));
+        const result = await executeAction(
+          actionId,
+          object(step.with),
+          controller.signal,
+        );
         results.push({ id: step.id, ok: true, result });
         context.step = { id: step.id, result };
         context.result = {

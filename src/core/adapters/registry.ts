@@ -46,6 +46,16 @@ export class AdapterRegistry {
     try {
       return adapter.configSchema.parse(raw);
     } catch (error) {
+      if (
+        error &&
+        typeof error === "object" &&
+        typeof (error as { code?: unknown }).code === "string"
+      )
+        throw new BenchPilotError(
+          (error as { code: string }).code,
+          3,
+          (error as Error).message,
+        );
       const detail =
         error instanceof SchemaValidationError ? error.path.join(".") : "";
       throw new BenchPilotError(
@@ -70,6 +80,16 @@ export class AdapterRegistry {
       try {
         deviceConfig = adapter.deviceConfigSchema.parse(deviceConfig);
       } catch (error) {
+        if (
+          error &&
+          typeof error === "object" &&
+          typeof (error as { code?: unknown }).code === "string"
+        )
+          throw new BenchPilotError(
+            (error as { code: string }).code,
+            3,
+            (error as Error).message,
+          );
         throw new BenchPilotError(
           "INVALID_DEVICE_CONFIG",
           3,

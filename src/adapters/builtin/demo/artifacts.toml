@@ -1,0 +1,11 @@
+schema = "benchpilot.adapter.artifacts"
+schema_version = 1
+[sets]
+[sets.build]
+base = "."
+[[sets.build.entries]]
+id = "firmware"
+kind = "firmware"
+path = "demo-firmware.bin"
+required = true
+multiple = false

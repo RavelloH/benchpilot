@@ -2,7 +2,11 @@ import { realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import { runProcess } from "../../../core/process/process-runner.js";
 import { AdapterRuntimeError } from "../errors.js";
-import { object, renderTemplate, type RuleObject } from "../rules/template.js";
+import {
+  object,
+  renderRequiredTemplate,
+  type RuleObject,
+} from "../rules/template.js";
 
 const duration = (value: unknown, fallback = 10_000) => {
   const match = /^([1-9]\d*)(ms|s|m|h)$/.exec(String(value ?? ""));
@@ -71,6 +75,7 @@ export class EnvironmentResolver {
     context: RuleObject,
     signal: AbortSignal,
   ): Promise<NodeJS.ProcessEnv> {
+    if (id === "inherit") return { ...this.base };
     const definition = object(definitions[id]);
     if (!Object.keys(definition).length)
       throw new AdapterRuntimeError(
@@ -123,13 +128,17 @@ export class EnvironmentResolver {
       const variables = Object.fromEntries(
         Object.entries(object(provider.variables)).map(([key, value]) => [
           key,
-          renderTemplate(value, context),
+          renderRequiredTemplate(value, context, "environment"),
         ]),
       );
       return mergeEnvironment(this.base, variables);
     }
     if (provider.type !== "capture-script") return undefined;
-    const rendered = renderTemplate(provider.script, context);
+    const rendered = renderRequiredTemplate(
+      provider.script,
+      context,
+      "capture script",
+    );
     if (typeof rendered !== "string" || !rendered)
       throw new AdapterRuntimeError(
         "ADAPTER_ENVIRONMENT_UNAVAILABLE",
@@ -138,12 +147,15 @@ export class EnvironmentResolver {
     const script = await realpath(path.resolve(rendered)).catch(
       () => undefined,
     );
-    if (!script || !(await stat(script)).isFile())
+    const metadata = script
+      ? await stat(script).catch(() => undefined)
+      : undefined;
+    if (!script || !metadata?.isFile())
       throw new AdapterRuntimeError(
         "ADAPTER_ENVIRONMENT_UNAVAILABLE",
         "Capture-script path is invalid.",
       );
-    const key = `${provider.id}:${script}`;
+    const key = `${provider.id}:${script}:${metadata.mtimeMs}`;
     const cached = this.cache.get(key);
     if (cached) return { ...cached };
     const command = captureCommand(provider.shell, script);
