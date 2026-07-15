@@ -20,7 +20,7 @@ Configuration is merged in this order: CLI input, `BENCHPILOT_*`, `--config`, pr
 
 Dangerous demo reset requires `--dangerously-reset-demo-state`. The simulated `burn-fuse` operation additionally creates a local approval request and can only consume a matching interactive approval. This is a local workflow guard, not a defense against an attacker with filesystem control.
 
-See [architecture](docs/architecture.md), [CLI](docs/cli.md), [configuration](docs/config.md), [adapters](docs/adapters.md), [runs](docs/logging-and-runs.md), [locks](docs/locks.md), [safety](docs/safety.md), and [process runner](docs/process-runner.md).
+See [architecture](docs/architecture.md), [CLI](docs/cli.md), [configuration](docs/config.md), [adapters](docs/adapters.md), [declarative adapter format](docs/adapter-format.md), [runs](docs/logging-and-runs.md), [locks](docs/locks.md), [safety](docs/safety.md), and [process runner](docs/process-runner.md).
 
 ## Development
 
