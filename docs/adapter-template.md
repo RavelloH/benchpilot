@@ -8,3 +8,8 @@ output data; inputs and outputs are referenced by `$defs` names.
 
 The template is intentionally non-executable. It documents the full package
 shape without adding a vendor adapter.
+
+Platform overlays may modify tools, discovery, environments, devices, actions,
+workflows, parsers and artifacts. They cannot modify the manifest, schemas,
+catalog, or capability definitions; platform capability support is declared
+only in `capabilities.toml`.

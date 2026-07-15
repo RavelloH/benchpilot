@@ -11,3 +11,8 @@ command strings or JavaScript expressions.
 
 `adapter:validate` writes diagnostics as JSON to stdout and exits non-zero for
 errors. `adapter:compile` emits deterministic bundles under `dist/adapters`.
+
+Format v1 is schema-closed: JSON Schema checks fixed structure and primitive
+types, while semantic validation checks cross-file references, tool cycles,
+capability safety and template paths. `_template` is validated as documentation,
+but is never compiled or published as an adapter bundle.

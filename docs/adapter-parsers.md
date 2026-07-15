@@ -10,3 +10,7 @@ path or glob; Core verifies real paths, prevents escapes, hashes copies and
 registers artifacts. Templates use only approved `${namespace.path}` variables.
 Platform files recursively merge objects, replace arrays, and cannot introduce
 new rule IDs.
+
+Declaration cases can render structured process arguments (including repeat
+arguments), parse separate stdout/stderr fixtures, plan workflows, and plan
+artifact resolution. They do not execute vendor tools or copy artifacts.
