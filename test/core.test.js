@@ -436,6 +436,17 @@ test("output schema failures are classified as INVALID_CAPABILITY_OUTPUT", async
             outputSchema: objectSchema({ value: stringSchema() }),
             execute: async () => ({ value: 1 }),
           },
+          {
+            id: "unregistered-artifact",
+            summary: "unregistered artifact",
+            defaultTimeoutMs: 1_000,
+            lockMode: "none",
+            createsRun: true,
+            safety: { mode: "normal" },
+            execute: async () => ({
+              artifact: { name: "untrusted.bin", path: "untrusted.bin" },
+            }),
+          },
         ],
       }),
     });
@@ -454,6 +465,12 @@ test("output schema failures are classified as INVALID_CAPABILITY_OUTPUT", async
       .execute("device", "bad-output", {})
       .catch((cause) => cause);
     assert.equal(error.kind, "INVALID_CAPABILITY_OUTPUT");
+    const unregistered = await runner.execute(
+      "device",
+      "unregistered-artifact",
+      {},
+    );
+    assert.deepEqual(unregistered.artifacts, []);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
