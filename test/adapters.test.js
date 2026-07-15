@@ -306,6 +306,16 @@ test("adapter data schemas reject invalid roots, metaschemas, extensions, and pr
     {
       $schema: "https://json-schema.org/draft/2020-12/schema",
       type: "object",
+      properties: {
+        value: {
+          "x-benchpilot-cli": { secret: "yes" },
+        },
+      },
+      $defs: {},
+    },
+    {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      type: "object",
       properties: { constructor: { type: "string" } },
       $defs: {},
     },

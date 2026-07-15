@@ -209,7 +209,12 @@ const validateSchemaExtensions = (
         (extension.flag !== undefined && typeof extension.flag !== "string") ||
         (extension.aliases !== undefined &&
           (!Array.isArray(extension.aliases) ||
-            extension.aliases.some((item) => typeof item !== "string")));
+            extension.aliases.some((item) => typeof item !== "string"))) ||
+        ["positional", "secret", "repeatable", "hidden"].some(
+          (name) =>
+            extension[name] !== undefined &&
+            typeof extension[name] !== "boolean",
+        );
       if (invalid)
         schemaError(
           diagnostics,
