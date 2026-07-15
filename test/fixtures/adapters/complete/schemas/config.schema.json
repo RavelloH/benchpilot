@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
-  "properties": {},
+  "properties": { "export_script": { "type": "string" } },
   "additionalProperties": false
 }

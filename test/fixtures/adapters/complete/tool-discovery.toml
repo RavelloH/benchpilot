@@ -3,6 +3,11 @@ schema_version = 1
 [discoveries.python]
 strategy = "first-valid"
 [[discoveries.python.candidates]]
+id = "configured-python"
+type = "config"
+key = "python"
+priority = 10
+[[discoveries.python.candidates]]
 id = "path-python"
 type = "path"
 names = ["python"]

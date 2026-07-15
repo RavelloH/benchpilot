@@ -2,3 +2,6 @@ schema = "benchpilot.adapter.platform"
 schema_version = 1
 platform = "linux"
 [overrides]
+[overrides.devices.identity]
+fields = ["device.serial"]
+allow_port_fallback = false

@@ -4,7 +4,13 @@
   "$defs": {
     "build": {
       "type": "object",
-      "properties": {},
+      "properties": {
+        "target": { "type": "string" },
+        "verbose": { "type": "boolean" },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "baud": { "type": "integer" },
+        "duration": { "type": "string" }
+      },
       "additionalProperties": false
     }
   }

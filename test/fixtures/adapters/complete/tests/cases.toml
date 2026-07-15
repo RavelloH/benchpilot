@@ -1,3 +1,54 @@
 schema = "benchpilot.adapter.cases"
 schema_version = 1
-cases = []
+[[cases]]
+id = "render-run"
+type = "render-action"
+platform = "linux"
+target = "run"
+[cases.context.device]
+project = "project"
+port = "COM1"
+[cases.context.input]
+target = "app"
+verbose = true
+tags = ["one", "two"]
+[cases.expect]
+tool = "script"
+cwd = "project"
+args = ["build", "app", "--port", "COM1", "--verbose", "--tag", "one", "--tag", "two"]
+
+[[cases]]
+id = "parse-text"
+type = "parse-output"
+platform = "linux"
+target = "text"
+stdout_fixture = "fixtures/output.txt"
+stderr_fixture = "fixtures/error.txt"
+exit_code = 0
+[cases.context]
+[cases.expect]
+success = true
+result = { version = 3 }
+progress = [{ current = 2 }]
+
+[[cases]]
+id = "plan-deploy"
+type = "plan-workflow"
+platform = "linux"
+target = "deploy"
+[cases.context]
+[cases.expect]
+steps = ["run"]
+
+[[cases]]
+id = "plan-artifacts"
+type = "resolve-artifacts"
+platform = "linux"
+target = "output"
+[cases.context.device]
+project = "project"
+[cases.expect]
+entries = [
+  { id = "output", path = "project/output.json", required = false, multiple = false },
+  { id = "logs", path = "project/*.log", required = false, multiple = true }
+]

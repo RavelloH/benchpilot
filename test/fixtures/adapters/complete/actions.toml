@@ -4,4 +4,23 @@ schema_version = 1
 type = "process"
 tool = "script"
 cwd = "${device.project}"
-arguments = [{ kind = "literal", value = "build" }]
+arguments = [
+  { kind = "literal", value = "build" },
+  { kind = "value", value = "${input.target}" },
+  { kind = "option", flag = "--port", value = "${device.port}" },
+  { kind = "flag", flag = "--verbose", when = { path = "input.verbose", operator = "truthy" } },
+  { kind = "repeat", values = "${input.tags}", prefix = "--tag" }
+]
+[actions.logs]
+type = "serial-read"
+port = "${device.port}"
+baud = "${input.baud}"
+duration = "${input.duration}"
+encoding = "utf8"
+line_mode = true
+[actions.copy]
+type = "copy"
+from = "${device.project}"
+to = "${device.destination}"
+recursive = true
+overwrite = true

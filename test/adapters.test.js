@@ -56,12 +56,13 @@ test("bulk compilation excludes the template and writes an empty index", async (
   }
 });
 
-test("complete adapter fixture validates and compiles", async () => {
+test("complete adapter fixture validates, compiles, and exercises all case types", async () => {
   const validation = await validateAdapter(complete);
   assert.deepEqual(validation.diagnostics, []);
   const compiled = await compileAdapter(complete);
   assert.deepEqual(compiled.diagnostics, []);
   assert.equal(compiled.bundle.capabilityCatalog.version, 1);
+  assert.deepEqual(await runCases(validation.adapter), []);
 });
 
 test("layout validation rejects missing and unexpected rule files", async () => {
