@@ -59,7 +59,7 @@ const captureCommand = (shell: unknown, script: string) => {
     };
   return {
     command: "sh",
-    args: ["-c", `. \"$1\"; node -e '${emit}'`, "benchpilot-capture", script],
+    args: ["-c", `. "$1"; node -e "$2"`, "benchpilot-capture", script, emit],
     sentinel,
   };
 };
