@@ -328,7 +328,7 @@ test("a normal operation recovers and reuses a stale approval claim", async () =
     const result = await runner.execute("device", "burn", {});
     assert.equal(result.ok, true);
     assert.equal((await approvals.list()).length, 1);
-    assert.equal((await approvals.get(request.id)).status, "approved");
+    assert.equal((await approvals.get(request.id)).status, "consumed");
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -1107,6 +1107,91 @@ test("post-effect dangerous-operation failure consumes the approval claim", asyn
   );
   try {
     assert.equal((await runDangerousFailure(root, true)).status, "consumed");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("successful dangerous operation without a marker consumes approval and warns", async () => {
+  const root = await mkdtemp(
+    path.join(os.tmpdir(), "benchpilot-approval-marker-missing-"),
+  );
+  const events = [];
+  try {
+    const paths = new PathService({ BENCHPILOT_HOME: root });
+    const registry = new AdapterRegistry();
+    registry.register({
+      id: "marker-missing",
+      apiVersion: 1,
+      version: "1",
+      summary: "marker missing test",
+      configSchema: objectSchema(),
+      discover: async () => [],
+      doctor: async () => [],
+      createDevice: async (instance) => ({
+        identity: {
+          instance,
+          physicalId: "marker-missing-device",
+          adapter: "marker-missing",
+        },
+        capabilities: () => [
+          {
+            id: "effect",
+            summary: "effect",
+            defaultTimeoutMs: 1000,
+            lockMode: "exclusive",
+            createsRun: true,
+            safety: { mode: "human-approval", flag: "danger" },
+            execute: async () => ({ ok: true }),
+          },
+        ],
+      }),
+    });
+    const config = {
+      value: { devices: { device: { adapter: "marker-missing" } } },
+      origins: new Map(),
+      layers: [],
+    };
+    const approval = await new ApprovalManager(paths).request({
+      command: "device.effect",
+      device: {
+        instance: "device",
+        physicalId: "marker-missing-device",
+        adapter: "marker-missing",
+      },
+      input: {},
+      project: "outside-project",
+      configDigest: (await import("../dist/index.js")).sha(config.value),
+    });
+    const approvals = new ApprovalManager(paths);
+    await approvals.change(approval.id, "approved");
+    const runner = new OperationRunner({
+      paths,
+      registry,
+      project: undefined,
+      flags: { quiet: true, danger: true },
+      config,
+      eventWriter: {
+        emit(type, data) {
+          events.push({ type, data });
+        },
+        completed() {},
+        failed() {},
+      },
+    });
+    await runner.execute("device", "effect", {});
+    assert.equal((await approvals.get(approval.id)).status, "consumed");
+    assert.deepEqual(
+      events.find((event) => event.type === "safety.marker-missing"),
+      {
+        type: "safety.marker-missing",
+        data: {
+          approvalId: approval.id,
+          capability: "effect",
+          code: "DANGEROUS_EFFECT_MARKER_MISSING",
+        },
+      },
+    );
   } finally {
     await rm(root, { recursive: true, force: true });
   }

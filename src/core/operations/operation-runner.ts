@@ -382,6 +382,21 @@ export class OperationRunner {
           message: primaryError.message,
         });
     }
+    const operationSucceeded = !primaryError;
+    if (
+      operationSucceeded &&
+      safety.mode === "human-approval" &&
+      !dangerousEffectStarted
+    )
+      emit(
+        "safety.marker-missing",
+        {
+          approvalId: claimedApproval?.id,
+          capability: capability.id,
+          code: "DANGEROUS_EFFECT_MARKER_MISSING",
+        },
+        { level: "warn" },
+      );
     clearTimeout(timer);
     process.removeListener("SIGINT", onSigint);
     process.removeListener("SIGTERM", onSigterm);
@@ -426,7 +441,7 @@ export class OperationRunner {
     }
     if (claimedApproval) {
       try {
-        if (dangerousEffectStarted && (data || primaryError)) {
+        if (operationSucceeded || dangerousEffectStarted) {
           await new ApprovalManager(this.s.paths).consumeClaim(claimedApproval);
           approvalFinalStatus = "consumed";
         } else {
