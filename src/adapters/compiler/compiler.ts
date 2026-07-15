@@ -18,21 +18,17 @@ import type {
 export const adaptersRoot = resolve("src", "adapters");
 const schemaRoot = resolve(adaptersRoot, "schema", "v1");
 const catalog = resolve(adaptersRoot, "catalog", "capabilities.toml");
-const baseNames = [
-  "capabilities",
-  "tools",
-  "discoveries",
-  "environments",
-  "devices",
-  "actions",
-  "workflows",
-  "parsers",
-  "artifacts",
-];
-const fileFor = (name: string) =>
-  name === "discoveries" ? "tool-discovery.toml" : `${name}.toml`;
-const propertyFor = (name: string) =>
-  name === "artifacts" ? "sets" : name === "devices" ? undefined : name;
+const sections = {
+  tools: { file: "tools.toml", property: "tools" },
+  discoveries: { file: "tool-discovery.toml", property: "discoveries" },
+  environments: { file: "environments.toml", property: "environments" },
+  devices: { file: "devices.toml", property: null },
+  actions: { file: "actions.toml", property: "actions" },
+  workflows: { file: "workflows.toml", property: "workflows" },
+  parsers: { file: "parsers.toml", property: "parsers" },
+  artifacts: { file: "artifacts.toml", property: "sets" },
+} as const;
+const sectionNames = Object.keys(sections) as Array<keyof typeof sections>;
 
 export const validateAdapter = async (
   root: string,
@@ -53,10 +49,18 @@ export const validateAdapter = async (
     ...(await validateSemantics(adapter, catalog)),
   ];
   for (const platform of ["windows", "linux", "macos"]) {
-    const overlay = adapter.files[`platforms/${platform}.toml`]
-      .overrides as JsonObject;
+    const platformFile = `platforms/${platform}.toml`;
+    if (adapter.files[platformFile].platform !== platform)
+      diagnostics.push({
+        severity: "error",
+        code: "ADAPTER_PLATFORM_OVERRIDE_INVALID",
+        adapterId: adapter.id,
+        file: platformFile,
+        message: `Platform file must declare platform = ${platform}`,
+      });
+    const overlay = adapter.files[platformFile].overrides as JsonObject;
     for (const key of Object.keys(overlay))
-      if (!baseNames.includes(key))
+      if (!sectionNames.includes(key as keyof typeof sections))
         diagnostics.push({
           severity: "error",
           code: "ADAPTER_PLATFORM_OVERRIDE_INVALID",
@@ -64,14 +68,18 @@ export const validateAdapter = async (
           file: `platforms/${platform}.toml`,
           message: `Platform overlay cannot override ${key}`,
         });
-    for (const [key, value] of Object.entries(overlay))
+    for (const [key, value] of Object.entries(overlay)) {
+      if (!sectionNames.includes(key as keyof typeof sections)) continue;
       if (value && typeof value === "object" && !Array.isArray(value))
         for (const id of Object.keys(value as JsonObject)) {
-          const baseFile = fileFor(key),
-            baseKey = propertyFor(key);
-          const base = baseKey
-            ? adapter.files[baseFile][baseKey]
-            : adapter.files[baseFile];
+          const section = sections[key as keyof typeof sections];
+          const base = section.property
+            ? adapter.files[section.file][section.property]
+            : Object.fromEntries(
+                Object.entries(adapter.files[section.file]).filter(
+                  ([name]) => name !== "schema" && name !== "schema_version",
+                ),
+              );
           if (!Object.hasOwn((base ?? {}) as object, id))
             diagnostics.push({
               severity: "error",
@@ -81,18 +89,24 @@ export const validateAdapter = async (
               message: `Platform overlay cannot introduce ${key} id ${id}`,
             });
         }
+    }
     const platformFiles = { ...adapter.files };
     for (const [key, value] of Object.entries(overlay)) {
-      const target = fileFor(key),
-        property = propertyFor(key);
-      if (!target || !property) continue;
-      platformFiles[target] = {
-        ...platformFiles[target],
-        [property]: mergePlatform(
-          (platformFiles[target][property] ?? {}) as JsonObject,
+      if (!sectionNames.includes(key as keyof typeof sections)) continue;
+      const section = sections[key as keyof typeof sections];
+      if (section.property)
+        platformFiles[section.file] = {
+          ...platformFiles[section.file],
+          [section.property]: mergePlatform(
+            (platformFiles[section.file][section.property] ?? {}) as JsonObject,
+            value as JsonObject,
+          ),
+        };
+      else
+        platformFiles[section.file] = mergePlatform(
+          platformFiles[section.file],
           value as JsonObject,
-        ),
-      };
+        );
     }
     const mergedAdapter = { ...adapter, files: platformFiles };
     diagnostics.push(
