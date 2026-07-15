@@ -1,0 +1,3 @@
+schema = "benchpilot.adapter.actions"
+schema_version = 1
+[actions]

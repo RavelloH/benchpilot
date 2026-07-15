@@ -1,0 +1,3 @@
+schema = "benchpilot.adapter.tool-discovery"
+schema_version = 1
+[discoveries]

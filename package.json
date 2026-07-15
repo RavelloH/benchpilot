@@ -55,6 +55,9 @@
     "test:coverage": "pnpm run build && node --test --experimental-test-coverage test/**/*.test.js",
     "test:package": "pnpm run test:package:npm",
     "test:package:npm": "pnpm run build && node test/package-e2e.mjs",
+    "adapter:validate": "tsx src/adapters/compiler/cli.ts validate",
+    "adapter:compile": "tsx src/adapters/compiler/cli.ts compile",
+    "adapter:test": "tsx src/adapters/compiler/cli.ts test",
     "pack:check": "pnpm pack --dry-run",
     "format": "prettier --write . --log-level warn",
     "format:check": "prettier --check . --log-level warn",
@@ -66,9 +69,12 @@
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
     "husky": "^9.1.7",
     "lint-staged": "^16.4.0",
     "prettier": "^3.8.3",
+    "tsx": "^4.19.2",
     "typescript": "^5.6.0"
   },
   "lint-staged": {

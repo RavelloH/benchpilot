@@ -18,8 +18,11 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm run format:check
+      - run: pnpm run adapter:validate
       - run: pnpm run typecheck
       - run: pnpm run build
+      - run: pnpm run adapter:compile
+      - run: pnpm run adapter:test
       - run: pnpm test
       - run: pnpm pack --dry-run
       - if: matrix.os == 'ubuntu-latest' && matrix.node == 22

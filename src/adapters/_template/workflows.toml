@@ -1,0 +1,3 @@
+schema = "benchpilot.adapter.workflows"
+schema_version = 1
+[workflows]

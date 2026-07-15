@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["schema", "schema_version", "catalog_version", "capabilities"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": { "const": "benchpilot.adapter.capabilities" },
+    "schema_version": { "const": 1 },
+    "catalog_version": { "const": 1 },
+    "capabilities": { "type": "object" },
+    "extensions": { "type": "object" }
+  }
+}

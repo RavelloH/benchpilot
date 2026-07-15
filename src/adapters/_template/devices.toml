@@ -1,0 +1,7 @@
+schema = "benchpilot.adapter.devices"
+schema_version = 1
+[discovery]
+enabled = false
+[identity]
+fields = []
+allow_port_fallback = false

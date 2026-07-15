@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["schema", "schema_version", "discoveries"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": { "const": "benchpilot.adapter.tool-discovery" },
+    "schema_version": { "const": 1 },
+    "discoveries": { "type": "object" }
+  }
+}

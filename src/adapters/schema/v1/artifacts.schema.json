@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["schema", "schema_version", "sets"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": { "const": "benchpilot.adapter.artifacts" },
+    "schema_version": { "const": 1 },
+    "sets": { "type": "object" }
+  }
+}

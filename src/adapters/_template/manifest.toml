@@ -1,0 +1,12 @@
+schema = "benchpilot.adapter.manifest"
+schema_version = 1
+id = "template"
+display_name = "Adapter Template"
+adapter_version = "0.0.0"
+vendor = "Unknown"
+description = "BenchPilot declarative adapter template."
+capability_catalog_version = 1
+minimum_benchpilot_version = "0.1.0"
+status = "experimental"
+deprecated = false
+tags = []

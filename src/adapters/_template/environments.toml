@@ -1,0 +1,4 @@
+schema = "benchpilot.adapter.environments"
+schema_version = 1
+[environments.inherit]
+strategy = "inherit"

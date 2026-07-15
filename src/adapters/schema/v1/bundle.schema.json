@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "schema",
+    "schemaVersion",
+    "id",
+    "sourceHash",
+    "manifest",
+    "capabilityCatalog",
+    "schemas",
+    "platforms"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema": { "const": "benchpilot.adapter-bundle" },
+    "schemaVersion": { "const": 1 },
+    "id": { "pattern": "^[a-z][a-z0-9-]*$" },
+    "sourceHash": { "pattern": "^[a-f0-9]{64}$" },
+    "manifest": { "type": "object" },
+    "capabilityCatalog": { "type": "object" },
+    "schemas": { "type": "object" },
+    "platforms": { "type": "object" }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["schema", "schema_version", "platform", "overrides"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": { "const": "benchpilot.adapter.platform" },
+    "schema_version": { "const": 1 },
+    "platform": { "enum": ["windows", "linux", "macos"] },
+    "overrides": { "type": "object" }
+  }
+}

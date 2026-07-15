@@ -1,0 +1,36 @@
+version = 1
+
+[capabilities.status]
+description = "Return current target state."
+[capabilities.info]
+description = "Return project, device and toolchain information."
+[capabilities.build]
+description = "Build firmware or application artifacts."
+[capabilities.clean]
+description = "Remove normal build output."
+[capabilities.fullclean]
+description = "Remove all generated build state."
+[capabilities.size]
+description = "Report firmware or application size."
+[capabilities.flash]
+description = "Write firmware to a physical target."
+[capabilities.reset]
+description = "Reset a physical target."
+[capabilities.run]
+description = "Start an application or target."
+[capabilities.stop]
+description = "Stop an application or target."
+[capabilities.logs]
+description = "Stream target logs."
+[capabilities.capture]
+description = "Capture logs or other diagnostic output."
+[capabilities.sync]
+description = "Synchronize project files to a target."
+[capabilities.test]
+description = "Run project or target tests."
+[capabilities.selftest]
+description = "Run a target health check."
+[capabilities.deploy]
+description = "Build and deploy a project."
+[capabilities.erase]
+description = "Erase device storage or firmware."
