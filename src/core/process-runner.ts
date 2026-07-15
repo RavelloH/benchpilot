@@ -1,4 +1,6 @@
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
+import type { Writable } from "node:stream";
+import { BenchPilotError } from "./errors/benchpilot-error.js";
 
 export interface ProcessRunOptions {
   command: string;
@@ -6,67 +8,210 @@ export interface ProcessRunOptions {
   cwd?: string;
   env?: NodeJS.ProcessEnv;
   signal: AbortSignal;
+  stdout?: Writable;
+  stderr?: Writable;
+  onStdout?: (chunk: Buffer) => void;
+  onStderr?: (chunk: Buffer) => void;
   gracefulKillMs?: number;
   forceKillMs?: number;
+  killTree?: boolean;
+  captureOutput?: boolean;
+  maxCaptureBytes?: number;
 }
 
 export interface ProcessRunResult {
   code: number | null;
   signal: NodeJS.Signals | null;
-  stdout: string;
-  stderr: string;
+  durationMs: number;
+  stdout?: string;
+  stderr?: string;
+  outputTruncated?: boolean;
 }
 
-/** Runs an executable without a shell and terminates it when its operation aborts. */
+export interface StartedProcess {
+  readonly child: ChildProcess;
+  readonly result: Promise<ProcessRunResult>;
+  stop(): Promise<void>;
+}
+
+const delay = (ms: number) =>
+  new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, ms);
+    timer.unref();
+  });
+
+const waitForChild = (child: ChildProcess) =>
+  new Promise<void>((resolve) => {
+    if (child.exitCode !== null || child.signalCode !== null) resolve();
+    else child.once("close", () => resolve());
+  });
+
+const runTaskkill = (args: string[]) =>
+  new Promise<void>((resolve) => {
+    const taskkill = spawn("taskkill", args, {
+      shell: false,
+      windowsHide: true,
+      stdio: "ignore",
+    });
+    taskkill.once("error", () => resolve());
+    taskkill.once("close", () => resolve());
+  });
+
+async function terminateTree(
+  child: ChildProcess,
+  force: boolean,
+  killTree: boolean,
+) {
+  if (!child.pid) return;
+  if (process.platform === "win32") {
+    await runTaskkill([
+      "/PID",
+      String(child.pid),
+      "/T",
+      ...(force ? ["/F"] : []),
+    ]);
+    return;
+  }
+  try {
+    if (killTree) process.kill(-child.pid, force ? "SIGKILL" : "SIGTERM");
+    else child.kill(force ? "SIGKILL" : "SIGTERM");
+  } catch (error: unknown) {
+    if (
+      !["ESRCH", "EPERM"].includes((error as NodeJS.ErrnoException).code || "")
+    )
+      throw error;
+  }
+}
+
+/**
+ * Starts an executable without a shell. Its stop method is idempotent and does
+ * not settle until its process tree has exited.
+ */
+export function startProcess(options: ProcessRunOptions): StartedProcess {
+  if (options.signal.aborted)
+    throw options.signal.reason ?? new Error("Process aborted before launch.");
+
+  let abortedDuringLaunch = false;
+  const onAbortDuringLaunch = () => {
+    abortedDuringLaunch = true;
+  };
+  options.signal.addEventListener("abort", onAbortDuringLaunch, { once: true });
+  if (options.signal.aborted) {
+    options.signal.removeEventListener("abort", onAbortDuringLaunch);
+    throw options.signal.reason ?? new Error("Process aborted before launch.");
+  }
+
+  const started = Date.now();
+  const child = spawn(options.command, options.args, {
+    cwd: options.cwd,
+    env: options.env,
+    shell: false,
+    windowsHide: true,
+    detached: process.platform !== "win32" && (options.killTree ?? true),
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  options.signal.removeEventListener("abort", onAbortDuringLaunch);
+  let stdout = "";
+  let stderr = "";
+  let outputTruncated = false;
+  const maxCaptureBytes = options.maxCaptureBytes ?? 1_048_576;
+  const append = (current: string, chunk: Buffer) => {
+    if (!options.captureOutput || outputTruncated) return current;
+    const remaining = maxCaptureBytes - Buffer.byteLength(current);
+    if (remaining <= 0) {
+      outputTruncated = true;
+      return current;
+    }
+    const accepted = chunk.subarray(0, remaining).toString("utf8");
+    if (chunk.length > remaining) outputTruncated = true;
+    return current + accepted;
+  };
+  child.stdout?.on("data", (chunk: Buffer) => {
+    options.stdout?.write(chunk);
+    options.onStdout?.(chunk);
+    stdout = append(stdout, chunk);
+  });
+  child.stderr?.on("data", (chunk: Buffer) => {
+    options.stderr?.write(chunk);
+    options.onStderr?.(chunk);
+    stderr = append(stderr, chunk);
+  });
+
+  let settle!: (value: ProcessRunResult) => void;
+  let reject!: (reason: unknown) => void;
+  const result = new Promise<ProcessRunResult>((resolve, rejectResult) => {
+    settle = resolve;
+    reject = rejectResult;
+  });
+  let stopped: Promise<void> | undefined;
+  let aborting = false;
+  let settled = false;
+  const removeAbortListener = () =>
+    options.signal.removeEventListener("abort", onAbort);
+  const finish = (value: ProcessRunResult) => {
+    if (settled) return;
+    settled = true;
+    removeAbortListener();
+    settle(value);
+  };
+  const fail = (error: unknown) => {
+    if (settled) return;
+    settled = true;
+    removeAbortListener();
+    reject(error);
+  };
+  const stop = () => {
+    if (stopped) return stopped;
+    stopped = (async () => {
+      const killTree = options.killTree ?? true;
+      await terminateTree(child, false, killTree);
+      await Promise.race([
+        waitForChild(child),
+        delay(options.gracefulKillMs ?? 2_000),
+      ]);
+      if (child.exitCode === null && child.signalCode === null) {
+        await terminateTree(child, true, killTree);
+        const ended = await Promise.race([
+          waitForChild(child).then(() => true),
+          delay(options.forceKillMs ?? 2_000).then(() => false),
+        ]);
+        if (!ended)
+          throw new BenchPilotError(
+            "PROCESS_CLEANUP_TIMEOUT",
+            5,
+            `Process tree did not exit: ${options.command}`,
+          );
+      }
+    })();
+    return stopped;
+  };
+  const onAbort = () => {
+    if (aborting || settled) return;
+    aborting = true;
+    void stop().then(
+      () => fail(options.signal.reason ?? new Error("Process aborted.")),
+      (error) => fail(error),
+    );
+  };
+  options.signal.addEventListener("abort", onAbort, { once: true });
+  child.once("error", (error) => fail(error));
+  child.once("close", (code, signal) => {
+    if (aborting) return;
+    finish({
+      code,
+      signal,
+      durationMs: Date.now() - started,
+      ...(options.captureOutput ? { stdout, stderr, outputTruncated } : {}),
+    });
+  });
+  // Covers an abort after listener registration but before/while spawn returns.
+  if (abortedDuringLaunch || options.signal.aborted) onAbort();
+  return { child, result, stop };
+}
+
+/** Runs an executable and waits for its complete process tree on abort. */
 export async function runProcess(
   options: ProcessRunOptions,
 ): Promise<ProcessRunResult> {
-  if (options.signal.aborted)
-    throw options.signal.reason ?? new Error("Process aborted before launch.");
-  return new Promise((resolve, reject) => {
-    const child = spawn(options.command, options.args, {
-      cwd: options.cwd,
-      env: options.env,
-      shell: false,
-      windowsHide: true,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    let stdout = "";
-    let stderr = "";
-    let aborted = false;
-    let forceTimer: NodeJS.Timeout | undefined;
-    const onAbort = () => {
-      aborted = true;
-      child.kill("SIGTERM");
-      forceTimer = setTimeout(() => {
-        if (process.platform === "win32" && child.pid)
-          spawn("taskkill", ["/pid", String(child.pid), "/T", "/F"], {
-            shell: false,
-            windowsHide: true,
-            stdio: "ignore",
-          });
-        else child.kill("SIGKILL");
-      }, options.forceKillMs ?? 2_000);
-      forceTimer.unref();
-    };
-    child.stdout?.setEncoding("utf8").on("data", (chunk: string) => {
-      stdout += chunk;
-    });
-    child.stderr?.setEncoding("utf8").on("data", (chunk: string) => {
-      stderr += chunk;
-    });
-    options.signal.addEventListener("abort", onAbort, { once: true });
-    child.once("error", (error) => {
-      options.signal.removeEventListener("abort", onAbort);
-      if (forceTimer) clearTimeout(forceTimer);
-      reject(error);
-    });
-    child.once("close", (code, signal) => {
-      options.signal.removeEventListener("abort", onAbort);
-      if (forceTimer) clearTimeout(forceTimer);
-      if (aborted)
-        reject(options.signal.reason ?? new Error("Process aborted."));
-      else resolve({ code, signal, stdout, stderr });
-    });
-  });
+  return startProcess(options).result;
 }

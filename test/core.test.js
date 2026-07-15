@@ -61,10 +61,40 @@ test("process runner aborts without invoking a shell", async () => {
     command: process.execPath,
     args: ["-e", "setTimeout(() => {}, 10000)"],
     signal: controller.signal,
+    gracefulKillMs: 100,
     forceKillMs: 100,
   });
   setTimeout(() => controller.abort(new Error("test abort")), 25);
   await assert.rejects(pending, /test abort/);
+});
+
+test("process runner terminates a spawned child tree before rejecting", async () => {
+  const controller = new AbortController();
+  let descendantPid;
+  const pending = runProcess({
+    command: process.execPath,
+    args: [
+      "-e",
+      `const { spawn } = require("node:child_process"); const child = spawn(process.execPath, ["-e", "setTimeout(() => {}, 10000)"], { stdio: "ignore" }); console.log(child.pid); setTimeout(() => {}, 10000);`,
+    ],
+    signal: controller.signal,
+    killTree: true,
+    gracefulKillMs: 50,
+    forceKillMs: 500,
+    onStdout(chunk) {
+      descendantPid ||= Number(String(chunk).trim());
+    },
+  });
+  for (let attempt = 0; attempt < 100 && !descendantPid; attempt += 1)
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.ok(descendantPid);
+  controller.abort(new Error("test tree abort"));
+  await assert.rejects(pending, /test tree abort/);
+  await new Promise((resolve) => setTimeout(resolve, 25));
+  assert.throws(
+    () => process.kill(descendantPid, 0),
+    (error) => error.code === "ESRCH",
+  );
 });
 
 test("abortPromise rejects when the signal was already aborted", async () => {
