@@ -4,6 +4,7 @@ import {
   fail,
   type Json,
   type OperationRunner,
+  type PathService,
   type ResolvedConfig,
 } from "../../core.js";
 import {
@@ -21,6 +22,7 @@ interface DeviceCommandContext {
   registry: AdapterRegistry;
   runner: OperationRunner;
   config: ResolvedConfig;
+  paths: PathService;
 }
 
 export async function handleDeviceCommand({
@@ -30,6 +32,7 @@ export async function handleDeviceCommand({
   registry,
   runner,
   config,
+  paths,
 }: DeviceCommandContext): Promise<boolean> {
   if (parts[0] === "device" && parts[1]) {
     const rawDevice = (config.value.devices as Json | undefined)?.[parts[1]];
@@ -41,6 +44,7 @@ export async function handleDeviceCommand({
       parts[1],
       rawDevice as Json,
       config.value,
+      paths,
     );
     if (parts.length === 2) {
       stdout.write(

@@ -1,6 +1,14 @@
 import type { DeviceRuntime } from "../capabilities/types.js";
 import type { Json } from "../config/config.js";
 import type { RuntimeSchema } from "./schemas.js";
+import type { PathService } from "../paths/path-service.js";
+
+export interface AdapterContext {
+  adapterConfig: Json;
+  paths: PathService;
+}
+
+export interface AdapterServices extends AdapterContext {}
 
 export interface Adapter {
   id: string;
@@ -10,7 +18,11 @@ export interface Adapter {
   description?: string;
   configSchema: RuntimeSchema<Json>;
   deviceConfigSchema?: RuntimeSchema<Json>;
-  discover(config: Json): Promise<Json[]>;
-  doctor(config: Json): Promise<Json[]>;
-  createDevice(instance: string, config: Json): Promise<DeviceRuntime>;
+  discover(context: AdapterContext): Promise<Json[]>;
+  doctor(context: AdapterContext): Promise<Json[]>;
+  createDevice(
+    instance: string,
+    deviceConfig: Json,
+    services: AdapterServices,
+  ): Promise<DeviceRuntime>;
 }

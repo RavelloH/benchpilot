@@ -1,6 +1,7 @@
 import type { Json } from "../../core.js";
 import { BenchPilotError, fail } from "../errors/benchpilot-error.js";
 import { SchemaValidationError } from "./schemas.js";
+import type { PathService } from "../paths/path-service.js";
 import type { Adapter } from "./types.js";
 
 export class AdapterRegistry {
@@ -62,8 +63,9 @@ export class AdapterRegistry {
     instance: string,
     deviceConfig: Json,
     config: Json,
+    paths: PathService,
   ) {
-    this.configFor(adapter, config);
+    const adapterConfig = this.configFor(adapter, config);
     if (adapter.deviceConfigSchema)
       try {
         deviceConfig = adapter.deviceConfigSchema.parse(deviceConfig);
@@ -74,6 +76,23 @@ export class AdapterRegistry {
           `Device ${instance} configuration for ${adapter.id} is invalid: ${(error as Error).message}`,
         );
       }
-    return adapter.createDevice(instance, deviceConfig);
+    return adapter.createDevice(instance, deviceConfig, {
+      adapterConfig,
+      paths,
+    });
+  }
+
+  async discover(adapter: Adapter, config: Json, paths: PathService) {
+    return adapter.discover({
+      adapterConfig: this.configFor(adapter, config),
+      paths,
+    });
+  }
+
+  async doctor(adapter: Adapter, config: Json, paths: PathService) {
+    return adapter.doctor({
+      adapterConfig: this.configFor(adapter, config),
+      paths,
+    });
   }
 }

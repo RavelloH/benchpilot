@@ -466,11 +466,68 @@ test("adapter definitions require a supported API and configuration schema", () 
       "device",
       { port: 42 },
       { adapters: { "device-configured": {} } },
+      new PathService({ BENCHPILOT_HOME: os.tmpdir() }),
     ),
     (error) =>
       error instanceof BenchPilotError &&
       error.kind === "INVALID_DEVICE_CONFIG",
   );
+});
+
+test("registry injects validated adapter config into createDevice", async () => {
+  const root = await mkdtemp(
+    path.join(os.tmpdir(), "benchpilot-adapter-config-"),
+  );
+  try {
+    const paths = new PathService({ BENCHPILOT_HOME: root });
+    const registry = new AdapterRegistry();
+    let received;
+    registry.register({
+      id: "injected-config",
+      apiVersion: 1,
+      version: "1",
+      summary: "injected config test",
+      configSchema: objectSchema({ toolchain: stringSchema() }),
+      deviceConfigSchema: objectSchema({ target: stringSchema() }),
+      discover: async () => [],
+      doctor: async () => [],
+      createDevice: async (_instance, deviceConfig, services) => {
+        received = { deviceConfig, services };
+        return {
+          identity: {
+            instance: "device",
+            physicalId: "device",
+            adapter: "injected-config",
+          },
+          capabilities: () => [],
+        };
+      },
+    });
+    await registry.createDevice(
+      registry.get("injected-config"),
+      "device",
+      { target: "test" },
+      { adapters: { "injected-config": { toolchain: "configured" } } },
+      paths,
+    );
+    assert.deepEqual(received.deviceConfig, { target: "test" });
+    assert.equal(received.services.adapterConfig.toolchain, "configured");
+    assert.equal(received.services.paths, paths);
+    await assert.rejects(
+      registry.createDevice(
+        registry.get("injected-config"),
+        "device",
+        { target: "test" },
+        { adapters: { "injected-config": { toolchain: false } } },
+        paths,
+      ),
+      (cause) =>
+        cause instanceof BenchPilotError &&
+        cause.kind === "INVALID_ADAPTER_CONFIG",
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test("output schema failures are classified as INVALID_CAPABILITY_OUTPUT", async () => {

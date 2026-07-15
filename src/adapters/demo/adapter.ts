@@ -30,9 +30,6 @@ const wait = (ms: number, signal: AbortSignal) => {
     if (timer) clearTimeout(timer);
   });
 };
-function settings(ctx: OperationContext) {
-  return ((ctx.config.adapters as Json | undefined)?.demo || {}) as Json;
-}
 function basic(
   id: string,
   summary: string,
@@ -57,6 +54,7 @@ class DemoDevice implements DeviceRuntime {
   constructor(
     instance: string,
     private config: Json,
+    private adapterConfig: Json,
   ) {
     this.identity = {
       instance,
@@ -82,7 +80,7 @@ class DemoDevice implements DeviceRuntime {
         "status",
         "Show simulated runtime state",
         async (ctx) => ({
-          connected: this.connected(ctx),
+          connected: this.connected(),
           ...(await this.state(ctx)),
           uptimeMs: 0,
           simulated: true,
@@ -121,7 +119,9 @@ class DemoDevice implements DeviceRuntime {
         });
         const started = await this.delayed(ctx, "start", { running: true });
         const bootHandshake =
-          settings(ctx).boot_handshake ?? settings(ctx).bootHandshake ?? true;
+          this.adapterConfig.boot_handshake ??
+          this.adapterConfig.bootHandshake ??
+          true;
         if (!bootHandshake)
           throw new BenchPilotError(
             "DEMO_BOOT_HANDSHAKE_FAILED",
@@ -282,13 +282,13 @@ class DemoDevice implements DeviceRuntime {
     value: Json,
     beforeEffect?: () => void,
   ) {
-    if (stage !== "build" && !this.connected(ctx))
+    if (stage !== "build" && !this.connected())
       throw new BenchPilotError(
         "DEVICE_NOT_CONNECTED",
         3,
         "Demo device is configured disconnected.",
       );
-    const config = settings(ctx);
+    const config = this.adapterConfig;
     if (
       config.operationDelayMs !== undefined ||
       this.config.operationDelayMs !== undefined
@@ -307,9 +307,9 @@ class DemoDevice implements DeviceRuntime {
     ctx.emitEvent("stage.started", { stage, simulated: true });
     await wait(ms, ctx.signal);
     if (
-      settings(ctx).fail_stage === stage ||
-      settings(ctx).failStage === stage ||
-      settings(ctx).fail_operation === stage
+      this.adapterConfig.fail_stage === stage ||
+      this.adapterConfig.failStage === stage ||
+      this.adapterConfig.fail_operation === stage
     )
       throw new BenchPilotError(
         `DEMO_${stage.toUpperCase()}_FAILED`,
@@ -336,10 +336,10 @@ class DemoDevice implements DeviceRuntime {
     });
     return { ...artifact };
   }
-  private connected(ctx: OperationContext) {
+  private connected() {
     // A global adapter setting is an explicit override. Device-local state is
     // the fallback for independently configured simulated devices.
-    const adapterConnected = settings(ctx).connected;
+    const adapterConnected = this.adapterConfig.connected;
     return adapterConnected !== undefined
       ? adapterConnected !== false
       : this.config.connected !== false;
@@ -375,8 +375,8 @@ export const demoAdapter: Adapter = {
   version: "0.0.0",
   summary: "Explicitly simulated software-only adapter",
   configSchema: objectSchema(),
-  async discover(config) {
-    const d = config;
+  async discover({ adapterConfig }) {
+    const d = adapterConfig;
     return d?.connected === false
       ? []
       : [
@@ -387,8 +387,8 @@ export const demoAdapter: Adapter = {
           },
         ];
   },
-  async doctor(config) {
-    const d = config;
+  async doctor({ adapterConfig }) {
+    const d = adapterConfig;
     return [
       {
         id: "demo-connected",
@@ -400,7 +400,7 @@ export const demoAdapter: Adapter = {
       },
     ];
   },
-  async createDevice(instance, config) {
-    return new DemoDevice(instance, config);
+  async createDevice(instance, config, services) {
+    return new DemoDevice(instance, config, services.adapterConfig);
   },
 };

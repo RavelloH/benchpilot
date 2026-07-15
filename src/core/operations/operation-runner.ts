@@ -49,6 +49,7 @@ export class OperationRunner {
       instance,
       d,
       this.s.config.value,
+      this.s.paths,
     );
     const cap = runtime.capabilities().find((x) => x.id === capabilityId);
     if (!cap)

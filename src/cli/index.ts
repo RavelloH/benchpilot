@@ -190,7 +190,7 @@ export async function main(adapters: Adapter[] = [demoAdapter]) {
         message: "TOML and configuration schema valid",
       });
       for (const d of registry.list())
-        checks.push(...(await d.doctor(registry.configFor(d, config.value))));
+        checks.push(...(await registry.doctor(d, config.value, paths)));
       if (commandFlags.save) {
         /* doctor is intentionally read-only unless explicit save; its diagnostics are returned */
       }
@@ -232,9 +232,7 @@ export async function main(adapters: Adapter[] = [demoAdapter]) {
       else if (parts[2] === "doctor")
         write(
           {
-            checks: await adapter.doctor(
-              registry.configFor(adapter, config.value),
-            ),
+            checks: await registry.doctor(adapter, config.value, paths),
           },
           flags,
         );
@@ -266,9 +264,7 @@ export async function main(adapters: Adapter[] = [demoAdapter]) {
             try {
               return {
                 adapter: adapter.id,
-                devices: await adapter.discover(
-                  registry.configFor(adapter, config.value),
-                ),
+                devices: await registry.discover(adapter, config.value, paths),
               };
             } catch (error: unknown) {
               return {
@@ -297,6 +293,7 @@ export async function main(adapters: Adapter[] = [demoAdapter]) {
         registry,
         runner,
         config,
+        paths,
       })
     )
       return;

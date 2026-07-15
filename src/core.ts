@@ -12,7 +12,11 @@ export {
 } from "./core/adapters/schemas.js";
 export type { RuntimeSchema } from "./core/adapters/schemas.js";
 export { AdapterRegistry } from "./core/adapters/registry.js";
-export type { Adapter } from "./core/adapters/types.js";
+export type {
+  Adapter,
+  AdapterContext,
+  AdapterServices,
+} from "./core/adapters/types.js";
 export {
   lockIdentity,
   type PhysicalResourceIdentity,
