@@ -7,6 +7,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import {
   AdapterRegistry,
+  abortPromise,
   ApprovalManager,
   atomicJson,
   durationSchema,
@@ -62,6 +63,18 @@ test("process runner aborts without invoking a shell", async () => {
   });
   setTimeout(() => controller.abort(new Error("test abort")), 25);
   await assert.rejects(pending, /test abort/);
+});
+
+test("abortPromise rejects when the signal was already aborted", async () => {
+  const controller = new AbortController();
+  controller.abort({ kind: "signal", signal: "SIGTERM" });
+  await assert.rejects(
+    abortPromise(controller.signal),
+    (error) =>
+      error instanceof BenchPilotError &&
+      error.kind === "OPERATION_ABORTED" &&
+      error.details.signal === "SIGTERM",
+  );
 });
 
 test("approval claims are exclusive", async () => {
@@ -160,12 +173,96 @@ test("lock lease stops before release and rejects unsafe IDs", async () => {
     const paths = new PathService({ BENCHPILOT_HOME: root });
     const locks = new LockManager(paths);
     const lock = await locks.acquire("demo-device-safe", "test");
+    assert.equal(lock.version, 2);
+    assert.equal(path.basename(locks.file(lock.lockId)), "owner.json");
     const lease = locks.startHeartbeat(lock, 1, 100);
     await lease.stop();
     await locks.release(lock);
     await new Promise((resolve) => setTimeout(resolve, 10));
     assert.equal((await locks.list()).length, 0);
     assert.throws(() => locks.file("../escape"), /Invalid lock ID/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("lock ownership loss aborts the capability and preserves the replacement", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "benchpilot-lock-abort-"));
+  let aborted = false;
+  let cleaned = false;
+  try {
+    const paths = new PathService({ BENCHPILOT_HOME: root });
+    const registry = new AdapterRegistry();
+    registry.register({
+      id: "lock-loss",
+      version: "1",
+      summary: "lock loss test",
+      discover: async () => [],
+      doctor: async () => [],
+      createDevice: async (instance) => ({
+        identity: {
+          instance,
+          physicalId: "lock-loss-device",
+          adapter: "lock-loss",
+        },
+        capabilities: () => [
+          {
+            id: "wait",
+            summary: "wait",
+            defaultTimeoutMs: 2_000,
+            lockMode: "exclusive",
+            createsRun: true,
+            safety: { mode: "normal" },
+            execute: async (context) => {
+              context.registerCleanup("observe-cleanup", () => {
+                cleaned = true;
+              });
+              await new Promise((resolve) => {
+                context.signal.addEventListener(
+                  "abort",
+                  () => {
+                    aborted = true;
+                    resolve();
+                  },
+                  { once: true },
+                );
+              });
+              return {};
+            },
+          },
+        ],
+      }),
+    });
+    const runner = new OperationRunner({
+      paths,
+      registry,
+      project: undefined,
+      flags: { quiet: true },
+      lockHeartbeatIntervalMs: 10,
+      lockLeaseMs: 100,
+      config: {
+        value: { devices: { device: { adapter: "lock-loss" } } },
+        origins: new Map(),
+        layers: [],
+      },
+    });
+    const pending = runner.execute("device", "wait", {});
+    const locks = new LockManager(paths);
+    let held;
+    for (let attempt = 0; attempt < 100 && !held; attempt += 1) {
+      [held] = await locks.list();
+      if (!held) await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+    assert.ok(held);
+    await atomicJson(locks.file(held.lockId), {
+      ...held,
+      ownerToken: "replacement-owner",
+    });
+    const error = await pending.catch((cause) => cause);
+    assert.equal(error.kind, "LOCK_OWNERSHIP_LOST");
+    assert.equal(aborted, true);
+    assert.equal(cleaned, true);
+    assert.equal((await locks.list())[0].ownerToken, "replacement-owner");
   } finally {
     await rm(root, { recursive: true, force: true });
   }

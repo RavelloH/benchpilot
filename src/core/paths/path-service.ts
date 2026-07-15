@@ -50,7 +50,7 @@ export class PathService {
     );
   }
   runtimeRoot() {
-    if (this.portable) return path.join(this.portable, "runtime");
+    if (this.portable) return path.join(this.portable, "runtime", "locks");
     return path.join(
       this.platform === "win32"
         ? this.env.TEMP || this.temp

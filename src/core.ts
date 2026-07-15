@@ -7,6 +7,13 @@ import RlogModule from "rlog-js";
 import { BenchPilotError, fail } from "./core/errors/benchpilot-error.js";
 import type { RuntimeSchema } from "./core/adapters/schemas.js";
 import { lockIdentity } from "./core/locks/lock-identity.js";
+import { LockManager } from "./core/locks/lock-manager.js";
+import type { LockLease, LockRecord } from "./core/locks/types.js";
+import {
+  abortPromise,
+  abortReasonToError,
+  type OperationAbortReason,
+} from "./core/operations/abort.js";
 import { PathService } from "./core/paths/path-service.js";
 import { atomicJson, readJson } from "./core/utilities/atomic-json.js";
 import { sha, stable } from "./core/utilities/stable-json.js";
@@ -51,6 +58,18 @@ export {
   lockIdentity,
   type PhysicalResourceIdentity,
 } from "./core/locks/lock-identity.js";
+export { LockManager } from "./core/locks/lock-manager.js";
+export type {
+  LockLease,
+  LockLiveness,
+  LockManagerHooks,
+  LockRecord,
+} from "./core/locks/types.js";
+export {
+  abortPromise,
+  abortReasonToError,
+  type OperationAbortReason,
+} from "./core/operations/abort.js";
 export { PathService } from "./core/paths/path-service.js";
 export { atomicJson, readJson } from "./core/utilities/atomic-json.js";
 export { sha, stable } from "./core/utilities/stable-json.js";
@@ -61,7 +80,6 @@ export {
   type ArtifactRecord,
   type Run,
 } from "./core/runs/run-manager.js";
-const LOCK_ID_PATTERN = /^[a-zA-Z0-9_-]+$/;
 const APPROVAL_ID_PATTERN = /^approval-[a-f0-9]+$/;
 export function projectStorageKey(project: {
   id?: string;
@@ -327,184 +345,6 @@ export class AdapterRegistry {
   }
 }
 
-export interface LockRecord {
-  schema: string;
-  version: number;
-  lockId: string;
-  ownerToken: string;
-  pid: number;
-  hostname: string;
-  session?: string;
-  command: string;
-  runId?: string;
-  acquiredAt: string;
-  heartbeatAt: string;
-  expiresAt: string;
-}
-export type LockLiveness = "active" | "stale" | "unknown";
-export interface LockLease {
-  readonly lock: LockRecord;
-  readonly lost: Promise<never>;
-  stop(): Promise<void>;
-}
-export class LockManager {
-  constructor(private paths: PathService) {}
-  file(id: string) {
-    if (!LOCK_ID_PATTERN.test(id))
-      fail("INVALID_LOCK_ID", 2, `Invalid lock ID: ${id}`);
-    return resolveInside(this.paths.runtimeRoot(), `${id}.json`);
-  }
-  async acquire(
-    id: string,
-    command: string,
-    runId?: string,
-  ): Promise<LockRecord> {
-    await fs.mkdir(this.paths.runtimeRoot(), { recursive: true });
-    const now = new Date(),
-      record: LockRecord = {
-        schema: "benchpilot.lock",
-        version: 1,
-        lockId: id,
-        ownerToken: randomBytes(16).toString("hex"),
-        pid: process.pid,
-        hostname: os.hostname(),
-        command,
-        runId,
-        acquiredAt: now.toISOString(),
-        heartbeatAt: now.toISOString(),
-        expiresAt: new Date(now.getTime() + 30000).toISOString(),
-      };
-    try {
-      const h = await fs.open(this.file(id), "wx");
-      await h.writeFile(JSON.stringify(record, null, 2));
-      await h.close();
-      return record;
-    } catch (e: unknown) {
-      if ((e as NodeJS.ErrnoException).code === "EEXIST") {
-        const held = await readJson<LockRecord>(this.file(id));
-        fail("DEVICE_BUSY", 4, `Resource ${id} is locked.`, { holder: held });
-      }
-      throw e;
-    }
-  }
-  async heartbeat(lock: LockRecord, leaseMs = 30_000): Promise<LockRecord> {
-    const existing = await readJson<LockRecord>(this.file(lock.lockId));
-    if (!existing || existing.ownerToken !== lock.ownerToken)
-      fail("LOCK_OWNERSHIP_LOST", 4, `Lock ownership lost: ${lock.lockId}`);
-    const now = new Date();
-    const updated: LockRecord = {
-      ...existing!,
-      heartbeatAt: now.toISOString(),
-      expiresAt: new Date(now.getTime() + leaseMs).toISOString(),
-    };
-    await atomicJson(this.file(lock.lockId), updated);
-    return updated;
-  }
-  startHeartbeat(
-    lock: LockRecord,
-    intervalMs = 5_000,
-    leaseMs = 30_000,
-  ): LockLease {
-    let stopped = false;
-    let wake: (() => void) | undefined;
-    let rejectLost!: (error: BenchPilotError) => void;
-    const lost = new Promise<never>((_, reject) => {
-      rejectLost = reject;
-    });
-    // The runner consumes this promise; avoid an unhandled rejection if it stops first.
-    void lost.catch(() => {});
-    const sleep = () =>
-      new Promise<void>((resolve) => {
-        wake = resolve;
-        const timer = setTimeout(resolve, intervalMs);
-        timer.unref();
-      });
-    const loop = (async () => {
-      while (!stopped) {
-        await sleep();
-        wake = undefined;
-        if (stopped) break;
-        try {
-          await this.heartbeat(lock, leaseMs);
-        } catch (error) {
-          stopped = true;
-          rejectLost(
-            error instanceof BenchPilotError
-              ? error
-              : new BenchPilotError(
-                  "LOCK_OWNERSHIP_LOST",
-                  4,
-                  "Lock heartbeat failed.",
-                ),
-          );
-        }
-      }
-    })();
-    return {
-      lock,
-      lost,
-      async stop() {
-        stopped = true;
-        wake?.();
-        await loop;
-      },
-    };
-  }
-  async liveness(lock: LockRecord, now = Date.now()): Promise<LockLiveness> {
-    const heartbeat = Date.parse(lock.heartbeatAt);
-    const expiry = Date.parse(lock.expiresAt);
-    const severelyExpired = now > expiry + 10_000;
-    if (lock.hostname !== os.hostname())
-      return severelyExpired ? "stale" : "unknown";
-    if (now > expiry + 10_000) return "stale";
-    try {
-      process.kill(lock.pid, 0);
-      return Number.isFinite(heartbeat) ? "active" : "unknown";
-    } catch (error: unknown) {
-      return (error as NodeJS.ErrnoException).code === "ESRCH"
-        ? "stale"
-        : "unknown";
-    }
-  }
-  async release(lock: LockRecord) {
-    const existing = await readJson<LockRecord>(this.file(lock.lockId));
-    if (!existing) return;
-    if (existing.ownerToken !== lock.ownerToken)
-      fail("LOCK_OWNERSHIP_LOST", 4, `Lock ownership lost: ${lock.lockId}`);
-    await fs.unlink(this.file(lock.lockId));
-  }
-  async list() {
-    try {
-      return await Promise.all(
-        (await fs.readdir(this.paths.runtimeRoot()))
-          .filter((f) => f.endsWith(".json"))
-          .map((f) =>
-            readJson<LockRecord>(path.join(this.paths.runtimeRoot(), f)),
-          ),
-      );
-    } catch (e: unknown) {
-      if ((e as NodeJS.ErrnoException).code === "ENOENT") return [];
-      throw e;
-    }
-  }
-  async clear(id: string, dangerous: boolean) {
-    const l = await readJson<LockRecord>(this.file(id));
-    if (!l) fail("LOCK_NOT_FOUND", 3, `Lock not found: ${id}`);
-    const status = await this.liveness(l!);
-    if (status !== "stale" && !dangerous)
-      fail(
-        "DANGEROUS_CONFIRMATION_REQUIRED",
-        7,
-        "Active lock requires --dangerously-clear-active-lock.",
-      );
-    const current = await readJson<LockRecord>(this.file(id));
-    if (current?.ownerToken !== l!.ownerToken)
-      fail("LOCK_OWNERSHIP_LOST", 4, `Lock changed while clearing: ${id}`);
-    await fs.unlink(this.file(id));
-    return l;
-  }
-}
-
 export class ApprovalManager {
   constructor(private paths: PathService) {}
   private assertId(id: string) {
@@ -736,6 +576,8 @@ export interface OperationServices {
   config: ResolvedConfig;
   project: { root: string; config: string } | undefined;
   flags: Json;
+  lockHeartbeatIntervalMs?: number;
+  lockLeaseMs?: number;
 }
 export class OperationRunner {
   constructor(private s: OperationServices) {}
@@ -888,17 +730,23 @@ export class OperationRunner {
     const artifacts: Json[] = [];
     let dangerousEffectStarted = false;
     const controller = new AbortController();
-    let abortReason: "timeout" | "signal" | undefined;
     const timer = setTimeout(() => {
-      abortReason = "timeout";
-      controller.abort({ kind: "timeout", timeoutMs: timeout });
+      controller.abort({
+        kind: "timeout",
+        timeoutMs: timeout,
+      } satisfies OperationAbortReason);
     }, timeout);
-    const onSignal = () => {
-      abortReason = "signal";
-      controller.abort({ kind: "signal" });
+    const abortForSignal = (signal: "SIGINT" | "SIGTERM") => {
+      if (!controller.signal.aborted)
+        controller.abort({
+          kind: "signal",
+          signal,
+        } satisfies OperationAbortReason);
     };
-    process.once("SIGINT", onSignal);
-    process.once("SIGTERM", onSignal);
+    const onSigint = () => abortForSignal("SIGINT");
+    const onSigterm = () => abortForSignal("SIGTERM");
+    process.once("SIGINT", onSigint);
+    process.once("SIGTERM", onSigterm);
     const started = Date.now();
     let data: Json | undefined;
     let primaryError: BenchPilotError | undefined;
@@ -910,8 +758,18 @@ export class OperationRunner {
           lockId,
           command,
           run?.id,
+          {
+            adapter: runtime.identity.adapter,
+            kind: "device",
+            physicalId: runtime.identity.physicalId,
+          },
+          this.s.flags.session ? String(this.s.flags.session) : undefined,
         );
-        lease = new LockManager(this.s.paths).startHeartbeat(lock);
+        lease = new LockManager(this.s.paths).startHeartbeat(
+          lock,
+          this.s.lockHeartbeatIntervalMs,
+          this.s.lockLeaseMs,
+        );
         logger.event("lock.acquired", { lockId });
       }
       if (safety.mode === "human-approval") {
@@ -962,34 +820,24 @@ export class OperationRunner {
         },
         input,
       );
+      const lockLoss = lease
+        ? lease.lost.catch((error: BenchPilotError) => {
+            if (!controller.signal.aborted)
+              controller.abort({
+                kind: "lock-ownership-lost",
+                lockId,
+                error,
+              } satisfies OperationAbortReason);
+            throw error;
+          })
+        : new Promise<never>(() => {});
       data = await Promise.race([
         execution,
-        new Promise<never>((_, reject) =>
-          controller.signal.addEventListener(
-            "abort",
-            () =>
-              reject(
-                new BenchPilotError(
-                  abortReason === "signal"
-                    ? "OPERATION_ABORTED"
-                    : "OPERATION_TIMEOUT",
-                  6,
-                  abortReason === "signal"
-                    ? "Operation aborted by signal."
-                    : `Operation timed out after ${timeout}ms.`,
-                ),
-              ),
-            { once: true },
-          ),
-        ),
-        lease?.lost ?? new Promise<never>(() => {}),
+        abortPromise(controller.signal),
+        lockLoss,
       ]);
       if (controller.signal.aborted)
-        fail(
-          abortReason === "signal" ? "OPERATION_ABORTED" : "OPERATION_TIMEOUT",
-          6,
-          "Operation aborted.",
-        );
+        throw abortReasonToError(controller.signal.reason);
       try {
         data = capability.outputSchema?.parse(data) ?? data;
       } catch (error) {
@@ -1003,21 +851,17 @@ export class OperationRunner {
           ? e
           : new BenchPilotError(
               controller.signal.aborted
-                ? abortReason === "signal"
-                  ? "OPERATION_ABORTED"
-                  : "OPERATION_TIMEOUT"
+                ? abortReasonToError(controller.signal.reason).kind
                 : "INTERNAL_ERROR",
               controller.signal.aborted ? 6 : 8,
               controller.signal.aborted
-                ? abortReason === "signal"
-                  ? "Operation aborted."
-                  : "Operation timed out."
+                ? abortReasonToError(controller.signal.reason).message
                 : (e as Error).message,
             );
     }
     clearTimeout(timer);
-    process.removeListener("SIGINT", onSignal);
-    process.removeListener("SIGTERM", onSignal);
+    process.removeListener("SIGINT", onSigint);
+    process.removeListener("SIGTERM", onSigterm);
     const cleanupWithGrace = async (
       cleanup: () => Promise<void> | void,
       name: string,
