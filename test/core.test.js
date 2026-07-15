@@ -419,6 +419,26 @@ test("adapter definitions require a supported API and configuration schema", () 
       error instanceof BenchPilotError &&
       error.kind === "INVALID_ADAPTER_CONFIG",
   );
+  registry.register({
+    id: "device-configured",
+    apiVersion: 1,
+    version: "1",
+    summary: "device configured",
+    configSchema: objectSchema(),
+    deviceConfigSchema: objectSchema({ port: stringSchema() }),
+    ...methods,
+  });
+  return assert.rejects(
+    registry.createDevice(
+      registry.get("device-configured"),
+      "device",
+      { port: 42 },
+      { adapters: { "device-configured": {} } },
+    ),
+    (error) =>
+      error instanceof BenchPilotError &&
+      error.kind === "INVALID_DEVICE_CONFIG",
+  );
 });
 
 test("output schema failures are classified as INVALID_CAPABILITY_OUTPUT", async () => {
