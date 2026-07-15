@@ -8,7 +8,7 @@ import {
 } from "./template-validator.js";
 
 const id = /^[a-z][a-z0-9-]*$/;
-const duration = /^\d+(ms|s|m|h)$/;
+const duration = /^[1-9]\d*(ms|s|m|h)$/;
 const platforms = ["windows", "linux", "macos"];
 const obj = (value: unknown): JsonObject =>
   value && typeof value === "object" && !Array.isArray(value)
@@ -139,6 +139,17 @@ export const validateSemantics = async (
       ),
     );
   const declared = obj(capabilities.capabilities);
+  for (const key of Object.keys(declared))
+    if (!Object.hasOwn(catalog, key))
+      errors.push(
+        diagnostic(
+          "ADAPTER_CAPABILITY_INVALID",
+          "capabilities.toml",
+          `Unknown standard capability: ${key}`,
+          undefined,
+          adapter.id,
+        ),
+      );
   for (const key of Object.keys(catalog)) {
     if (!Object.hasOwn(declared, key))
       errors.push(
@@ -222,7 +233,20 @@ export const validateSemantics = async (
         ),
       );
     if (typeof item.handler === "string") {
-      const [kind, target] = item.handler.split(":");
+      const match = /^(action|workflow):([a-z][a-z0-9-]*)$/.exec(item.handler);
+      if (!match) {
+        errors.push(
+          diagnostic(
+            "ADAPTER_CAPABILITY_INVALID",
+            "capabilities.toml",
+            `Capability ${key} has an invalid handler`,
+            undefined,
+            adapter.id,
+          ),
+        );
+        continue;
+      }
+      const [, kind, target] = match;
       ref(
         errors,
         kind === "action" ? actions : workflows,
@@ -310,7 +334,8 @@ export const validateSemantics = async (
       );
     if (
       ["danger-flag", "human-approval"].includes(String(safety.mode)) &&
-      typeof safety.flag !== "string"
+      (typeof safety.flag !== "string" ||
+        typeof safety.description !== "string")
     )
       errors.push(
         diagnostic(
@@ -321,7 +346,35 @@ export const validateSemantics = async (
           adapter.id,
         ),
       );
+    if (
+      safety.mode === "normal" &&
+      (safety.flag !== undefined || safety.description !== undefined)
+    )
+      errors.push(
+        diagnostic(
+          "ADAPTER_CAPABILITY_INVALID",
+          "capabilities.toml",
+          "Normal safety may not declare a danger flag",
+          undefined,
+          adapter.id,
+        ),
+      );
   }
+  if (manifest.status === "disabled")
+    for (const [key, item] of [
+      ...entries(declared),
+      ...entries(capabilities.extensions),
+    ])
+      if (obj(item).enabled !== false)
+        errors.push(
+          diagnostic(
+            "ADAPTER_CAPABILITY_INVALID",
+            "capabilities.toml",
+            `Disabled adapter cannot enable ${key}`,
+            undefined,
+            adapter.id,
+          ),
+        );
   for (const [key, raw] of entries(discoveries)) {
     const discovery = obj(raw),
       candidateIds = new Set<string>();
@@ -468,6 +521,45 @@ export const validateSemantics = async (
   Object.keys(tools).forEach(visit);
   for (const [key, raw] of entries(actions)) {
     const action = obj(raw);
+    if (
+      !["process", "serial-read", "serial-write", "copy"].includes(
+        String(action.type),
+      )
+    )
+      errors.push(
+        diagnostic(
+          "ADAPTER_SCHEMA_INVALID",
+          "actions.toml",
+          `Action ${key} has an invalid type`,
+          undefined,
+          adapter.id,
+        ),
+      );
+    if (action.type !== "process" && action.tool !== undefined)
+      errors.push(
+        diagnostic(
+          "ADAPTER_SCHEMA_INVALID",
+          "actions.toml",
+          `Non-process action ${key} may not reference a tool`,
+          undefined,
+          adapter.id,
+        ),
+      );
+    if (
+      action.type === "process" &&
+      ["shell", "command", "command_line", "script"].some((field) =>
+        Object.hasOwn(action, field),
+      )
+    )
+      errors.push(
+        diagnostic(
+          "ADAPTER_SCHEMA_INVALID",
+          "actions.toml",
+          `Process action ${key} contains a prohibited command field`,
+          undefined,
+          adapter.id,
+        ),
+      );
     if (action.type === "process")
       ref(errors, tools, action.tool, "actions.toml", adapter.id, "Tool");
     if (action.parser)
@@ -537,7 +629,10 @@ export const validateSemantics = async (
   }
   for (const [key, raw] of entries(parsers)) {
     const parser = obj(raw);
-    if (!Array.isArray(parser.success_exit_codes))
+    if (
+      !Array.isArray(parser.success_exit_codes) ||
+      !parser.success_exit_codes.length
+    )
       errors.push(
         diagnostic(
           "ADAPTER_SCHEMA_INVALID",
@@ -547,13 +642,39 @@ export const validateSemantics = async (
           adapter.id,
         ),
       );
+    const ids = new Set<string>();
     for (const rule of [
       ...(Array.isArray(parser.extract) ? parser.extract : []),
       ...(Array.isArray(parser.progress) ? parser.progress : []),
       ...(Array.isArray(parser.errors) ? parser.errors : []),
-    ])
+    ]) {
+      const item = obj(rule);
+      if (typeof item.id !== "string" || ids.has(item.id))
+        errors.push(
+          diagnostic(
+            "ADAPTER_SCHEMA_INVALID",
+            "parsers.toml",
+            `Parser ${key} has duplicate or invalid rule id`,
+            undefined,
+            adapter.id,
+          ),
+        );
+      ids.add(String(item.id));
+      if (typeof item.pattern !== "string" || !item.pattern) {
+        if (item.type !== "json-pointer")
+          errors.push(
+            diagnostic(
+              "ADAPTER_REGEX_INVALID",
+              "parsers.toml",
+              `Parser ${key} has a missing regex`,
+              undefined,
+              adapter.id,
+            ),
+          );
+        continue;
+      }
       try {
-        new RegExp(String(obj(rule).pattern));
+        new RegExp(item.pattern);
       } catch {
         errors.push(
           diagnostic(
@@ -565,6 +686,7 @@ export const validateSemantics = async (
           ),
         );
       }
+    }
   }
   for (const [key, raw] of entries(sets)) {
     const set = obj(raw),

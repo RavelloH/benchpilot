@@ -23,6 +23,21 @@ if (!command || !["validate", "compile", "test"].includes(command)) {
   );
   process.exitCode = 2;
 } else {
-  process.stdout.write(`${JSON.stringify({ diagnostics })}\n`);
+  diagnostics = diagnostics.sort((left, right) =>
+    [left.adapterId ?? "", left.file, left.path ?? "", left.code, left.message]
+      .join("\u0000")
+      .localeCompare(
+        [
+          right.adapterId ?? "",
+          right.file,
+          right.path ?? "",
+          right.code,
+          right.message,
+        ].join("\u0000"),
+      ),
+  );
+  process.stdout.write(
+    `${JSON.stringify({ ok: !hasErrors(diagnostics), diagnostics })}\n`,
+  );
   if (hasErrors(diagnostics)) process.exitCode = 1;
 }
