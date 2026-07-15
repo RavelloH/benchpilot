@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -37,10 +37,10 @@ try {
     (await readdir(temp)).find((name) => name.endsWith(".tgz")) || "",
   );
   assert.notEqual(archive, temp, "pnpm pack did not create an archive.");
-  execFileSync(process.execPath, [npmCli, "init", "-y"], {
-    cwd: temp,
-    stdio: "ignore",
-  });
+  await writeFile(
+    path.join(temp, "package.json"),
+    `${JSON.stringify({ private: true }, null, 2)}\n`,
+  );
   execFileSync(process.execPath, [npmCli, "install", archive], {
     cwd: temp,
     stdio: "inherit",
