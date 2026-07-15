@@ -8,6 +8,8 @@
     "sourceHash",
     "manifest",
     "capabilityCatalog",
+    "capabilityCatalogVersion",
+    "capabilityCatalogHash",
     "schemas",
     "platforms"
   ],
@@ -15,11 +17,60 @@
   "properties": {
     "schema": { "const": "benchpilot.adapter-bundle" },
     "schemaVersion": { "const": 1 },
-    "id": { "pattern": "^[a-z][a-z0-9-]*$" },
-    "sourceHash": { "pattern": "^[a-f0-9]{64}$" },
+    "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+    "sourceHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
     "manifest": { "type": "object" },
     "capabilityCatalog": { "type": "object" },
-    "schemas": { "type": "object" },
-    "platforms": { "type": "object" }
+    "capabilityCatalogVersion": { "const": 1 },
+    "capabilityCatalogHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "schemas": {
+      "type": "object",
+      "required": ["config", "device", "inputs", "outputs"],
+      "additionalProperties": false,
+      "properties": {
+        "config": { "type": "object" },
+        "device": { "type": "object" },
+        "inputs": { "type": "object" },
+        "outputs": { "type": "object" }
+      }
+    },
+    "platforms": {
+      "type": "object",
+      "required": ["windows", "linux", "macos"],
+      "additionalProperties": false,
+      "properties": {
+        "windows": { "$ref": "#/$defs/platform" },
+        "linux": { "$ref": "#/$defs/platform" },
+        "macos": { "$ref": "#/$defs/platform" }
+      }
+    }
+  },
+  "$defs": {
+    "platform": {
+      "type": "object",
+      "required": [
+        "capabilities",
+        "tools",
+        "discoveries",
+        "environments",
+        "devices",
+        "actions",
+        "workflows",
+        "parsers",
+        "artifacts"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "capabilities": { "type": "object" },
+        "tools": { "type": "object" },
+        "discoveries": { "type": "object" },
+        "environments": { "type": "object" },
+        "devices": { "type": "object" },
+        "actions": { "type": "object" },
+        "workflows": { "type": "object" },
+        "parsers": { "type": "object" },
+        "artifacts": { "type": "object" }
+      }
+    }
   }
 }

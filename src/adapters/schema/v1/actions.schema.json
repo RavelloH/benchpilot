@@ -6,6 +6,10 @@
   "properties": {
     "schema": { "const": "benchpilot.adapter.actions" },
     "schema_version": { "const": 1 },
-    "actions": { "type": "object" }
+    "actions": {
+      "type": "object",
+      "propertyNames": { "pattern": "^[a-z][a-z0-9-]*$" },
+      "additionalProperties": { "type": "object" }
+    }
   }
 }

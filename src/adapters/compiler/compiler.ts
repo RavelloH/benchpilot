@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { basename, resolve } from "node:path";
 import { sha, stable } from "../../core/utilities/stable-json.js";
 import { hasErrors } from "./diagnostics.js";
@@ -114,6 +114,9 @@ export const adapterRoots = async () => [
     .catch(() => [])),
 ];
 
+export const compileRoots = async () =>
+  (await adapterRoots()).filter((root) => basename(root) !== "_template");
+
 export const validateAllAdapters = async () => {
   const results = await Promise.all(
     (await adapterRoots()).map(validateAdapter),
@@ -154,6 +157,10 @@ export const compileAdapter = async (
     };
     platforms[platform] = mergePlatform(base, overlay);
   }
+  const catalogContent = await readFile(catalog, "utf8");
+  const capabilityCatalog = (await import("@iarna/toml")).parse(
+    catalogContent,
+  ) as JsonObject;
   const source = await Promise.all(
     fixedFiles
       .slice()
@@ -166,9 +173,11 @@ export const compileAdapter = async (
       schema: "benchpilot.adapter-bundle",
       schemaVersion: 1,
       id: adapter.id,
-      sourceHash: sha(source),
+      sourceHash: sha([source, catalogContent, 1]),
       manifest: adapter.files["manifest.toml"],
-      capabilityCatalog: {},
+      capabilityCatalog,
+      capabilityCatalogVersion: 1,
+      capabilityCatalogHash: sha(catalogContent),
       schemas: adapter.schemas,
       platforms,
     },
@@ -176,11 +185,12 @@ export const compileAdapter = async (
 };
 
 export const compileAll = async (output = resolve("dist", "adapters")) => {
-  const roots = await adapterRoots();
+  const roots = await compileRoots();
   const results = await Promise.all(roots.map(compileAdapter));
   const diagnostics = results.flatMap((item) => item.diagnostics);
   if (hasErrors(diagnostics)) return { diagnostics };
   await mkdir(output, { recursive: true });
+  await rm(resolve(output, "template.json"), { force: true });
   const bundles = results.flatMap((item) => (item.bundle ? [item.bundle] : []));
   await Promise.all(
     bundles.map((bundle) =>

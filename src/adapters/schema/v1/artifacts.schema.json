@@ -6,6 +6,74 @@
   "properties": {
     "schema": { "const": "benchpilot.adapter.artifacts" },
     "schema_version": { "const": 1 },
-    "sets": { "type": "object" }
+    "sets": {
+      "type": "object",
+      "propertyNames": { "pattern": "^[a-z][a-z0-9-]*$" },
+      "additionalProperties": { "$ref": "#/$defs/set" }
+    }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+    "entryBase": {
+      "type": "object",
+      "required": ["id", "kind", "required", "multiple"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "kind": { "type": "string", "minLength": 1 },
+        "required": { "type": "boolean" },
+        "multiple": { "type": "boolean" }
+      }
+    },
+    "entry": {
+      "oneOf": [
+        {
+          "allOf": [
+            { "$ref": "#/$defs/entryBase" },
+            {
+              "type": "object",
+              "required": ["path"],
+              "additionalProperties": false,
+              "properties": {
+                "id": { "$ref": "#/$defs/id" },
+                "kind": { "type": "string", "minLength": 1 },
+                "required": { "type": "boolean" },
+                "multiple": { "type": "boolean" },
+                "path": { "type": "string", "minLength": 1 }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/entryBase" },
+            {
+              "type": "object",
+              "required": ["glob"],
+              "additionalProperties": false,
+              "properties": {
+                "id": { "$ref": "#/$defs/id" },
+                "kind": { "type": "string", "minLength": 1 },
+                "required": { "type": "boolean" },
+                "multiple": { "type": "boolean" },
+                "glob": { "type": "string", "minLength": 1 }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "set": {
+      "type": "object",
+      "required": ["base", "entries"],
+      "additionalProperties": false,
+      "properties": {
+        "base": { "type": "string", "minLength": 1 },
+        "entries": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/entry" }
+        }
+      }
+    }
   }
 }

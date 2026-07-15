@@ -7,7 +7,88 @@
     "schema": { "const": "benchpilot.adapter.capabilities" },
     "schema_version": { "const": 1 },
     "catalog_version": { "const": 1 },
-    "capabilities": { "type": "object" },
-    "extensions": { "type": "object" }
+    "capabilities": { "$ref": "#/$defs/capabilityMap" },
+    "extensions": { "$ref": "#/$defs/capabilityMap" }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+    "capabilityMap": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/id" },
+      "additionalProperties": { "$ref": "#/$defs/capability" }
+    },
+    "platforms": {
+      "type": "object",
+      "required": ["windows", "linux", "macos"],
+      "additionalProperties": false,
+      "properties": {
+        "windows": { "type": "boolean" },
+        "linux": { "type": "boolean" },
+        "macos": { "type": "boolean" }
+      }
+    },
+    "platformReasons": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "windows": { "type": "string", "minLength": 1 },
+        "linux": { "type": "string", "minLength": 1 },
+        "macos": { "type": "string", "minLength": 1 }
+      }
+    },
+    "safety": {
+      "type": "object",
+      "required": ["mode"],
+      "additionalProperties": false,
+      "properties": {
+        "mode": { "enum": ["normal", "danger-flag", "human-approval"] },
+        "flag": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+        "description": { "type": "string", "minLength": 1 }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "mode": { "const": "normal" } } },
+          "then": {
+            "not": {
+              "anyOf": [
+                { "required": ["flag"] },
+                { "required": ["description"] }
+              ]
+            }
+          },
+          "else": { "required": ["flag", "description"] }
+        }
+      ]
+    },
+    "capability": {
+      "type": "object",
+      "required": ["enabled", "platforms"],
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "reason": { "type": "string", "minLength": 1 },
+        "handler": {
+          "type": "string",
+          "pattern": "^(action|workflow):[a-z][a-z0-9-]*$"
+        },
+        "input_schema": { "$ref": "#/$defs/id" },
+        "output_schema": { "$ref": "#/$defs/id" },
+        "creates_run": { "type": "boolean" },
+        "timeout": { "type": "string", "pattern": "^[1-9][0-9]*(ms|s|m|h)$" },
+        "lock": { "enum": ["none", "device"] },
+        "safety": { "$ref": "#/$defs/safety" },
+        "platforms": { "$ref": "#/$defs/platforms" },
+        "platform_reasons": { "$ref": "#/$defs/platformReasons" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "enabled": { "const": true } } },
+          "then": {
+            "required": ["handler", "creates_run", "timeout", "lock", "safety"]
+          },
+          "else": { "required": ["reason"] }
+        }
+      ]
+    }
   }
 }

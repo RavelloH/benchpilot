@@ -6,6 +6,165 @@
   "properties": {
     "schema": { "const": "benchpilot.adapter.cases" },
     "schema_version": { "const": 1 },
-    "cases": { "type": "array" }
+    "cases": { "type": "array", "items": { "$ref": "#/$defs/case" } }
+  },
+  "$defs": {
+    "base": {
+      "type": "object",
+      "required": ["id", "type", "platform", "target", "context", "expect"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+        "platform": { "enum": ["windows", "linux", "macos"] },
+        "target": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+        "context": { "type": "object" }
+      }
+    },
+    "case": {
+      "oneOf": [
+        {
+          "allOf": [
+            { "$ref": "#/$defs/base" },
+            {
+              "type": "object",
+              "required": [
+                "id",
+                "type",
+                "platform",
+                "target",
+                "context",
+                "expect"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+                "type": { "const": "render-action" },
+                "platform": { "enum": ["windows", "linux", "macos"] },
+                "target": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+                "context": { "type": "object" },
+                "expect": {
+                  "type": "object",
+                  "required": ["args"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "tool": { "type": "string" },
+                    "cwd": {},
+                    "args": { "type": "array" },
+                    "environment": { "type": "object" }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/base" },
+            {
+              "type": "object",
+              "required": [
+                "id",
+                "type",
+                "platform",
+                "target",
+                "context",
+                "expect"
+              ],
+              "anyOf": [
+                { "required": ["stdout_fixture"] },
+                { "required": ["stderr_fixture"] }
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+                "type": { "const": "parse-output" },
+                "platform": { "enum": ["windows", "linux", "macos"] },
+                "target": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+                "context": { "type": "object" },
+                "stdout_fixture": { "type": "string", "pattern": "^fixtures/" },
+                "stderr_fixture": { "type": "string", "pattern": "^fixtures/" },
+                "exit_code": { "type": "integer" },
+                "expect": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "success": { "type": "boolean" },
+                    "error": { "type": "object" },
+                    "result": { "type": "object" },
+                    "progress": { "type": "array" }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/base" },
+            {
+              "type": "object",
+              "required": [
+                "id",
+                "type",
+                "platform",
+                "target",
+                "context",
+                "expect"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+                "type": { "const": "plan-workflow" },
+                "platform": { "enum": ["windows", "linux", "macos"] },
+                "target": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+                "context": { "type": "object" },
+                "expect": {
+                  "type": "object",
+                  "required": ["steps"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "steps": { "type": "array", "items": { "type": "string" } }
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "allOf": [
+            { "$ref": "#/$defs/base" },
+            {
+              "type": "object",
+              "required": [
+                "id",
+                "type",
+                "platform",
+                "target",
+                "context",
+                "expect"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+                "type": { "const": "resolve-artifacts" },
+                "platform": { "enum": ["windows", "linux", "macos"] },
+                "target": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+                "context": { "type": "object" },
+                "expect": {
+                  "type": "object",
+                  "required": ["entries"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "entries": {
+                      "type": "array",
+                      "items": { "type": "object" }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
   }
 }

@@ -7,6 +7,29 @@
     "schema": { "const": "benchpilot.adapter.platform" },
     "schema_version": { "const": 1 },
     "platform": { "enum": ["windows", "linux", "macos"] },
-    "overrides": { "type": "object" }
-  }
+    "overrides": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tools": { "type": "object" },
+        "discoveries": { "type": "object" },
+        "environments": { "type": "object" },
+        "devices": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "discovery": { "type": "object" },
+            "identity": { "type": "object" },
+            "connections": { "type": "object" },
+            "probe": { "type": "object" }
+          }
+        },
+        "actions": { "type": "object" },
+        "workflows": { "type": "object" },
+        "parsers": { "type": "object" },
+        "artifacts": { "type": "object" }
+      }
+    }
+  },
+  "$defs": {}
 }

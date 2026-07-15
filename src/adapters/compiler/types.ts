@@ -22,6 +22,8 @@ export interface CompiledAdapterBundleV1 {
   schemaVersion: 1;
   id: string;
   sourceHash: string;
+  capabilityCatalogVersion: 1;
+  capabilityCatalogHash: string;
   manifest: JsonObject;
   capabilityCatalog: JsonObject;
   schemas: Record<string, JsonObject>;
