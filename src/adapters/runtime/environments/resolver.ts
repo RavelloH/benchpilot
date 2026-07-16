@@ -1,4 +1,5 @@
-import { realpath, stat } from "node:fs/promises";
+import { mkdtemp, realpath, rm, stat, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { runProcess } from "../../../core/process/process-runner.js";
 import { sha, stable } from "../../../core/utilities/stable-json.js";
@@ -43,38 +44,74 @@ const envValue = (base: NodeJS.ProcessEnv, name: string) =>
       : key === name,
   )?.[1];
 
-const captureCommand = (shell: unknown, script: string) => {
+interface CaptureCommand {
+  command: string;
+  args: string[];
+  sentinel: string;
+  cleanup?: () => Promise<void>;
+}
+
+const captureCommand = async (
+  shell: unknown,
+  script: string,
+): Promise<CaptureCommand> => {
   const sentinel = "__BENCHPILOT_ENV__";
   const emit =
     "process.stdout.write('__BENCHPILOT_ENV__'+JSON.stringify(process.env))";
-  if (shell === "powershell")
+  if (shell === "powershell") {
+    const directory = await mkdtemp(path.join(tmpdir(), "benchpilot-env-"));
+    const wrapper = path.join(directory, "capture.ps1");
+    await writeFile(
+      wrapper,
+      [
+        "param([string]$ScriptPath, [string]$NodePath, [string]$EmitProgram)",
+        ". $ScriptPath",
+        "& $NodePath -e $EmitProgram",
+        "exit $LASTEXITCODE",
+        "",
+      ].join("\r\n"),
+      "utf8",
+    );
     return {
       command: "powershell.exe",
       args: [
         "-NoProfile",
         "-NonInteractive",
-        "-Command",
-        "& { . $args[0]; & $args[1] -e $args[2] }",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        wrapper,
         script,
         process.execPath,
         emit,
       ],
       sentinel,
+      cleanup: () => rm(directory, { recursive: true, force: true }),
     };
-  if (shell === "cmd")
+  }
+  if (shell === "cmd") {
+    const directory = await mkdtemp(path.join(tmpdir(), "benchpilot-env-"));
+    const wrapper = path.join(directory, "capture.cmd");
+    await writeFile(
+      wrapper,
+      [
+        "@echo off",
+        "setlocal DisableDelayedExpansion",
+        'call "%~1"',
+        "if errorlevel 1 exit /b %errorlevel%",
+        '"%~2" -e "%~3"',
+        "exit /b %errorlevel%",
+        "",
+      ].join("\r\n"),
+      "utf8",
+    );
     return {
       command: "cmd.exe",
-      args: [
-        "/d",
-        "/s",
-        "/c",
-        'call "%~1" && "%~2" -e "%~3"',
-        script,
-        process.execPath,
-        emit,
-      ],
+      args: ["/d", "/s", "/c", wrapper, script, process.execPath, emit],
       sentinel,
+      cleanup: () => rm(directory, { recursive: true, force: true }),
     };
+  }
   return {
     command: "sh",
     args: [
@@ -227,31 +264,35 @@ export class EnvironmentResolver {
     );
     const cached = this.cache.get(key);
     if (cached) return { ...cached };
-    const command = captureCommand(provider.shell, script);
-    const result = await runProcess({
-      command: command.command,
-      args: command.args,
-      env: { ...this.base },
-      signal,
-      captureOutput: true,
-      maxCaptureBytes: 1_048_576,
-    });
-    const serialized = result.stdout?.split(command.sentinel).at(-1);
-    if (result.code !== 0 || !serialized)
-      throw new AdapterRuntimeError(
-        "ADAPTER_ENVIRONMENT_UNAVAILABLE",
-        "Capture-script execution failed.",
-      );
-    let environment: NodeJS.ProcessEnv;
+    const command = await captureCommand(provider.shell, script);
     try {
-      environment = JSON.parse(serialized) as NodeJS.ProcessEnv;
-    } catch {
-      throw new AdapterRuntimeError(
-        "ADAPTER_ENVIRONMENT_UNAVAILABLE",
-        "Capture-script did not emit a valid environment.",
-      );
+      const result = await runProcess({
+        command: command.command,
+        args: command.args,
+        env: { ...this.base },
+        signal,
+        captureOutput: true,
+        maxCaptureBytes: 1_048_576,
+      });
+      const serialized = result.stdout?.split(command.sentinel).at(-1);
+      if (result.code !== 0 || !serialized)
+        throw new AdapterRuntimeError(
+          "ADAPTER_ENVIRONMENT_UNAVAILABLE",
+          "Capture-script execution failed.",
+        );
+      let environment: NodeJS.ProcessEnv;
+      try {
+        environment = JSON.parse(serialized) as NodeJS.ProcessEnv;
+      } catch {
+        throw new AdapterRuntimeError(
+          "ADAPTER_ENVIRONMENT_UNAVAILABLE",
+          "Capture-script did not emit a valid environment.",
+        );
+      }
+      this.cache.set(key, environment);
+      return { ...environment };
+    } finally {
+      await command.cleanup?.();
     }
-    this.cache.set(key, environment);
-    return { ...environment };
   }
 }
