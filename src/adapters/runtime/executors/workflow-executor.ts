@@ -17,21 +17,25 @@ export const executeWorkflow = async (
   const controller = new AbortController();
   const onAbort = () => controller.abort(signal.reason);
   signal.addEventListener("abort", onAbort, { once: true });
-  const timer = setTimeout(
-    () =>
-      controller.abort(
-        new AdapterRuntimeError(
-          "ADAPTER_WORKFLOW_TIMEOUT",
-          "Workflow timed out.",
-          true,
-          [
-            "Retry the operation.",
-            "Increase the operation timeout if the device or tool is slow.",
-          ],
-        ),
-      ),
-    durationMs(workflow.timeout),
-  );
+  const timeoutMs = durationMs(workflow.timeout);
+  const timer =
+    timeoutMs > 0
+      ? setTimeout(
+          () =>
+            controller.abort(
+              new AdapterRuntimeError(
+                "ADAPTER_WORKFLOW_TIMEOUT",
+                "Workflow timed out.",
+                true,
+                [
+                  "Retry the operation.",
+                  "Increase the operation timeout if the device or tool is slow.",
+                ],
+              ),
+            ),
+          timeoutMs,
+        )
+      : undefined;
   const results: RuleObject[] = [];
   try {
     const workflowId = String(workflow.id ?? "workflow");
@@ -110,7 +114,7 @@ export const executeWorkflow = async (
     emit?.("adapter.workflow.completed", { workflowId });
     return { steps: results };
   } finally {
-    clearTimeout(timer);
+    if (timer) clearTimeout(timer);
     signal.removeEventListener("abort", onAbort);
   }
 };

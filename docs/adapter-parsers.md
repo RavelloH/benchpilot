@@ -45,3 +45,9 @@ including a final unterminated line. Incomplete UTF-8 sequences stay in the
 decoder until complete. The final parser receives the retained beginning and
 end of each stream; JSON Pointer extraction rejects truncated output rather
 than parsing a partial document.
+
+Tool stdout and stderr are consumed by the parser and line-captured by RLog
+from the same stream. stdout is logged at info and stderr at warn; raw chunks
+never bypass RLog or write directly to the terminal. Capture is bounded to
+4 MiB per stream (a 1 MiB head and 3 MiB tail), preserving likely final errors
+and artifact paths while preventing unbounded process-output memory use.

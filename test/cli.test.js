@@ -49,6 +49,35 @@ test("global color options use a positive internal flag", () => {
     { name: "cache", negated: true },
   ]);
 });
+
+test("capability metadata maps long and short aliases back to schema fields", () => {
+  const parsed = parse([
+    "device",
+    "demo",
+    "flash",
+    "--port",
+    "COM7",
+    "-D",
+    "one",
+    "-D",
+    "two",
+    "--",
+    "target",
+  ]);
+  assert.deepEqual(
+    capabilityInput(
+      parsed.rawOptions,
+      [
+        { name: "port", aliases: ["--port", "-p"] },
+        { name: "define", aliases: ["-D"], repeatable: true },
+        { name: "target", positional: 0 },
+      ],
+      undefined,
+      parsed.path.slice(3),
+    ),
+    { port: "COM7", define: ["one", "two"], target: "target" },
+  );
+});
 test("installed CLI surface initializes and runs the demo", async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "benchpilot-test-"));
   try {

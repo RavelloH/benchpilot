@@ -31,7 +31,7 @@ firmware artifact.
 ## Runtime Context and safety boundary
 
 Every execution starts with `adapter`, `platform`, `config`, `device`, `input`,
-`project`, `home`, `temp`, `env`, optional `run`, and empty `tool`,
+`project`, `home`, `temp`, `env`, `run` (when the Core created one), and empty `tool`,
 `discovery`, `environment`, and `result` namespaces. Tool resolution and
 Parser output update that live Context. Workflow steps are rendered one at a
 time, so a following step can use `${result.previous.value}` and
@@ -45,3 +45,26 @@ output. Serial execution remains deliberately unavailable.
 Dangerous process actions mark the Core effect boundary only after `spawn`;
 dangerous copy actions mark it immediately before their first write. Core keeps
 approval consumption, cleanup, lock release and quarantine ownership.
+
+## Deadlines, discovery and extensions
+
+An action with an explicit timeout is bounded by that timeout and the remaining
+Capability deadline. An action without one inherits the remaining Capability
+deadline; a Workflow can additionally establish a shorter Workflow deadline.
+Core operation cancellation remains the outer boundary and retains its own
+`OPERATION_TIMEOUT` error. Runtime timeout failures are serializable
+`ADAPTER_ACTION_TIMEOUT`, `ADAPTER_WORKFLOW_TIMEOUT`, or
+`ADAPTER_TOOL_PROBE_TIMEOUT` errors with retry guidance.
+
+`benchpilot devices scan` is passive. The bundled runtime only enumerates
+available serial path candidates on POSIX and can consume declared static
+records for fixtures; it neither opens a serial port nor changes DTR/RTS.
+There is no serial executor or ESP-IDF adapter in this release. Device identity
+uses declared physical fields, then an explicit port fallback. Instance fallback
+is disabled by default and is enabled only by the simulated Demo.
+
+Extension capabilities are compiled separately from the standard catalog and
+are exposed through the same dynamic `benchpilot device <id> <capability>`
+route. Input-schema `x-benchpilot-cli` metadata supplies flags, aliases,
+positionals, repeatable values, secrets, and hidden help entries; no CLI command
+is hard-coded for a vendor adapter.

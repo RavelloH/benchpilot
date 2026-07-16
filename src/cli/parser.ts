@@ -34,12 +34,17 @@ export function parse(argv: string[]): {
   const rawOptions: RawOption[] = [];
   for (let index = 0; index < argv.length; index += 1) {
     const token = argv[index]!;
-    if (!token.startsWith("--")) {
+    if (token === "--") {
+      positional.push(...argv.slice(index + 1));
+      break;
+    }
+    if (!token.startsWith("-") || token === "-") {
       positional.push(token);
       continue;
     }
-    const [rawKey, inline] = token.slice(2).split("=", 2);
-    const negated = rawKey.startsWith("no-");
+    const long = token.startsWith("--");
+    const [rawKey, inline] = token.slice(long ? 2 : 1).split("=", 2);
+    const negated = long && rawKey.startsWith("no-");
     const key = negated ? rawKey.slice(3) : rawKey;
     if (globalBooleanOptions.has(key) || globalValueOptions.has(key)) {
       if (negated) flags[key] = false;
@@ -49,7 +54,7 @@ export function parse(argv: string[]): {
       else if (globalBooleanOptions.has(key)) flags[key] = true;
       else {
         const next = argv[index + 1];
-        if (!next || next.startsWith("--"))
+        if (!next || next.startsWith("-"))
           fail("USAGE_ERROR", 2, `--${key} requires a value.`);
         flags[key] = argv[++index]!;
       }
@@ -60,7 +65,7 @@ export function parse(argv: string[]): {
       rawOptions.push({ name: key, value: inline });
     else {
       const next = argv[index + 1];
-      if (next && !next.startsWith("--"))
+      if (next && !next.startsWith("-"))
         rawOptions.push({ name: key, value: argv[++index]! });
       else rawOptions.push({ name: key });
     }

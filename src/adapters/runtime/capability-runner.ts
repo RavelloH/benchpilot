@@ -15,6 +15,29 @@ import { ToolResolver, type ResolvedTool } from "./tools/resolver.js";
 import type { AdapterRuntimeContext, RuntimeAdapter } from "./types.js";
 import { AdapterDataValidator } from "./validation/data-validator.js";
 
+/** A monotonic deadline shared by every action in a capability invocation. */
+export class ExecutionDeadline {
+  readonly startedAt = Date.now();
+  readonly expiresAt: number;
+
+  constructor(timeoutMs: number) {
+    this.expiresAt = timeoutMs > 0 ? this.startedAt + timeoutMs : Infinity;
+  }
+
+  remainingMs() {
+    return this.expiresAt === Infinity
+      ? 0
+      : Math.max(0, this.expiresAt - Date.now());
+  }
+
+  limit(timeoutMs: number) {
+    const remaining = this.remainingMs();
+    if (timeoutMs <= 0) return remaining;
+    if (this.expiresAt === Infinity) return timeoutMs;
+    return Math.max(1, Math.min(timeoutMs, remaining));
+  }
+}
+
 const abortAfter = async <T>(
   signal: AbortSignal,
   timeoutMs: number,
@@ -28,7 +51,7 @@ const abortAfter = async <T>(
     timeoutMs > 0
       ? setTimeout(() => {
           timedOut = true;
-          controller.abort(new Error("Adapter action timed out."));
+          controller.abort({ kind: "adapter-action-timeout" });
         }, timeoutMs)
       : undefined;
   try {
@@ -100,9 +123,9 @@ export class DeclarativeCapabilityRunner {
       home: process.env.HOME ?? process.env.USERPROFILE ?? "",
       temp: tmpdir(),
       env: process.env,
-      ...(operation.run
-        ? { run: { dir: operation.run.dir, id: operation.run.id } }
-        : {}),
+      run: operation.run
+        ? { dir: operation.run.dir, id: operation.run.id }
+        : undefined,
       tool: {},
       discovery: {},
       environment: {},
@@ -110,7 +133,7 @@ export class DeclarativeCapabilityRunner {
     };
     const handler = String(capability.handler);
     const dangerous = object(capability.safety).mode !== "normal";
-    const capabilityTimeoutMs = durationMs(capability.timeout);
+    const deadline = new ExecutionDeadline(durationMs(capability.timeout));
     const executeAction = (
       id: string,
       actionInput: RuleObject,
@@ -124,7 +147,7 @@ export class DeclarativeCapabilityRunner {
         signal,
         dangerous,
         capabilityId,
-        capabilityTimeoutMs,
+        deadline,
         true,
       );
     let result: RuleObject;
@@ -144,7 +167,7 @@ export class DeclarativeCapabilityRunner {
           `Workflow does not exist: ${handler}`,
         );
       const execution = await executeWorkflow(
-        workflow,
+        { ...workflow, id: handler.slice("workflow:".length) },
         context,
         operation.signal,
         (id, actionInput, signal) =>
@@ -156,7 +179,7 @@ export class DeclarativeCapabilityRunner {
             signal,
             dangerous,
             capabilityId,
-            capabilityTimeoutMs,
+            deadline,
             false,
           ),
         (event, data) => operation.emitEvent(event, data as Json),
@@ -184,7 +207,7 @@ export class DeclarativeCapabilityRunner {
     signal: AbortSignal,
     dangerous: boolean,
     capabilityId: string,
-    parentTimeoutMs: number,
+    deadline: ExecutionDeadline,
     retainActionResult: boolean,
   ): Promise<RuleObject> {
     const action = object(object(this.adapter.rules.actions)[id]);
@@ -251,7 +274,7 @@ export class DeclarativeCapabilityRunner {
         environment.environment,
         dangerous,
         capabilityId,
-        parentTimeoutMs,
+        deadline,
         retainActionResult,
       );
     }
@@ -265,7 +288,7 @@ export class DeclarativeCapabilityRunner {
       environment.environment,
       dangerous,
       capabilityId,
-      parentTimeoutMs,
+      deadline,
       retainActionResult,
     );
   }
@@ -280,15 +303,13 @@ export class DeclarativeCapabilityRunner {
     environment: NodeJS.ProcessEnv,
     dangerous: boolean,
     capabilityId: string,
-    parentTimeoutMs: number,
+    deadline: ExecutionDeadline,
     retainActionResult: boolean,
   ): Promise<RuleObject> {
     const plan = planLaunch(action, actionContext, tool, environment);
     const result = await abortAfter(
       signal,
-      plan.timeoutMs > 0
-        ? Math.min(plan.timeoutMs, parentTimeoutMs)
-        : parentTimeoutMs,
+      deadline.limit(plan.timeoutMs),
       async (actionSignal) => {
         if (plan.kind === "process") {
           const parser = plan.parserId

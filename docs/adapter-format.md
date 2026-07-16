@@ -29,6 +29,18 @@ machine-readable JSON diagnostic result and are not passed to the case runner.
 
 `test/fixtures/adapters/complete` is a separate, executable conformance fixture:
 it exercises every v1 declaration category and all case-runner types, but is not
-a builtin adapter and is never published. The existing TypeScript Demo remains
-the CLI and package-test default until the declarative runtime is implemented.
-Neither that runtime nor an ESP-IDF adapter is part of Format v1.
+a builtin adapter and is never published. The declarative Demo is the CLI and
+package-test default. ESP-IDF is not part of Format v1 and has not been
+implemented.
+
+`[extensions.<id>]` uses the same capability declaration shape as standard
+capabilities but is retained as a separate Bundle field. Extensions are routed
+dynamically by the capability catalog; they do not introduce JavaScript plugins
+or shell command strings. Input properties can declare `x-benchpilot-cli` with
+`flag`, `aliases`, `positional`, `secret`, `repeatable`, and `hidden` metadata.
+
+Physical identities must be explicit. `identity.fields` is preferred, optional
+port fallback is next, and `allow_instance_fallback` defaults to `false`.
+Capabilities that lock a device fail with `DEVICE_IDENTITY_UNAVAILABLE` when no
+stable identity is available. The simulated Demo explicitly opts into instance
+fallback.

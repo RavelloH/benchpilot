@@ -19,6 +19,7 @@ import { executeProcess } from "../dist/adapters/runtime/executors/process-execu
 import { executeCopy } from "../dist/adapters/runtime/executors/copy-executor.js";
 import { executeUnsupportedSerial } from "../dist/adapters/runtime/executors/unsupported-executor.js";
 import { executeWorkflow } from "../dist/adapters/runtime/executors/workflow-executor.js";
+import { ExecutionDeadline } from "../dist/adapters/runtime/capability-runner.js";
 import { planLaunch } from "../dist/adapters/runtime/planning/launch-plan.js";
 import { RuntimeAdapterRegistry } from "../dist/adapters/runtime/registry.js";
 import { ToolResolver } from "../dist/adapters/runtime/tools/resolver.js";
@@ -155,6 +156,32 @@ test("runtime data validation applies defaults without removing unknown fields",
     ),
     { token: "[REDACTED]", nested: { visible: "ok" } },
   );
+});
+
+test("workflow without a local timeout retains the capability deadline and event id", async () => {
+  const events = [];
+  const context = { result: {} };
+  const result = await executeWorkflow(
+    { id: "deploy", steps: [{ id: "first", uses: "action:build" }] },
+    context,
+    new AbortController().signal,
+    async () => {
+      await new Promise((resolve) => setTimeout(resolve, 15));
+      return { built: true };
+    },
+    (event, data) => events.push({ event, data }),
+  );
+  assert.deepEqual(result, {
+    steps: [{ id: "first", ok: true, result: { built: true } }],
+  });
+  assert.ok(events.every((event) => event.data.workflowId === "deploy"));
+});
+
+test("execution deadlines reduce the timeout available to later actions", async () => {
+  const deadline = new ExecutionDeadline(30);
+  await new Promise((resolve) => setTimeout(resolve, 15));
+  assert.ok(deadline.remainingMs() > 0);
+  assert.ok(deadline.limit(60) < 30);
 });
 
 test("tool discovery honors priority and rejects an invalid explicit path", async () => {

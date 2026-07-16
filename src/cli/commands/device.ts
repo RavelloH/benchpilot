@@ -72,7 +72,9 @@ export async function handleDeviceCommand({
         path: parts,
         summary: definition.summary,
         description: definition.description || definition.summary,
-        options: definition.options || [],
+        options: (definition.options || []).filter(
+          (option) => option.hidden !== true,
+        ),
         inputSchema: definition.inputSchema?.describe() || { type: "object" },
         outputSchema: definition.outputSchema?.describe() || {
           type: "object",

@@ -14,6 +14,12 @@ contains no real hardware adapter.
 operation AbortSignal and waits for it to exit before cleanup can release the
 physical lock.
 
+Declarative adapters are compiled into Bundle v1 before shipping. At runtime,
+Tool Discovery, full via-tool launch resolution, environments, actions,
+workflows, parsers, artifacts, passive discovery, Doctor checks, and extension
+capabilities run from the compiled Bundle only. Adapter TOML is a build-time
+input and no arbitrary JavaScript is loaded from an adapter.
+
 `src/core.ts` is a compatibility export surface only. Implementations live in
 `core/config`, `core/capabilities`, `core/operations`, `core/process`, and their
 resource-specific modules. CLI startup remains in `cli/index.ts`; project setup,

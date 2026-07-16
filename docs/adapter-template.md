@@ -21,3 +21,17 @@ Runtime templates never evaluate expressions or code. In execution-critical
 fields such as process arguments, working directories, tool paths, environment
 variables and capture scripts, a missing `${namespace.path}` fails with
 `ADAPTER_TEMPLATE_VALUE_MISSING`; it is not converted to an empty string.
+
+Use direct tools when the discovered executable is launched directly. For an
+interpreter-style tool, use `launch.mode = "via-tool"`, name its parent Tool,
+and put the discovered child path in `prefix_args`, usually as
+`${discovery.path}`. Runtime resolves the complete parent launch before a
+discovery probe runs. Capture scripts use the installed Node executable and
+must not embed user-provided command text.
+
+Artifact and copy destinations are constrained to Core-allowed roots. Runtime
+rejects destination symlinks, parent-directory escapes and source-tree
+symlinks; artifact collection also enforces per-file and per-operation limits.
+Mark secret input properties with `x-benchpilot-cli.secret = true`: nested
+objects, arrays, `$ref`, and schema-composition branches are redacted before
+logs, JSON results, run metadata, and persisted approval bindings are written.

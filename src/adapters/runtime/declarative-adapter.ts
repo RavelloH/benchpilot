@@ -76,15 +76,18 @@ const capabilityFor = (
       typeof cli.positional === "number" ? cli.positional : undefined;
     return [
       {
-        name: typeof cli.flag === "string" ? cli.flag : name,
+        // `name` is the schema property. CLI spellings are aliases so the
+        // parsed object always validates against the input definition.
+        name,
         summary: String(schema.description ?? name),
         required: Array.isArray(object(inputSchema).required)
           ? (object(inputSchema).required as unknown[]).includes(name)
           : false,
         schema: optionSchema(schema),
-        aliases: Array.isArray(cli.aliases)
-          ? cli.aliases.map(String)
-          : undefined,
+        aliases: [
+          ...(typeof cli.flag === "string" ? [cli.flag] : []),
+          ...(Array.isArray(cli.aliases) ? cli.aliases.map(String) : []),
+        ],
         positional,
         secret: cli.secret === true,
         repeatable: cli.repeatable === true || schema.type === "array",
@@ -278,7 +281,7 @@ export const createDeclarativeAdapter = (runtime: RuntimeAdapter): Adapter => {
       );
       for (const [id, raw] of Object.entries(object(rules.tools))) {
         const tool = object(raw);
-        if (tool.required !== true) continue;
+        const required = tool.required === true;
         try {
           const launch = await resolver.resolve(
             String(id),
@@ -305,14 +308,20 @@ export const createDeclarativeAdapter = (runtime: RuntimeAdapter): Adapter => {
           checks.push({
             id: `${runtime.bundle.id}-tool-${id}`,
             status: "pass",
-            message: "Required tool resolved.",
-            details: { tool: id, probe },
+            message: required
+              ? "Required tool resolved."
+              : "Optional tool resolved.",
+            // A parser can extract arbitrary tool output. Keep doctor output
+            // safe by reporting the check, not its raw or extracted values.
+            details: { tool: id, probed: Object.keys(probe).length > 0 },
           });
         } catch (error) {
           checks.push({
             id: `${runtime.bundle.id}-tool-${id}`,
-            status: "fail",
-            message: "Required tool check failed.",
+            status: required ? "fail" : "warn",
+            message: required
+              ? "Required tool check failed."
+              : "Optional tool is unavailable.",
           });
         }
       }
