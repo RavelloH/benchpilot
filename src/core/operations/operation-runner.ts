@@ -108,6 +108,15 @@ export class OperationRunner {
         (error as Error).message,
       );
     }
+    if (
+      capability.lockMode === "exclusive" &&
+      runtime.identity.stable === false
+    )
+      fail(
+        "DEVICE_IDENTITY_UNAVAILABLE",
+        3,
+        "A device lock requires a stable physical identity.",
+      );
     const command = `device.${capabilityId}`,
       lockId = lockIdentity({
         adapter: runtime.identity.adapter,

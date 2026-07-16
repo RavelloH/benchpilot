@@ -141,6 +141,18 @@ export const validateSemantics = async (
       ),
     );
   const declared = obj(capabilities.capabilities);
+  const extensions = obj(capabilities.extensions);
+  for (const key of Object.keys(extensions))
+    if (Object.hasOwn(declared, key))
+      errors.push(
+        diagnostic(
+          "ADAPTER_CAPABILITY_INVALID",
+          "capabilities.toml",
+          `Extension capability conflicts with standard capability: ${key}`,
+          undefined,
+          adapter.id,
+        ),
+      );
   for (const key of Object.keys(declared))
     if (!Object.hasOwn(catalog, key))
       errors.push(
@@ -164,10 +176,7 @@ export const validateSemantics = async (
         ),
       );
   }
-  for (const [key, raw] of [
-    ...entries(declared),
-    ...entries(capabilities.extensions),
-  ]) {
+  for (const [key, raw] of [...entries(declared), ...entries(extensions)]) {
     const item = obj(raw);
     if (!id.test(key))
       errors.push(
@@ -392,10 +401,7 @@ export const validateSemantics = async (
     }
   }
   if (manifest.status === "disabled")
-    for (const [key, item] of [
-      ...entries(declared),
-      ...entries(capabilities.extensions),
-    ])
+    for (const [key, item] of [...entries(declared), ...entries(extensions)])
       if (obj(item).enabled !== false)
         errors.push(
           diagnostic(

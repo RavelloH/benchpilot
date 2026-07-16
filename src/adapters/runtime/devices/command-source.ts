@@ -66,13 +66,26 @@ export const executeDeviceCommandSource = async (
     { probe: false, adapterId: runtime.bundle.id },
   );
   const environments = new EnvironmentResolver();
+  for (const current of tool.chain) {
+    (context.tool as Record<string, RuleObject>)[current.toolId] = {
+      executable: current.executable,
+      argsPrefix: current.argsPrefix,
+      environmentId: current.environmentId,
+      discoveryId: current.discoveryId,
+      discoveredPath: current.discoveredPath,
+    };
+    (context.discovery as Record<string, RuleObject>)[current.discoveryId] = {
+      path: current.discoveredPath,
+      candidateId: current.candidateId,
+    };
+  }
   const environment = await environments.resolveDetailed(
     tool.environmentId,
     object(runtime.rules.environments),
     context,
     new AbortController().signal,
   );
-  await tools.probe(
+  const probes = await tools.probeChain(
     tool,
     object(runtime.rules.discoveries),
     context,
@@ -80,6 +93,16 @@ export const executeDeviceCommandSource = async (
     environment.environment,
     runtime.bundle.id,
   );
+  for (const current of tool.chain) {
+    const probe = probes.get(current.toolId) ?? {};
+    if (Object.keys(probe).length) {
+      (context.tool as Record<string, RuleObject>)[current.toolId]!.probe =
+        probe;
+      (context.discovery as Record<string, RuleObject>)[
+        current.discoveryId
+      ]!.probe = probe;
+    }
+  }
   const plan = planLaunch(action, context, tool, environment.environment);
   if (plan.kind !== "process")
     throw new AdapterRuntimeError(

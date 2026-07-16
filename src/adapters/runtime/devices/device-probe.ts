@@ -82,13 +82,26 @@ export const executeDeviceProbe = async (
     { probe: false, adapterId: runtime.bundle.id },
   );
   const environments = new EnvironmentResolver();
+  for (const current of tool.chain) {
+    (context.tool as Record<string, RuleObject>)[current.toolId] = {
+      executable: current.executable,
+      argsPrefix: current.argsPrefix,
+      environmentId: current.environmentId,
+      discoveryId: current.discoveryId,
+      discoveredPath: current.discoveredPath,
+    };
+    (context.discovery as Record<string, RuleObject>)[current.discoveryId] = {
+      path: current.discoveredPath,
+      candidateId: current.candidateId,
+    };
+  }
   const environment = await environments.resolveDetailed(
     tool.environmentId,
     object(rules.environments),
     context,
     new AbortController().signal,
   );
-  const toolProbe = await tools.probe(
+  const probes = await tools.probeChain(
     tool,
     object(rules.discoveries),
     context,
@@ -96,19 +109,16 @@ export const executeDeviceProbe = async (
     environment.environment,
     runtime.bundle.id,
   );
-  (context.tool as Record<string, RuleObject>)[tool.toolId] = {
-    executable: tool.executable,
-    argsPrefix: tool.argsPrefix,
-    environmentId: tool.environmentId,
-    discoveryId: tool.discoveryId,
-    discoveredPath: tool.discoveredPath,
-    probe: toolProbe,
-  };
-  (context.discovery as Record<string, RuleObject>)[tool.discoveryId] = {
-    path: tool.discoveredPath,
-    candidateId: tool.candidateId,
-    probe: toolProbe,
-  };
+  for (const current of tool.chain) {
+    const toolProbe = probes.get(current.toolId) ?? {};
+    if (Object.keys(toolProbe).length) {
+      (context.tool as Record<string, RuleObject>)[current.toolId]!.probe =
+        toolProbe;
+      (context.discovery as Record<string, RuleObject>)[
+        current.discoveryId
+      ]!.probe = toolProbe;
+    }
+  }
   (context.environment as Record<string, RuleObject>)[tool.environmentId] = {
     providerId: environment.providerId,
     strategy: environment.strategy,

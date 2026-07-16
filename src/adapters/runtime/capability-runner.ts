@@ -14,6 +14,10 @@ import { lookup, object, type RuleObject } from "./rules/template.js";
 import { ToolResolver, type ResolvedTool } from "./tools/resolver.js";
 import type { AdapterRuntimeContext, RuntimeAdapter } from "./types.js";
 import { AdapterDataValidator } from "./validation/data-validator.js";
+import {
+  SecretRedactor,
+  secretValuesWithSchema,
+} from "./validation/secret-redactor.js";
 
 /** A monotonic deadline shared by every action in a capability invocation. */
 export class ExecutionDeadline {
@@ -24,31 +28,38 @@ export class ExecutionDeadline {
     this.expiresAt = timeoutMs > 0 ? this.startedAt + timeoutMs : Infinity;
   }
 
-  remainingMs() {
+  remainingMs(): number | undefined {
     return this.expiresAt === Infinity
-      ? 0
+      ? undefined
       : Math.max(0, this.expiresAt - Date.now());
   }
 
-  limit(timeoutMs: number) {
+  limit(timeoutMs: number): number | undefined {
     const remaining = this.remainingMs();
     if (timeoutMs <= 0) return remaining;
-    if (this.expiresAt === Infinity) return timeoutMs;
-    return Math.max(1, Math.min(timeoutMs, remaining));
+    if (remaining === undefined) return timeoutMs;
+    return Math.min(timeoutMs, remaining);
   }
 }
 
 const abortAfter = async <T>(
   signal: AbortSignal,
-  timeoutMs: number,
+  timeoutMs: number | undefined,
   execute: (signal: AbortSignal) => Promise<T>,
 ) => {
   const controller = new AbortController();
   const onAbort = () => controller.abort(signal.reason);
   signal.addEventListener("abort", onAbort, { once: true });
   let timedOut = false;
+  if (timeoutMs !== undefined && timeoutMs <= 0)
+    throw new AdapterRuntimeError(
+      "ADAPTER_ACTION_TIMEOUT",
+      "Capability deadline has expired.",
+      true,
+      ["Retry the operation with a longer timeout."],
+    );
   const timer =
-    timeoutMs > 0
+    timeoutMs !== undefined
       ? setTimeout(() => {
           timedOut = true;
           controller.abort({ kind: "adapter-action-timeout" });
@@ -134,6 +145,7 @@ export class DeclarativeCapabilityRunner {
     const handler = String(capability.handler);
     const dangerous = object(capability.safety).mode !== "normal";
     const deadline = new ExecutionDeadline(durationMs(capability.timeout));
+    const redactor = this.secretRedactor(validatedInput, inputDefinition);
     const executeAction = (
       id: string,
       actionInput: RuleObject,
@@ -149,6 +161,7 @@ export class DeclarativeCapabilityRunner {
         capabilityId,
         deadline,
         true,
+        redactor,
       );
     let result: RuleObject;
     if (handler.startsWith("action:"))
@@ -181,8 +194,11 @@ export class DeclarativeCapabilityRunner {
             capabilityId,
             deadline,
             false,
+            redactor,
           ),
-        (event, data) => operation.emitEvent(event, data as Json),
+        (event, data) =>
+          operation.emitEvent(event, redactor.redactValue(data) as Json),
+        deadline.limit(durationMs(workflow.timeout)),
       );
       result = object(context.result);
       if (!Object.keys(result).length) result = execution as RuleObject;
@@ -209,6 +225,7 @@ export class DeclarativeCapabilityRunner {
     capabilityId: string,
     deadline: ExecutionDeadline,
     retainActionResult: boolean,
+    redactor: SecretRedactor,
   ): Promise<RuleObject> {
     const action = object(object(this.adapter.rules.actions)[id]);
     if (!Object.keys(action).length)
@@ -216,81 +233,82 @@ export class DeclarativeCapabilityRunner {
         "ADAPTER_ACTION_FAILED",
         `Action does not exist: ${id}`,
       );
-    context.input = input;
-    const actionContext = context as RuleObject;
-    const tool =
-      action.type === "process"
-        ? await this.resolveTool(String(action.tool), actionContext, signal)
-        : undefined;
-    const environment = await this.environments.resolveDetailed(
-      tool?.environmentId ?? "inherit",
-      object(this.adapter.rules.environments),
-      actionContext,
+    // `context.input` is the capability input for the entire workflow. Each
+    // Action receives an isolated view so later steps can still read it.
+    const actionContext = { ...context, input } as RuleObject;
+    return abortAfter(
       signal,
-    );
-    if (tool) {
-      const probed = await this.tools.probe(
-        tool,
-        object(this.adapter.rules.discoveries),
-        actionContext,
-        object(this.adapter.rules.parsers),
-        environment.environment,
-        this.adapter.bundle.id,
-        signal,
-        (message) => operation.logger.debug(message),
-      );
-      const resolvedTool = {
-        ...tool,
-        ...(Object.keys(probed).length
-          ? { probeResult: probed, probe: probed }
-          : {}),
-      };
-      (context.tool as Record<string, RuleObject>)[tool.toolId] = {
-        executable: resolvedTool.executable,
-        argsPrefix: resolvedTool.argsPrefix,
-        environmentId: resolvedTool.environmentId,
-        discoveryId: resolvedTool.discoveryId,
-        discoveredPath: resolvedTool.discoveredPath,
-        probe: probed,
-      };
-      (context.discovery as Record<string, RuleObject>)[tool.discoveryId] = {
-        path: tool.discoveredPath,
-        candidateId: tool.candidateId,
-        probe: probed,
-      };
-      (context.environment as Record<string, RuleObject>)[tool.environmentId] =
-        {
-          providerId: environment.providerId,
-          strategy: environment.strategy,
-          source: environment.source,
-          variables: this.environmentSummary(environment.environment),
-        };
-      return this.executePlannedAction(
-        id,
-        action,
-        actionContext,
-        operation,
-        signal,
-        resolvedTool,
-        environment.environment,
-        dangerous,
-        capabilityId,
-        deadline,
-        retainActionResult,
-      );
-    }
-    return this.executePlannedAction(
-      id,
-      action,
-      actionContext,
-      operation,
-      signal,
-      undefined,
-      environment.environment,
-      dangerous,
-      capabilityId,
-      deadline,
-      retainActionResult,
+      deadline.limit(durationMs(action.timeout)),
+      async (actionSignal) => {
+        const tool =
+          action.type === "process"
+            ? await this.resolveTool(
+                String(action.tool),
+                actionContext,
+                actionSignal,
+              )
+            : undefined;
+        if (tool) this.writeToolDiscovery(context, tool);
+        const environment = await this.environments.resolveDetailed(
+          tool?.environmentId ?? "inherit",
+          object(this.adapter.rules.environments),
+          actionContext,
+          actionSignal,
+        );
+        if (tool) {
+          (context.environment as Record<string, RuleObject>)[
+            tool.environmentId
+          ] = {
+            providerId: environment.providerId,
+            strategy: environment.strategy,
+            source: environment.source,
+            variables: this.environmentSummary(environment.environment),
+          };
+          const probes = await this.tools.probeChain(
+            tool,
+            object(this.adapter.rules.discoveries),
+            actionContext,
+            object(this.adapter.rules.parsers),
+            environment.environment,
+            this.adapter.bundle.id,
+            actionSignal,
+            (message) => operation.logger.debug(redactor.redactText(message)),
+          );
+          this.writeToolProbes(context, tool, probes);
+          const probe = probes.get(tool.toolId) ?? {};
+          return this.executePlannedAction(
+            id,
+            action,
+            actionContext,
+            operation,
+            actionSignal,
+            {
+              ...tool,
+              ...(Object.keys(probe).length
+                ? { probeResult: probe, probe }
+                : {}),
+            },
+            environment.environment,
+            dangerous,
+            capabilityId,
+            retainActionResult,
+            redactor,
+          );
+        }
+        return this.executePlannedAction(
+          id,
+          action,
+          actionContext,
+          operation,
+          actionSignal,
+          undefined,
+          environment.environment,
+          dangerous,
+          capabilityId,
+          retainActionResult,
+          redactor,
+        );
+      },
     );
   }
 
@@ -304,53 +322,51 @@ export class DeclarativeCapabilityRunner {
     environment: NodeJS.ProcessEnv,
     dangerous: boolean,
     capabilityId: string,
-    deadline: ExecutionDeadline,
     retainActionResult: boolean,
+    redactor: SecretRedactor,
   ): Promise<RuleObject> {
     const plan = planLaunch(action, actionContext, tool, environment);
-    const result = await abortAfter(
-      signal,
-      deadline.limit(plan.timeoutMs),
-      async (actionSignal) => {
-        if (plan.kind === "process") {
-          const parser = plan.parserId
-            ? object(object(this.adapter.rules.parsers)[plan.parserId])
-            : undefined;
-          const execution = await executeProcess(
-            plan,
-            parser,
-            actionSignal,
-            (event, data) => operation.emitEvent(event, data as Json),
-            operation.logger,
-            dangerous
-              ? () =>
-                  operation.markDangerousEffectStarted({
-                    adapterId: this.adapter.bundle.id,
-                    capabilityId,
-                    actionId: id,
-                    actionType: "process",
-                  })
-              : undefined,
-          );
-          return execution.result;
-        }
-        if (plan.kind === "copy")
-          return await executeCopy(
-            plan,
-            this.allowedRoots(operation),
-            dangerous
-              ? () =>
-                  operation.markDangerousEffectStarted({
-                    adapterId: this.adapter.bundle.id,
-                    capabilityId,
-                    actionId: id,
-                    actionType: "copy",
-                  })
-              : undefined,
-          );
-        return executeUnsupportedSerial();
-      },
-    );
+    const result = await (async () => {
+      if (plan.kind === "process") {
+        const parser = plan.parserId
+          ? object(object(this.adapter.rules.parsers)[plan.parserId])
+          : undefined;
+        const execution = await executeProcess(
+          plan,
+          parser,
+          signal,
+          (event, data) =>
+            operation.emitEvent(event, redactor.redactValue(data) as Json),
+          operation.logger,
+          dangerous
+            ? () =>
+                operation.markDangerousEffectStarted({
+                  adapterId: this.adapter.bundle.id,
+                  capabilityId,
+                  actionId: id,
+                  actionType: "process",
+                })
+            : undefined,
+          redactor,
+        );
+        return execution.result;
+      }
+      if (plan.kind === "copy")
+        return await executeCopy(
+          plan,
+          this.allowedRoots(operation),
+          dangerous
+            ? () =>
+                operation.markDangerousEffectStarted({
+                  adapterId: this.adapter.bundle.id,
+                  capabilityId,
+                  actionId: id,
+                  actionType: "copy",
+                })
+            : undefined,
+        );
+      return executeUnsupportedSerial();
+    })();
     const previousResult = object(actionContext.result);
     actionContext.result = {
       ...object(actionContext.result),
@@ -394,6 +410,38 @@ export class DeclarativeCapabilityRunner {
     return tool;
   }
 
+  private writeToolDiscovery(context: RuleObject, tool: ResolvedTool) {
+    for (const current of tool.chain) {
+      (context.tool as Record<string, RuleObject>)[current.toolId] = {
+        executable: current.executable,
+        argsPrefix: current.argsPrefix,
+        environmentId: current.environmentId,
+        discoveryId: current.discoveryId,
+        discoveredPath: current.discoveredPath,
+      };
+      (context.discovery as Record<string, RuleObject>)[current.discoveryId] = {
+        path: current.discoveredPath,
+        candidateId: current.candidateId,
+      };
+    }
+  }
+
+  private writeToolProbes(
+    context: RuleObject,
+    tool: ResolvedTool,
+    probes: Map<string, RuleObject>,
+  ) {
+    for (const current of tool.chain) {
+      const probe = probes.get(current.toolId) ?? {};
+      if (!Object.keys(probe).length) continue;
+      (context.tool as Record<string, RuleObject>)[current.toolId]!.probe =
+        probe;
+      (context.discovery as Record<string, RuleObject>)[
+        current.discoveryId
+      ]!.probe = probe;
+    }
+  }
+
   private environmentSummary(environment: NodeJS.ProcessEnv) {
     return Object.fromEntries(
       Object.entries(environment).map(([key, value]) => [
@@ -403,11 +451,34 @@ export class DeclarativeCapabilityRunner {
     );
   }
 
+  private secretRedactor(input: RuleObject, inputDefinition: string) {
+    const inputRoot = this.adapter.bundle.schemas.inputs;
+    return new SecretRedactor([
+      ...secretValuesWithSchema(
+        this.adapter.bundle.schemas.config,
+        this.adapter.bundle.schemas.config,
+        this.adapterConfig,
+      ),
+      ...secretValuesWithSchema(
+        this.adapter.bundle.schemas.device,
+        this.adapter.bundle.schemas.device,
+        this.deviceConfig,
+      ),
+      ...secretValuesWithSchema(
+        inputRoot,
+        object(object(inputRoot).$defs)[inputDefinition] ?? inputRoot,
+        input,
+      ),
+    ]);
+  }
+
   private allowedRoots(operation: OperationContext) {
     return [
       operation.project?.root ?? process.cwd(),
-      operation.stateRoot,
-      tmpdir(),
+      path.join(operation.stateRoot, "adapters", this.adapter.bundle.id),
+      ...(operation.run
+        ? [path.join(operation.run.dir, "tmp")]
+        : [path.join(operation.stateRoot, "tmp", "operation")]),
       ...(operation.run ? [operation.run.dir] : []),
     ].map((value) => path.resolve(value));
   }

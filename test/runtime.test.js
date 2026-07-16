@@ -15,7 +15,10 @@ import { pathToFileURL } from "node:url";
 import test from "node:test";
 import { AdapterBundleLoader } from "../dist/adapters/runtime/bundle-loader.js";
 import { createDeclarativeAdapter } from "../dist/adapters/runtime/declarative-adapter.js";
-import { discoverDevices } from "../dist/adapters/runtime/devices/discovery.js";
+import {
+  discoverDevices,
+  discoverDevicesDetailed,
+} from "../dist/adapters/runtime/devices/discovery.js";
 import { executeDeviceProbe } from "../dist/adapters/runtime/devices/device-probe.js";
 import { AdapterRuntimeError } from "../dist/adapters/runtime/errors.js";
 import { EnvironmentResolver } from "../dist/adapters/runtime/environments/resolver.js";
@@ -32,6 +35,9 @@ import {
   AdapterDataValidator,
   redactSecrets,
 } from "../dist/adapters/runtime/validation/data-validator.js";
+import { SecretRedactor } from "../dist/adapters/runtime/validation/secret-redactor.js";
+import { inspectSchemaProperties } from "../dist/adapters/runtime/validation/schema-inspector.js";
+import { runProcess } from "../dist/core/process/process-runner.js";
 import {
   AdapterRegistry,
   BenchPilotError,
@@ -590,9 +596,110 @@ test("tool discovery honors priority and rejects an invalid explicit path", asyn
       resolved.path,
       await (await import("node:fs/promises")).realpath(first),
     );
+    const fallback = await resolver.resolve(
+      "tool",
+      {
+        tool: {
+          discovery: "tool-discovery",
+          launch: { environment: "inherit" },
+        },
+      },
+      {
+        "tool-discovery": {
+          validation: { path_type: "file", executable: false },
+          candidates: [
+            {
+              id: "configured",
+              type: "config",
+              key: "tool_path",
+              priority: 10,
+            },
+            { id: "fixed", type: "fixed", paths: [second], priority: 1 },
+          ],
+        },
+      },
+      { config: { tool_path: "" } },
+    );
+    assert.equal(fallback.candidateId, "fixed");
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test("discovery diagnostics retain source failures without output", async () => {
+  const detailed = await discoverDevicesDetailed(
+    "demo",
+    {
+      discovery: {
+        enabled: true,
+        sources: [
+          { id: "bad", type: "command" },
+          { id: "good", type: "serial", records: [{ port: "COM8" }] },
+        ],
+        matchers: [
+          {
+            id: "port",
+            source: "good",
+            field: "port",
+            operator: "exists",
+            score: 1,
+          },
+        ],
+        result: { minimum_score: 1 },
+      },
+      identity: { fields: [], allow_port_fallback: true },
+    },
+    {
+      command: async () => {
+        throw new AdapterRuntimeError(
+          "ADAPTER_DISCOVERY_FAILED",
+          "secret output",
+        );
+      },
+    },
+  );
+  assert.equal(detailed.devices.length, 1);
+  assert.deepEqual(detailed.sources[0].error, {
+    kind: "ADAPTER_DISCOVERY_FAILED",
+    retryable: false,
+  });
+  assert.equal(
+    JSON.stringify(detailed.sources).includes("secret output"),
+    false,
+  );
+});
+
+test("secret redaction, schema inspection, and capture boundaries are safe", async () => {
+  const redactor = new SecretRedactor(["token-value", "abc"]);
+  assert.equal(
+    redactor.redactText("url/token-value/end"),
+    "url/[REDACTED]/end",
+  );
+  const root = {
+    $defs: {
+      common: {
+        type: "object",
+        properties: { token: { type: "array" } },
+        required: ["token"],
+      },
+    },
+  };
+  assert.deepEqual(
+    inspectSchemaProperties(root, { allOf: [{ $ref: "#/$defs/common" }] }),
+    [{ name: "token", schema: { type: "array" }, required: true }],
+  );
+  const controller = new AbortController();
+  const capture = await runProcess({
+    command: process.execPath,
+    args: ["-e", "process.stdout.write('ER' + 'x'.repeat(32) + 'ROR')"],
+    signal: controller.signal,
+    captureOutput: true,
+    maxCaptureBytes: 8,
+  });
+  assert.equal(
+    capture.stdout.includes("__BENCHPILOT_OUTPUT_TRUNCATED__"),
+    true,
+  );
 });
 
 test("tool probes parse output and reject an unsuccessful candidate", async () => {

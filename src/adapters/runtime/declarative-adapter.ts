@@ -1,5 +1,7 @@
 import {
   BenchPilotError,
+  LockManager,
+  lockIdentity,
   duration,
   objectSchema,
   type Adapter,
@@ -12,14 +14,19 @@ import {
   type RuntimeSchema,
 } from "../../core.js";
 import { DeclarativeCapabilityRunner } from "./capability-runner.js";
-import { discoverDevices } from "./devices/discovery.js";
+import {
+  discoverDevices,
+  discoverDevicesDetailed,
+} from "./devices/discovery.js";
 import { executeDeviceCommandSource } from "./devices/command-source.js";
 import { executeDeviceProbe } from "./devices/device-probe.js";
+import { normalizePortIdentity } from "./devices/identity.js";
 import { EnvironmentResolver } from "./environments/resolver.js";
 import { AdapterRuntimeError } from "./errors.js";
 import { lookup, object, type RuleObject } from "./rules/template.js";
 import type { RuntimeAdapter } from "./types.js";
 import { ToolResolver } from "./tools/resolver.js";
+import { inspectSchemaProperties } from "./validation/schema-inspector.js";
 import {
   AdapterDataValidator,
   redactWithSchema,
@@ -44,7 +51,7 @@ const physicalId = (rules: RuleObject, instance: string, device: Json) => {
     if (value !== undefined && value !== "") return String(value);
   }
   if (identity.allow_port_fallback === true && typeof device.port === "string")
-    return device.port;
+    return normalizePortIdentity(device.port);
   return identity.allow_instance_fallback === true ? instance : undefined;
 };
 
@@ -68,35 +75,32 @@ const capabilityFor = (
     parse: (item) => item,
     describe: () => schema,
   });
-  const options = Object.entries(
-    object(object(inputSchema).properties),
-  ).flatMap(([name, raw]) => {
-    const schema = object(raw);
-    const cli = object(schema["x-benchpilot-cli"]);
-    if (cli.hidden === true && cli.flag === false) return [];
-    const positional =
-      typeof cli.positional === "number" ? cli.positional : undefined;
-    return [
-      {
-        // `name` is the schema property. CLI spellings are aliases so the
-        // parsed object always validates against the input definition.
-        name,
-        summary: String(schema.description ?? name),
-        required: Array.isArray(object(inputSchema).required)
-          ? (object(inputSchema).required as unknown[]).includes(name)
-          : false,
-        schema: optionSchema(schema),
-        aliases: [
-          ...(typeof cli.flag === "string" ? [cli.flag] : []),
-          ...(Array.isArray(cli.aliases) ? cli.aliases.map(String) : []),
-        ],
-        positional,
-        secret: cli.secret === true,
-        repeatable: cli.repeatable === true || schema.type === "array",
-        hidden: cli.hidden === true,
-      },
-    ];
-  });
+  const options = inspectSchemaProperties(inputRoot, inputSchema).flatMap(
+    ({ name, schema, required }) => {
+      const cli = object(schema["x-benchpilot-cli"]);
+      if (cli.hidden === true && cli.flag === false) return [];
+      const positional =
+        typeof cli.positional === "number" ? cli.positional : undefined;
+      return [
+        {
+          // `name` is the schema property. CLI spellings are aliases so the
+          // parsed object always validates against the input definition.
+          name,
+          summary: String(schema.description ?? name),
+          required,
+          schema: optionSchema(schema),
+          aliases: [
+            ...(typeof cli.flag === "string" ? [cli.flag] : []),
+            ...(Array.isArray(cli.aliases) ? cli.aliases.map(String) : []),
+          ],
+          positional,
+          secret: cli.secret === true,
+          repeatable: cli.repeatable === true || schema.type === "array",
+          hidden: cli.hidden === true,
+        },
+      ];
+    },
+  );
   return {
     id,
     summary: String(value.summary ?? object(catalog[id]).description ?? id),
@@ -176,29 +180,37 @@ class DeclarativeDevice implements DeviceRuntime {
       instance,
       physicalId: stable ?? `unstable:${instance}`,
       adapter: adapter.bundle.id,
+      stable: this.stableIdentity,
     };
   }
 
   capabilities(): Capability[] {
     const current = adapterPlatform();
-    return Object.entries({
-      ...object(this.adapter.rules.capabilities),
-      ...object(this.adapter.rules.extensions),
-    }).flatMap(([id, raw]) => {
-      const value = object(raw);
-      if (value.enabled !== true || object(value.platforms)[current] !== true)
-        return [];
-      return [
-        capabilityFor(
-          id,
-          value,
-          this.adapter,
-          this.adapterConfig,
-          this.device,
-          this.stableIdentity,
-        ),
-      ];
-    });
+    const standard = object(this.adapter.rules.capabilities);
+    const extensions = object(this.adapter.rules.extensions);
+    for (const id of Object.keys(extensions))
+      if (Object.hasOwn(standard, id))
+        throw new AdapterRuntimeError(
+          "ADAPTER_BUNDLE_INVALID",
+          `Extension capability conflicts with standard capability: ${id}`,
+        );
+    return Object.entries({ ...standard, ...extensions }).flatMap(
+      ([id, raw]) => {
+        const value = object(raw);
+        if (value.enabled !== true || object(value.platforms)[current] !== true)
+          return [];
+        return [
+          capabilityFor(
+            id,
+            value,
+            this.adapter,
+            this.adapterConfig,
+            this.device,
+            this.stableIdentity,
+          ),
+        ];
+      },
+    );
   }
 }
 
@@ -260,7 +272,10 @@ export const createDeclarativeAdapter = (runtime: RuntimeAdapter): Adapter => {
       return redactSecrets(runtime.bundle.schemas.device, config) as Json;
     },
     async discover(context: AdapterContext) {
-      const devices = await discoverDevices(
+      return (await this.discoverDetailed!(context)).devices;
+    },
+    async discoverDetailed(context: AdapterContext) {
+      const detailed = await discoverDevicesDetailed(
         runtime.bundle.id,
         object(runtime.rules.devices),
         {
@@ -272,10 +287,14 @@ export const createDeclarativeAdapter = (runtime: RuntimeAdapter): Adapter => {
             ),
         },
       );
+      let devices = detailed.devices;
       const request = context.discovery;
       const probe = object(object(runtime.rules.devices).probe);
       if (request?.probe !== true || probe.enabled !== true)
-        return devices as unknown as Json[];
+        return {
+          devices: devices as unknown as Json[],
+          diagnostics: detailed.sources as unknown as Json[],
+        };
       if (
         (probe.may_reset_device === true || probe.destructive === true) &&
         request.confirmDeviceProbe !== true
@@ -290,16 +309,71 @@ export const createDeclarativeAdapter = (runtime: RuntimeAdapter): Adapter => {
             "Repeat with --probe --confirm-device-probe after verifying the device state.",
           ],
         );
-      return Promise.all(
-        devices.map(async (device) => ({
-          ...device,
-          probe: await executeDeviceProbe(
-            runtime,
-            context.adapterConfig as RuleObject,
-            device.fields,
-          ),
-        })),
-      ) as unknown as Json[];
+      // Probes are deliberately serial. It is conservative but guarantees
+      // that duplicate candidates for one physical device never race.
+      const probed = [];
+      for (const device of devices) {
+        probed.push(
+          await (async () => {
+            if (!device.identity)
+              return {
+                ...device,
+                probe: {
+                  ok: false,
+                  error: {
+                    kind: "DEVICE_IDENTITY_UNAVAILABLE",
+                    retryable: false,
+                  },
+                },
+              };
+            const identity = {
+              adapter: runtime.bundle.id,
+              kind: "device",
+              physicalId: device.identity,
+            };
+            const locks = new LockManager(context.paths);
+            let lock;
+            try {
+              lock = await locks.acquire(
+                lockIdentity(identity),
+                "device.probe",
+                undefined,
+                identity,
+              );
+              return {
+                ...device,
+                probe: await executeDeviceProbe(
+                  runtime,
+                  context.adapterConfig as RuleObject,
+                  device.fields,
+                ),
+              };
+            } catch (error) {
+              return {
+                ...device,
+                probe: {
+                  ok: false,
+                  error: {
+                    kind:
+                      error instanceof BenchPilotError
+                        ? error.kind
+                        : "ADAPTER_DISCOVERY_FAILED",
+                    retryable:
+                      error instanceof BenchPilotError && error.retryable,
+                  },
+                },
+              };
+            } finally {
+              if (lock) await locks.release(lock).catch(() => {});
+            }
+          })(),
+        );
+      }
+      devices = probed;
+      return {
+        devices: devices as unknown as Json[],
+        diagnostics: detailed.sources as unknown as Json[],
+      };
     },
     async doctor(context: AdapterContext) {
       const checks: Json[] = [
@@ -312,7 +386,7 @@ export const createDeclarativeAdapter = (runtime: RuntimeAdapter): Adapter => {
       const rules = runtime.rules;
       const resolver = new ToolResolver(runtime.platform, process.env);
       const environments = new EnvironmentResolver();
-      const runtimeContext = doctorContext(
+      const runtimeContext: RuleObject = doctorContext(
         runtime,
         context.adapterConfig,
         context.paths,
@@ -329,13 +403,30 @@ export const createDeclarativeAdapter = (runtime: RuntimeAdapter): Adapter => {
             object(rules.parsers),
             { probe: false, adapterId: runtime.bundle.id },
           );
+          const toolContext = object(runtimeContext.tool);
+          const discoveryContext = object(runtimeContext.discovery);
+          for (const current of launch.chain) {
+            toolContext[current.toolId] = {
+              executable: current.executable,
+              argsPrefix: current.argsPrefix,
+              environmentId: current.environmentId,
+              discoveryId: current.discoveryId,
+              discoveredPath: current.discoveredPath,
+            };
+            discoveryContext[current.discoveryId] = {
+              path: current.discoveredPath,
+              candidateId: current.candidateId,
+            };
+          }
+          runtimeContext.tool = toolContext;
+          runtimeContext.discovery = discoveryContext;
           const environment = await environments.resolveDetailed(
             launch.environmentId,
             object(rules.environments),
             runtimeContext,
             new AbortController().signal,
           );
-          const probe = await resolver.probe(
+          const probes = await resolver.probeChain(
             launch,
             object(rules.discoveries),
             runtimeContext,
@@ -351,7 +442,12 @@ export const createDeclarativeAdapter = (runtime: RuntimeAdapter): Adapter => {
               : "Optional tool resolved.",
             // A parser can extract arbitrary tool output. Keep doctor output
             // safe by reporting the check, not its raw or extracted values.
-            details: { tool: id, probed: Object.keys(probe).length > 0 },
+            details: {
+              tool: id,
+              probed: [...probes.values()].some(
+                (probe) => Object.keys(probe).length > 0,
+              ),
+            },
           });
         } catch (error) {
           checks.push({
@@ -393,7 +489,7 @@ export const createDeclarativeAdapter = (runtime: RuntimeAdapter): Adapter => {
         });
       else {
         try {
-          const devices = await discoverDevices(
+          const discoveryResult = await discoverDevicesDetailed(
             runtime.bundle.id,
             object(rules.devices),
             {
@@ -407,9 +503,22 @@ export const createDeclarativeAdapter = (runtime: RuntimeAdapter): Adapter => {
           );
           checks.push({
             id: `${runtime.bundle.id}-device-sources`,
-            status: "pass",
-            message: "Passive device discovery is available.",
-            details: { candidates: devices.length },
+            status: discoveryResult.sources.some(
+              (source) => source.status === "fail",
+            )
+              ? discoveryResult.devices.length > 0
+                ? "warn"
+                : "fail"
+              : "pass",
+            message: discoveryResult.sources.some(
+              (source) => source.status === "fail",
+            )
+              ? "One or more device discovery sources failed."
+              : "Passive device discovery is available.",
+            details: {
+              candidates: discoveryResult.devices.length,
+              sources: discoveryResult.sources,
+            },
           });
         } catch {
           checks.push({

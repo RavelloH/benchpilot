@@ -265,12 +265,23 @@ export class EnvironmentResolver {
     const cached = this.cache.get(key);
     if (cached) return { ...cached };
     const command = await captureCommand(provider.shell, script);
+    const controller = new AbortController();
+    const onAbort = () => controller.abort(signal.reason);
+    signal.addEventListener("abort", onAbort, { once: true });
+    let timedOut = false;
+    const timer = setTimeout(
+      () => {
+        timedOut = true;
+        controller.abort({ kind: "environment-capture-timeout" });
+      },
+      Math.min(10_000, duration(provider.timeout, 10_000)),
+    );
     try {
       const result = await runProcess({
         command: command.command,
         args: command.args,
         env: { ...this.base },
-        signal,
+        signal: controller.signal,
         captureOutput: true,
         maxCaptureBytes: 1_048_576,
       });
@@ -291,7 +302,23 @@ export class EnvironmentResolver {
       }
       this.cache.set(key, environment);
       return { ...environment };
+    } catch (error) {
+      // Keep a parent operation/action abort intact. The internal hard limit
+      // is intentionally reported as an environment failure instead.
+      if (timedOut && !signal.aborted)
+        throw new AdapterRuntimeError(
+          "ADAPTER_ENVIRONMENT_UNAVAILABLE",
+          "Environment capture script timed out.",
+          true,
+          [
+            "Check the SDK activation script.",
+            "Run the script manually to verify it exits.",
+          ],
+        );
+      throw error;
     } finally {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", onAbort);
       await command.cleanup?.();
     }
   }

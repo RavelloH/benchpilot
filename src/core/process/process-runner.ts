@@ -196,7 +196,17 @@ export function startProcess(options: ProcessRunOptions): StartedProcess {
       } else this.tail = combined;
     }
     text() {
-      return Buffer.concat([this.head, this.tail]).toString("utf8");
+      // The parser receives a bounded view, not a fabricated contiguous
+      // stream: an explicit separator prevents cross-boundary regex matches.
+      return Buffer.concat(
+        this.truncated
+          ? [
+              this.head,
+              Buffer.from("\n__BENCHPILOT_OUTPUT_TRUNCATED__\n", "utf8"),
+              this.tail,
+            ]
+          : [this.head, this.tail],
+      ).toString("utf8");
     }
   }
   const stdoutCapture = new BoundedCapture(maxCaptureBytes);

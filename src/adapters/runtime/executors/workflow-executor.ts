@@ -13,13 +13,23 @@ export const executeWorkflow = async (
     signal: AbortSignal,
   ) => Promise<RuleObject>,
   emit?: (event: string, data: RuleObject) => void,
+  effectiveTimeoutMs?: number,
 ) => {
   const controller = new AbortController();
   const onAbort = () => controller.abort(signal.reason);
   signal.addEventListener("abort", onAbort, { once: true });
-  const timeoutMs = durationMs(workflow.timeout);
+  const timeoutMs =
+    effectiveTimeoutMs === undefined
+      ? durationMs(workflow.timeout)
+      : effectiveTimeoutMs;
+  if (effectiveTimeoutMs !== undefined && effectiveTimeoutMs <= 0)
+    throw new AdapterRuntimeError(
+      "ADAPTER_ACTION_TIMEOUT",
+      "Capability deadline has expired.",
+      true,
+    );
   const timer =
-    timeoutMs > 0
+    timeoutMs !== undefined && timeoutMs > 0
       ? setTimeout(
           () =>
             controller.abort(
@@ -44,6 +54,8 @@ export const executeWorkflow = async (
       const raw = object(rawStep);
       const actionId = String(raw.uses).replace(/^action:/, "");
       const stepId = String(raw.id);
+      // Workflow conditions see the original capability input. Step inputs
+      // are rendered separately and exposed through `context.step.input`.
       const step = planWorkflowStep(rawStep, context, true);
       if (!step) {
         emit?.("adapter.workflow.step.skipped", {
@@ -64,6 +76,7 @@ export const executeWorkflow = async (
           ],
         );
       emit?.("adapter.workflow.step.started", { workflowId, stepId, actionId });
+      context.step = { id: step.id, action: actionId, input: step.with };
       try {
         const result = await executeAction(
           actionId,
@@ -71,7 +84,13 @@ export const executeWorkflow = async (
           controller.signal,
         );
         results.push({ id: step.id, ok: true, result });
-        context.step = { id: step.id, action: actionId, ok: true, result };
+        context.step = {
+          id: step.id,
+          action: actionId,
+          input: step.with,
+          ok: true,
+          result,
+        };
         context.result = {
           ...object(context.result),
           [String(step.id)]: result,
@@ -88,6 +107,7 @@ export const executeWorkflow = async (
         context.step = {
           id: step.id,
           action: actionId,
+          input: step.with,
           ok: false,
           error: {
             kind: runtime?.code ?? "ADAPTER_ACTION_FAILED",

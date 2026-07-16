@@ -25,6 +25,10 @@ export interface Adapter {
   redactConfig?(config: Json): Json;
   redactDeviceConfig?(config: Json): Json;
   discover(context: AdapterContext): Promise<Json[]>;
+  discoverDetailed?(context: AdapterContext): Promise<{
+    devices: Json[];
+    diagnostics?: Json[];
+  }>;
   doctor(context: AdapterContext): Promise<Json[]>;
   createDevice(
     instance: string,

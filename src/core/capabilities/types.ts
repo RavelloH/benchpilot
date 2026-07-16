@@ -37,6 +37,12 @@ export interface Capability {
 }
 
 export interface DeviceRuntime {
-  identity: { instance: string; physicalId: string; adapter: string };
+  identity: {
+    instance: string;
+    physicalId: string;
+    adapter: string;
+    /** False means the physical identity is not safe to lock. */
+    stable?: boolean;
+  };
   capabilities(): Capability[];
 }

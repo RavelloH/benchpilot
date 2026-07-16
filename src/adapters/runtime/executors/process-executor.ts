@@ -4,6 +4,7 @@ import { planLaunch, type ProcessLaunchPlan } from "../planning/launch-plan.js";
 import { castValue, type CastKind } from "../rules/cast.js";
 import { parseOutput } from "../rules/parser.js";
 import { object, type RuleObject } from "../rules/template.js";
+import type { SecretRedactor } from "../validation/secret-redactor.js";
 
 interface ProcessLogger {
   info(...args: unknown[]): unknown;
@@ -25,10 +26,12 @@ class StreamingProgress {
   private stdoutTail = "";
   private stderrTail = "";
   private readonly maxLineChars = 1024 * 1024;
+  private finished = false;
 
   constructor(
     private readonly parser: RuleObject | undefined,
     private readonly emit?: (event: string, data: RuleObject) => void,
+    private readonly redactor?: SecretRedactor,
   ) {}
 
   stdoutChunk(chunk: Buffer) {
@@ -46,6 +49,8 @@ class StreamingProgress {
   }
 
   finish() {
+    if (this.finished) return;
+    this.finished = true;
     this.stdoutTail = this.consume(
       "stdout",
       `${this.stdoutTail}${this.stdout.decode()}`,
@@ -99,7 +104,7 @@ class StreamingProgress {
             Object.entries(object(rule.fields)).map(([name, kind]) => {
               const rawValue = match.groups?.[name] ?? "";
               const value = castValue(rawValue, kind as CastKind);
-              return [name, value];
+              return [name, this.redactor?.redactValue(value) ?? value];
             }),
           ),
         );
@@ -114,7 +119,11 @@ class ProcessLogSink {
   private stdoutTail = "";
   private stderrTail = "";
   private readonly maxLineChars = 1024 * 1024;
-  constructor(private readonly logger: ProcessLogger | undefined) {}
+  private finished = false;
+  constructor(
+    private readonly logger: ProcessLogger | undefined,
+    private readonly redactor?: SecretRedactor,
+  ) {}
   write(source: "stdout" | "stderr", chunk: Buffer) {
     if (!this.logger) return;
     const decoder = source === "stdout" ? this.stdout : this.stderr;
@@ -130,6 +139,8 @@ class ProcessLogSink {
     else this.stderrTail = bounded;
   }
   finish() {
+    if (this.finished) return;
+    this.finished = true;
     if (!this.logger) return;
     const stdout = `${this.stdoutTail}${this.stdout.decode()}`;
     const stderr = `${this.stderrTail}${this.stderr.decode()}`;
@@ -137,8 +148,9 @@ class ProcessLogSink {
     if (stderr) this.log("stderr", stderr);
   }
   private log(source: "stdout" | "stderr", line: string) {
-    if (source === "stdout") this.logger?.info(line);
-    else this.logger?.warn(line);
+    const redacted = this.redactor?.redactText(line) ?? line;
+    if (source === "stdout") this.logger?.info(redacted);
+    else this.logger?.warn(redacted);
   }
 }
 
@@ -149,29 +161,36 @@ export const executeProcess = async (
   emitProgress?: (event: string, data: RuleObject) => void,
   logger?: ProcessLogger,
   onStarted?: () => void,
+  redactor?: SecretRedactor,
 ): Promise<ProcessExecutionResult> => {
-  const streaming = new StreamingProgress(parser, emitProgress);
-  const logs = new ProcessLogSink(logger);
-  const result = await runProcess({
-    command: plan.executable,
-    args: plan.args,
-    cwd: plan.cwd,
-    env: plan.env,
-    signal,
-    captureOutput: true,
-    maxCaptureBytes: 4 * 1024 * 1024,
-    onStdout: (chunk) => {
-      streaming.stdoutChunk(chunk);
-      logs.write("stdout", chunk);
-    },
-    onStderr: (chunk) => {
-      streaming.stderrChunk(chunk);
-      logs.write("stderr", chunk);
-    },
-    onStarted,
-  });
-  streaming.finish();
-  logs.finish();
+  const streaming = new StreamingProgress(parser, emitProgress, redactor);
+  const logs = new ProcessLogSink(logger, redactor);
+  let result: Awaited<ReturnType<typeof runProcess>>;
+  try {
+    result = await runProcess({
+      command: plan.executable,
+      args: plan.args,
+      cwd: plan.cwd,
+      env: plan.env,
+      signal,
+      captureOutput: true,
+      maxCaptureBytes: 4 * 1024 * 1024,
+      onStdout: (chunk) => {
+        streaming.stdoutChunk(chunk);
+        logs.write("stdout", chunk);
+      },
+      onStderr: (chunk) => {
+        streaming.stderrChunk(chunk);
+        logs.write("stderr", chunk);
+      },
+      onStarted,
+    });
+  } finally {
+    // Error, abort and spawn-failure paths may still contain a final partial
+    // UTF-8 line that must reach parsers/progress and the operation RLog.
+    streaming.finish();
+    logs.finish();
+  }
   const stdout = result.stdout ?? "";
   const stderr = result.stderr ?? "";
   const stdoutTruncated = result.stdoutTruncated === true;
@@ -239,6 +258,7 @@ export const executeProcessAction = (
   emitProgress?: (event: string, data: RuleObject) => void,
   logger?: ProcessLogger,
   onStarted?: () => void,
+  redactor?: SecretRedactor,
 ) => {
   const plan = planLaunch(action, context, tool, environment);
   if (plan.kind !== "process")
@@ -246,5 +266,13 @@ export const executeProcessAction = (
       "ADAPTER_ACTION_FAILED",
       "Action is not a process action.",
     );
-  return executeProcess(plan, parser, signal, emitProgress, logger, onStarted);
+  return executeProcess(
+    plan,
+    parser,
+    signal,
+    emitProgress,
+    logger,
+    onStarted,
+    redactor,
+  );
 };

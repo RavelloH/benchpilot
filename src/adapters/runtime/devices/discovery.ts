@@ -2,6 +2,7 @@ import { readdir } from "node:fs/promises";
 import path from "node:path";
 import { runProcess } from "../../../core/process/process-runner.js";
 import { lookup, object, type RuleObject } from "../rules/template.js";
+import { normalizePortIdentity } from "./identity.js";
 
 export interface DiscoveredDevice {
   adapter: string;
@@ -15,6 +16,17 @@ export interface DiscoveredDevice {
     result?: RuleObject;
     error?: { kind: string; retryable: boolean };
   };
+}
+
+export interface DeviceDiscoveryResult {
+  devices: DiscoveredDevice[];
+  sources: Array<{
+    id: string;
+    type: string;
+    status: "pass" | "warn" | "fail";
+    candidates: number;
+    error?: { kind: string; retryable: boolean };
+  }>;
 }
 
 export type DeviceSourceProvider = (
@@ -103,28 +115,32 @@ const identityFor = (identity: RuleObject, fields: RuleObject) => {
   }
   return identity.allow_port_fallback === true &&
     typeof fields.port === "string"
-    ? fields.port
+    ? normalizePortIdentity(fields.port)
     : undefined;
 };
 
-export const discoverDevices = async (
+export const discoverDevicesDetailed = async (
   adapter: string,
   devices: RuleObject,
   providers: DeviceDiscoveryProviders = {},
-): Promise<DiscoveredDevice[]> => {
+): Promise<DeviceDiscoveryResult> => {
   const discovery = object(devices.discovery);
-  if (discovery.enabled !== true) return [];
+  if (discovery.enabled !== true) return { devices: [], sources: [] };
   const matchers = Array.isArray(discovery.matchers)
     ? discovery.matchers.map(object)
     : [];
   const minimumScore = Number(object(discovery.result).minimum_score ?? 0);
   const identity = object(devices.identity);
   const discovered: DiscoveredDevice[] = [];
+  const diagnostics: DeviceDiscoveryResult["sources"] = [];
   for (const source of Array.isArray(discovery.sources)
     ? discovery.sources.map(object)
     : []) {
     try {
-      for (const fields of await sourceRecords(source, providers)) {
+      const records = await sourceRecords(source, providers);
+      let candidates = 0;
+      for (const fields of records) {
+        candidates += 1;
         const matched = matchers.filter(
           (rule) =>
             rule.source === source.id &&
@@ -144,8 +160,31 @@ export const discoverDevices = async (
           matchedRules: matched.map((rule) => String(rule.id)),
         });
       }
-    } catch {
-      // One unavailable passive source never invalidates the rest of a scan.
+      diagnostics.push({
+        id: String(source.id),
+        type: String(source.type),
+        status: "pass",
+        candidates,
+      });
+    } catch (error) {
+      const retryable = Boolean(
+        error &&
+        typeof error === "object" &&
+        (error as { retryable?: unknown }).retryable === true,
+      );
+      const kind =
+        error &&
+        typeof error === "object" &&
+        typeof (error as { code?: unknown }).code === "string"
+          ? String((error as { code: string }).code)
+          : "ADAPTER_DISCOVERY_FAILED";
+      diagnostics.push({
+        id: String(source.id),
+        type: String(source.type),
+        status: "fail",
+        candidates: 0,
+        error: { kind, retryable },
+      });
     }
   }
   const unique = new Map<string, DiscoveredDevice>();
@@ -155,10 +194,22 @@ export const discoverDevices = async (
     const previous = unique.get(key);
     if (!previous || item.score > previous.score) unique.set(key, item);
   }
-  return [...unique.values()].sort(
-    (left, right) =>
-      right.score - left.score ||
-      String(left.identity ?? "").localeCompare(String(right.identity ?? "")) ||
-      JSON.stringify(left.fields).localeCompare(JSON.stringify(right.fields)),
-  );
+  return {
+    devices: [...unique.values()].sort(
+      (left, right) =>
+        right.score - left.score ||
+        String(left.identity ?? "").localeCompare(
+          String(right.identity ?? ""),
+        ) ||
+        JSON.stringify(left.fields).localeCompare(JSON.stringify(right.fields)),
+    ),
+    sources: diagnostics,
+  };
 };
+
+/** Compatibility API for existing Core adapters. */
+export const discoverDevices = async (
+  adapter: string,
+  devices: RuleObject,
+  providers: DeviceDiscoveryProviders = {},
+) => (await discoverDevicesDetailed(adapter, devices, providers)).devices;

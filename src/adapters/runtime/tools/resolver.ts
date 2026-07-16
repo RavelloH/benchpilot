@@ -23,6 +23,8 @@ export interface ResolvedToolLaunch {
   candidateId: string;
   discoveryResult: RuleObject;
   probeResult?: RuleObject;
+  /** Launches in dependency order, from the executable owner to this Tool. */
+  chain: ResolvedToolLaunch[];
 }
 
 /** @deprecated Use the explicit launch fields. Compatibility aliases are retained for v1 callers. */
@@ -36,6 +38,12 @@ export interface ResolvedTool extends ResolvedToolLaunch {
 interface DiscoveryResolution {
   path: string;
   candidateId: string;
+}
+
+interface CandidatePaths {
+  /** Whether an explicitly configured candidate was actually configured. */
+  configured: boolean;
+  paths: string[];
 }
 
 const platformEnabled = (candidate: RuleObject, platform: string) =>
@@ -273,6 +281,34 @@ export class ToolResolver {
     }
   }
 
+  /** Probes every Tool in a via-tool chain exactly once, in dependency order. */
+  async probeChain(
+    tool: ResolvedTool,
+    discoveries: RuleObject,
+    context: RuleObject,
+    parsers: RuleObject,
+    environment: NodeJS.ProcessEnv,
+    adapterId: string,
+    signal?: AbortSignal,
+    debugLog?: (message: string) => void,
+  ): Promise<Map<string, RuleObject>> {
+    const results = new Map<string, RuleObject>();
+    for (const current of tool.chain) {
+      const result = await this.probe(
+        current as ResolvedTool,
+        discoveries,
+        context,
+        parsers,
+        environment,
+        adapterId,
+        signal,
+        debugLog,
+      );
+      results.set(current.toolId, result);
+    }
+    return results;
+  }
+
   private withProbe(tool: ResolvedTool, probeResult: RuleObject): ResolvedTool {
     return Object.keys(probeResult).length
       ? { ...tool, probeResult, probe: probeResult }
@@ -330,7 +366,7 @@ export class ToolResolver {
           : undefined;
       const executable = parent?.executable ?? resolved.path;
       const argsPrefix = [...(parent?.argsPrefix ?? []), ...ownPrefix];
-      return {
+      const current: ResolvedTool = {
         toolId,
         executable,
         argsPrefix,
@@ -347,7 +383,10 @@ export class ToolResolver {
         id: toolId,
         path: executable,
         prefixArgs: argsPrefix,
+        chain: [],
       };
+      current.chain = [...(parent?.chain ?? []), current];
+      return current;
     } finally {
       resolving.delete(toolId);
     }
@@ -366,8 +405,12 @@ export class ToolResolver {
       const explicit = ["config", "config-path"].includes(
         String(candidate.type),
       );
-      const paths = await this.candidatePaths(candidate, context);
-      for (const candidatePath of paths) {
+      const result = await this.candidatePaths(candidate, context);
+      // A missing optional configuration is not an invalid configuration:
+      // continue to PATH/fixed candidates. A supplied but invalid value is
+      // deliberately terminal so a typo cannot silently select another tool.
+      if (explicit && !result.configured) continue;
+      for (const candidatePath of result.paths) {
         const resolved = await validatePath(
           candidatePath,
           validation,
@@ -394,15 +437,19 @@ export class ToolResolver {
     );
   }
 
-  private async candidatePaths(candidate: RuleObject, context: RuleObject) {
+  private async candidatePaths(
+    candidate: RuleObject,
+    context: RuleObject,
+  ): Promise<CandidatePaths> {
     const type = String(candidate.type);
     if (type === "config" || type === "config-path") {
       const value = lookup(object(context.config), String(candidate.key));
-      if (typeof value !== "string" || !value) return [];
+      if (typeof value !== "string" || !value.trim())
+        return { configured: false, paths: [] };
       const append = Array.isArray(candidate.append)
         ? candidate.append.map(String)
         : [];
-      return [path.resolve(value, ...append)];
+      return { configured: true, paths: [path.resolve(value, ...append)] };
     }
     if (type === "environment" || type === "environment-path") {
       const value = envValue(
@@ -410,11 +457,11 @@ export class ToolResolver {
         String(candidate.variable),
         this.platform,
       );
-      if (!value) return [];
+      if (!value) return { configured: false, paths: [] };
       const append = Array.isArray(candidate.append)
         ? candidate.append.map(String)
         : [];
-      return [path.resolve(value, ...append)];
+      return { configured: true, paths: [path.resolve(value, ...append)] };
     }
     if (type === "path") {
       const directories = (
@@ -425,17 +472,23 @@ export class ToolResolver {
         this.env,
         this.platform,
       );
-      return directories.flatMap((directory) =>
-        names.map((name) => path.resolve(directory || ".", name)),
-      );
+      return {
+        configured: true,
+        paths: directories.flatMap((directory) =>
+          names.map((name) => path.resolve(directory || ".", name)),
+        ),
+      };
     }
     if (type === "fixed")
-      return (Array.isArray(candidate.paths) ? candidate.paths : []).map(
-        (item) =>
-          path.resolve(
-            String(renderRequiredTemplate(item, context, "tool path") ?? ""),
-          ),
-      );
+      return {
+        configured: true,
+        paths: (Array.isArray(candidate.paths) ? candidate.paths : []).map(
+          (item) =>
+            path.resolve(
+              String(renderRequiredTemplate(item, context, "tool path") ?? ""),
+            ),
+        ),
+      };
     if (type === "glob") {
       const matches: string[] = [];
       for (const pattern of Array.isArray(candidate.patterns)
@@ -445,8 +498,11 @@ export class ToolResolver {
           String(renderRequiredTemplate(pattern, context, "tool glob") ?? ""),
         ))
           matches.push(path.resolve(match));
-      return matches.sort((left, right) => left.localeCompare(right));
+      return {
+        configured: true,
+        paths: matches.sort((left, right) => left.localeCompare(right)),
+      };
     }
-    return [];
+    return { configured: true, paths: [] };
   }
 }

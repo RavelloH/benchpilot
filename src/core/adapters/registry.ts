@@ -115,6 +115,22 @@ export class AdapterRegistry {
     });
   }
 
+  async discoverDetailed(
+    adapter: Adapter,
+    config: Json,
+    paths: PathService,
+    discovery?: { probe: boolean; confirmDeviceProbe: boolean },
+  ) {
+    const context = {
+      adapterConfig: this.configFor(adapter, config),
+      paths,
+      discovery,
+    };
+    return adapter.discoverDetailed
+      ? adapter.discoverDetailed(context)
+      : { devices: await adapter.discover(context), diagnostics: undefined };
+  }
+
   async doctor(adapter: Adapter, config: Json, paths: PathService) {
     return adapter.doctor({
       adapterConfig: this.configFor(adapter, config),

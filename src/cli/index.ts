@@ -263,13 +263,20 @@ export async function main(adapters?: Adapter[]) {
         const scans = await Promise.all(
           adapters.map(async (adapter) => {
             try {
-              return {
-                adapter: adapter.id,
-                devices: await registry.discover(adapter, config.value, paths, {
+              const result = await registry.discoverDetailed(
+                adapter,
+                config.value,
+                paths,
+                {
                   probe: commandFlags.probe === true,
                   confirmDeviceProbe:
                     commandFlags["confirm-device-probe"] === true,
-                }),
+                },
+              );
+              return {
+                adapter: adapter.id,
+                devices: result.devices,
+                sources: result.diagnostics,
               };
             } catch (error: unknown) {
               return {
@@ -283,7 +290,11 @@ export async function main(adapters?: Adapter[]) {
         write(
           {
             devices: scans.flatMap((scan) => scan.devices),
-            adapters: scans.map(({ adapter, error }) => ({ adapter, error })),
+            adapters: scans.map(({ adapter, error, sources }) => ({
+              adapter,
+              error,
+              ...(sources ? { sources } : {}),
+            })),
           },
           flags,
         );
