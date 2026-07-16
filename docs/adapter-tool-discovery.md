@@ -30,6 +30,22 @@ are capped at ten seconds. A failed candidate reports only a structured error
 kind and retryability; raw process output and resolved environment values are
 not emitted by scan output.
 
+## Device Discovery sources
+
+Device discovery remains passive unless an adapter explicitly declares a
+`command` source. Static `records` are useful for fixed network endpoints and
+test fixtures. Serial discovery lists candidate port names only; on Windows it
+uses a fixed PowerShell query that does not open a port. USB discovery has no
+bundled native dependency, so Core may inject a passive provider when one is
+available. Network discovery never scans a subnet.
+
+A `command` source names a normal process Action plus the Parser result field
+that contains its record array. It resolves the Action Tool and Environment,
+runs the tool probe, executes through the shared Process Runner with
+`shell: false`, and is limited to ten seconds. This is a targeted discovery
+command, not an adapter-supplied shell script. Per-source errors are isolated
+so another passive source can still produce candidates.
+
 Artifact planning preserves the declaration kind: a path entry produces
 `{ "path": "..." }`, while a glob entry produces `{ "glob": "..." }`.
 Planning performs no filesystem reads, glob expansion, copying or collection,

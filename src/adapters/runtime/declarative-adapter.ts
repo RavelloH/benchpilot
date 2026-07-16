@@ -13,6 +13,7 @@ import {
 } from "../../core.js";
 import { DeclarativeCapabilityRunner } from "./capability-runner.js";
 import { discoverDevices } from "./devices/discovery.js";
+import { executeDeviceCommandSource } from "./devices/command-source.js";
 import { executeDeviceProbe } from "./devices/device-probe.js";
 import { EnvironmentResolver } from "./environments/resolver.js";
 import { AdapterRuntimeError } from "./errors.js";
@@ -262,6 +263,14 @@ export const createDeclarativeAdapter = (runtime: RuntimeAdapter): Adapter => {
       const devices = await discoverDevices(
         runtime.bundle.id,
         object(runtime.rules.devices),
+        {
+          command: (source) =>
+            executeDeviceCommandSource(
+              runtime,
+              context.adapterConfig as RuleObject,
+              source,
+            ),
+        },
       );
       const request = context.discovery;
       const probe = object(object(runtime.rules.devices).probe);
@@ -387,6 +396,14 @@ export const createDeclarativeAdapter = (runtime: RuntimeAdapter): Adapter => {
           const devices = await discoverDevices(
             runtime.bundle.id,
             object(rules.devices),
+            {
+              command: (source) =>
+                executeDeviceCommandSource(
+                  runtime,
+                  context.adapterConfig as RuleObject,
+                  source,
+                ),
+            },
           );
           checks.push({
             id: `${runtime.bundle.id}-device-sources`,

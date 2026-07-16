@@ -1,5 +1,6 @@
 import { readdir } from "node:fs/promises";
 import path from "node:path";
+import { runProcess } from "../../../core/process/process-runner.js";
 import { lookup, object, type RuleObject } from "../rules/template.js";
 
 export interface DiscoveredDevice {
@@ -14,6 +15,17 @@ export interface DiscoveredDevice {
     result?: RuleObject;
     error?: { kind: string; retryable: boolean };
   };
+}
+
+export type DeviceSourceProvider = (
+  source: RuleObject,
+) => Promise<RuleObject[]>;
+
+export interface DeviceDiscoveryProviders {
+  serial?: DeviceSourceProvider;
+  usb?: DeviceSourceProvider;
+  network?: DeviceSourceProvider;
+  command?: DeviceSourceProvider;
 }
 
 const match = (actual: unknown, rule: RuleObject) => {
@@ -41,7 +53,28 @@ const match = (actual: unknown, rule: RuleObject) => {
 };
 
 const serialCandidates = async (): Promise<RuleObject[]> => {
-  if (process.platform === "win32") return [];
+  if (process.platform === "win32") {
+    // This is a fixed, shell-free system query. It only lists port names and
+    // never opens a serial device or changes DTR/RTS state.
+    const result = await runProcess({
+      command: "powershell.exe",
+      args: [
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        "[System.IO.Ports.SerialPort]::GetPortNames()",
+      ],
+      signal: new AbortController().signal,
+      captureOutput: true,
+      maxCaptureBytes: 64 * 1024,
+    }).catch(() => undefined);
+    return (result?.stdout ?? "")
+      .split(/\r?\n/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+      .sort((left, right) => left.localeCompare(right))
+      .map((port) => ({ port }));
+  }
   const entries = await readdir("/dev").catch(() => []);
   return entries
     .filter((name) => /^(tty(USB|ACM|S|AMA|\.)|cu\.)/.test(name))
@@ -49,11 +82,17 @@ const serialCandidates = async (): Promise<RuleObject[]> => {
     .map((name) => ({ port: path.join("/dev", name) }));
 };
 
-const sourceRecords = async (source: RuleObject): Promise<RuleObject[]> => {
+const sourceRecords = async (
+  source: RuleObject,
+  providers: DeviceDiscoveryProviders,
+): Promise<RuleObject[]> => {
   if (Array.isArray(source.records)) return source.records.map(object);
+  const provider = providers[source.type as keyof DeviceDiscoveryProviders];
+  if (provider) return provider(source);
   if (source.type === "serial") return serialCandidates();
-  // USB and network intentionally remain passive/no-op without native dependencies
-  // or a declared targeted command provider.
+  // USB requires a native dependency to enumerate reliably. Network sources
+  // are intentionally passive: adapters may supply static records or an
+  // explicit command source, but the runtime never scans a LAN.
   return [];
 };
 
@@ -71,6 +110,7 @@ const identityFor = (identity: RuleObject, fields: RuleObject) => {
 export const discoverDevices = async (
   adapter: string,
   devices: RuleObject,
+  providers: DeviceDiscoveryProviders = {},
 ): Promise<DiscoveredDevice[]> => {
   const discovery = object(devices.discovery);
   if (discovery.enabled !== true) return [];
@@ -84,7 +124,7 @@ export const discoverDevices = async (
     ? discovery.sources.map(object)
     : []) {
     try {
-      for (const fields of await sourceRecords(source)) {
+      for (const fields of await sourceRecords(source, providers)) {
         const matched = matchers.filter(
           (rule) =>
             rule.source === source.id &&

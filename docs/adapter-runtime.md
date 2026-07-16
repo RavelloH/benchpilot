@@ -56,9 +56,12 @@ Core operation cancellation remains the outer boundary and retains its own
 `ADAPTER_ACTION_TIMEOUT`, `ADAPTER_WORKFLOW_TIMEOUT`, or
 `ADAPTER_TOOL_PROBE_TIMEOUT` errors with retry guidance.
 
-`benchpilot devices scan` is passive. The bundled runtime only enumerates
-available serial path candidates on POSIX and can consume declared static
-records for fixtures; it neither opens a serial port nor changes DTR/RTS.
+`benchpilot devices scan` is passive. The bundled runtime enumerates available
+serial port names on POSIX and Windows and can consume declared static records
+or Core-injected passive USB/network providers; it neither opens a serial port
+nor changes DTR/RTS. Network sources never scan a LAN. A targeted `command`
+source reuses a declared shell-free Tool Action and Parser, with a ten-second
+ceiling, rather than accepting a command string from an adapter.
 An Adapter Probe is never part of an ordinary scan. It is requested explicitly
 with `benchpilot devices scan --probe`; a Probe marked `may_reset_device` or
 `destructive` also requires `--confirm-device-probe`. Probes run without a

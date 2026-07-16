@@ -292,6 +292,134 @@ test("passive device discovery scores, deduplicates, and orders stable identitie
   );
 });
 
+test("device discovery accepts injected passive providers without scanning hardware", async () => {
+  const devices = await discoverDevices(
+    "demo",
+    {
+      discovery: {
+        enabled: true,
+        sources: [{ id: "network", type: "network" }],
+        matchers: [
+          {
+            id: "address",
+            source: "network",
+            field: "address",
+            operator: "exists",
+            score: 1,
+          },
+        ],
+        result: { minimum_score: 1 },
+      },
+      identity: { fields: ["device.address"], allow_port_fallback: false },
+    },
+    {
+      network: async () => [{ address: "192.0.2.8", name: "board" }],
+    },
+  );
+  assert.deepEqual(
+    devices.map((device) => device.fields),
+    [{ address: "192.0.2.8", name: "board" }],
+  );
+});
+
+test("command device discovery uses a Tool Action and parsed records", async () => {
+  const platform = process.platform === "win32" ? "windows" : "linux";
+  const runtime = {
+    bundle: {
+      ...bundle,
+      id: "command-discovery-demo",
+      manifest: { adapter_version: "1.0.0", display_name: "Command Discovery" },
+    },
+    platform,
+    rules: {
+      devices: {
+        discovery: {
+          enabled: true,
+          sources: [
+            {
+              id: "command",
+              type: "command",
+              action: "list-devices",
+              result: "records",
+            },
+          ],
+          matchers: [
+            {
+              id: "port",
+              source: "command",
+              field: "port",
+              operator: "exists",
+              score: 1,
+            },
+          ],
+          result: { minimum_score: 1 },
+        },
+        identity: { fields: ["device.port"], allow_port_fallback: true },
+        probe: { enabled: false, reason: "No hardware probe is needed." },
+      },
+      tools: {
+        node: {
+          discovery: "node",
+          launch: { mode: "direct", prefix_args: [], environment: "inherit" },
+        },
+      },
+      discoveries: {
+        node: {
+          validation: { path_type: "file", executable: true },
+          candidates: [
+            { id: "node", type: "fixed", paths: [process.execPath] },
+          ],
+        },
+      },
+      environments: {},
+      actions: {
+        "list-devices": {
+          type: "process",
+          tool: "node",
+          cwd: "${project.root}",
+          timeout: "2s",
+          parser: "device-list",
+          arguments: [
+            { kind: "value", value: "-e" },
+            {
+              kind: "value",
+              value:
+                'process.stdout.write(JSON.stringify({devices:[{port:"COM7"}]}))',
+            },
+          ],
+        },
+      },
+      parsers: {
+        "device-list": {
+          mode: "json",
+          encoding: "utf-8",
+          strip_ansi: false,
+          success_exit_codes: [0],
+          extract: [
+            {
+              id: "devices",
+              source: "stdout",
+              type: "json-pointer",
+              pointer: "/devices",
+              target: "records",
+              cast: "json",
+              required: true,
+            },
+          ],
+        },
+      },
+    },
+  };
+  const devices = await createDeclarativeAdapter(runtime).discover({
+    adapterConfig: {},
+    paths: new PathService(),
+  });
+  assert.deepEqual(
+    devices.map((device) => device.fields),
+    [{ port: "COM7" }],
+  );
+});
+
 test("device probes require explicit confirmation and run without a Core Run", async () => {
   const platform = process.platform === "win32" ? "windows" : "linux";
   const runtime = {

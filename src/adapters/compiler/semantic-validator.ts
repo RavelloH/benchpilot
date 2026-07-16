@@ -487,6 +487,27 @@ export const validateSemantics = async (
         ),
       );
     sourceIds.add(String(source.id));
+    if (source.type === "command") {
+      ref(
+        errors,
+        actions,
+        source.action,
+        "devices.toml",
+        adapter.id,
+        `Command device source ${String(source.id)} action`,
+      );
+      const action = obj(actions[String(source.action)]);
+      if (Object.keys(action).length && action.type !== "process")
+        errors.push(
+          diagnostic(
+            "ADAPTER_SCHEMA_INVALID",
+            "devices.toml",
+            `Command device source ${String(source.id)} must use a process Action`,
+            undefined,
+            adapter.id,
+          ),
+        );
+    }
   }
   const sources = Object.fromEntries(
     [...sourceIds].map((source) => [source, true]),

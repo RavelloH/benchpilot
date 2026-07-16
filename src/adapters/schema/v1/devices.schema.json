@@ -20,11 +20,24 @@
     "source": {
       "type": "object",
       "required": ["id", "type"],
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "id": { "$ref": "#/$defs/id" },
-        "type": { "enum": ["serial", "usb", "network", "command"] }
-      }
+        "type": { "enum": ["serial", "usb", "network", "command"] },
+        "records": {
+          "type": "array",
+          "items": { "type": "object", "additionalProperties": true }
+        },
+        "action": { "$ref": "#/$defs/id" },
+        "result": { "type": "string", "minLength": 1 }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "const": "command" } } },
+          "then": { "required": ["action", "result"] },
+          "else": { "not": { "required": ["action", "result"] } }
+        }
+      ]
     },
     "matcher": {
       "type": "object",

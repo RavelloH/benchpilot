@@ -51,3 +51,11 @@ Probe declaring `may_reset_device` or `destructive` requires the additional
 `--confirm-device-probe` confirmation. The v1 runtime currently allows only a
 shell-free process Action for a Device Probe. It does not open serial ports,
 toggle DTR/RTS, or implement a serial executor.
+
+Discovery sources are `serial`, `usb`, `network`, or `command`. `serial` is a
+passive port-name listing (including a fixed Windows system query); `usb` may
+be supplied by a Core provider without adding a native dependency; and
+`network` accepts declared static records but never performs a LAN scan. A
+`command` source must name a declared process Action and a Parser result key
+containing an array of records. It uses normal Tool and Environment resolution,
+has a ten-second maximum, and cannot contain an arbitrary shell command.
