@@ -250,6 +250,35 @@ test("semantic discovery and device references are validated exactly once", asyn
   }
 });
 
+test("command device sources require a process Action and Parser", async () => {
+  const root = await mkdtemp(join(tmpdir(), "benchpilot-command-source-"));
+  const adapterRoot = join(root, "complete");
+  try {
+    await cp(complete, adapterRoot, { recursive: true });
+    await writeFile(
+      join(adapterRoot, "devices.toml"),
+      `schema = "benchpilot.adapter.devices"\nschema_version = 1\n[discovery]\nenabled = true\n[[discovery.sources]]\nid = "command"\ntype = "command"\naction = "missing"\nresult = "records"\n[[discovery.matchers]]\nid = "present"\nsource = "command"\nfield = "port"\noperator = "exists"\nscore = 1\n[discovery.result]\nminimum_score = 1\n[identity]\nfields = ["device.port"]\nallow_port_fallback = true\n[probe]\nenabled = false\nreason = "No probe."\n`,
+    );
+    const result = await validateAdapter(adapterRoot);
+    assert.ok(
+      result.diagnostics.some(
+        (item) =>
+          item.code === "ADAPTER_REFERENCE_NOT_FOUND" &&
+          item.message.includes("Command device source command action"),
+      ),
+    );
+    assert.ok(
+      result.diagnostics.some(
+        (item) =>
+          item.code === "ADAPTER_REFERENCE_NOT_FOUND" &&
+          item.message.includes("Command device source command parser"),
+      ),
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("JSON Pointer extracts share strict cast handling with regex extracts", async () => {
   const root = await mkdtemp(join(tmpdir(), "benchpilot-parser-casts-"));
   const adapterRoot = join(root, "complete");

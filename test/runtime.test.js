@@ -1001,6 +1001,7 @@ test("process launch plans use argv and parse structured output", async () => {
   );
   assert.equal(plan.kind, "process");
   const events = [];
+  const logs = [];
   let completed = false;
   let progressBeforeCompletion = false;
   const result = await executeProcess(
@@ -1034,10 +1035,17 @@ test("process launch plans use argv and parse structured output", async () => {
       progressBeforeCompletion ||= !completed;
       events.push({ event, data });
     },
+    {
+      info: (line) => logs.push({ level: "info", line }),
+      warn: (line) => logs.push({ level: "warn", line }),
+    },
   );
   completed = true;
   assert.deepEqual(result.result, { value: 3 });
   assert.deepEqual(events, [{ event: "build.progress", data: { current: 2 } }]);
+  assert.ok(
+    logs.some((entry) => entry.level === "info" && entry.line === "value=3"),
+  );
   assert.equal(progressBeforeCompletion, true);
   assert.throws(
     executeUnsupportedSerial,
@@ -1045,6 +1053,43 @@ test("process launch plans use argv and parse structured output", async () => {
       error instanceof AdapterRuntimeError &&
       error.code === "ADAPTER_EXECUTOR_UNAVAILABLE",
   );
+});
+
+test("streaming progress handles split UTF-8, ANSI, and an unterminated tail once", async () => {
+  const events = [];
+  await executeProcess(
+    {
+      kind: "process",
+      executable: process.execPath,
+      args: [
+        "-e",
+        "process.stdout.write(Buffer.from([0xe8, 0xbf])); setTimeout(() => process.stdout.write(Buffer.concat([Buffer.from([0x9b]), Buffer.from(' progress=7\\n\\x1b[31mprogress=8\\x1b[0m\\nprogress=9')])), 5)",
+      ],
+      cwd: process.cwd(),
+      env: process.env,
+      timeoutMs: 10_000,
+    },
+    {
+      strip_ansi: true,
+      success_exit_codes: [0],
+      progress: [
+        {
+          id: "progress",
+          source: "stdout",
+          pattern: "progress=(?<value>\\d+)",
+          event: "progress",
+          fields: { value: "integer" },
+        },
+      ],
+    },
+    new AbortController().signal,
+    (event, data) => events.push({ event, data }),
+  );
+  assert.deepEqual(events, [
+    { event: "progress", data: { value: 7 } },
+    { event: "progress", data: { value: 8 } },
+    { event: "progress", data: { value: 9 } },
+  ]);
 });
 
 test("process parsing retains tail errors while capture stays bounded", async () => {
@@ -1055,7 +1100,7 @@ test("process parsing retains tail errors while capture stays bounded", async ()
         executable: process.execPath,
         args: [
           "-e",
-          "process.stdout.write('x'.repeat(5 * 1024 * 1024) + 'FATAL: tail')",
+          "process.stdout.write('x'.repeat(10 * 1024 * 1024) + 'FATAL: tail')",
         ],
         cwd: process.cwd(),
         env: process.env,

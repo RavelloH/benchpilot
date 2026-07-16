@@ -507,6 +507,14 @@ export const validateSemantics = async (
             adapter.id,
           ),
         );
+      ref(
+        errors,
+        parsers,
+        action.parser,
+        "devices.toml",
+        adapter.id,
+        `Command device source ${String(source.id)} parser`,
+      );
     }
   }
   const sources = Object.fromEntries(
