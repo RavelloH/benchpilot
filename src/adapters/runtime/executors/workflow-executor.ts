@@ -1,6 +1,6 @@
 import { AdapterRuntimeError } from "../errors.js";
 import { durationMs } from "../planning/launch-plan.js";
-import { planWorkflow } from "../planning/workflow-planner.js";
+import { planWorkflowStep } from "../planning/workflow-planner.js";
 import { object, type RuleObject } from "../rules/template.js";
 
 export const executeWorkflow = async (
@@ -23,15 +23,32 @@ export const executeWorkflow = async (
   );
   const results: RuleObject[] = [];
   try {
-    emit?.("adapter.workflow.started", {});
-    for (const step of planWorkflow(workflow, context, true)) {
+    const workflowId = String(workflow.id ?? "workflow");
+    emit?.("adapter.workflow.started", { workflowId });
+    for (const rawStep of Array.isArray(workflow.steps) ? workflow.steps : []) {
+      const raw = object(rawStep);
+      const actionId = String(raw.uses).replace(/^action:/, "");
+      const stepId = String(raw.id);
+      const step = planWorkflowStep(rawStep, context, true);
+      if (!step) {
+        emit?.("adapter.workflow.step.skipped", {
+          workflowId,
+          stepId,
+          actionId,
+        });
+        continue;
+      }
       if (controller.signal.aborted)
         throw new AdapterRuntimeError(
-          "ADAPTER_ACTION_FAILED",
+          "ADAPTER_WORKFLOW_TIMEOUT",
           "Workflow timed out or was aborted.",
+          true,
+          [
+            "Retry the operation.",
+            "Increase the operation timeout if the device or tool is slow.",
+          ],
         );
-      const actionId = String(step.uses).replace(/^action:/, "");
-      emit?.("adapter.workflow.step.started", { id: step.id, actionId });
+      emit?.("adapter.workflow.step.started", { workflowId, stepId, actionId });
       try {
         const result = await executeAction(
           actionId,
@@ -39,15 +56,38 @@ export const executeWorkflow = async (
           controller.signal,
         );
         results.push({ id: step.id, ok: true, result });
-        context.step = { id: step.id, result };
+        context.step = { id: step.id, action: actionId, ok: true, result };
         context.result = {
           ...object(context.result),
           [String(step.id)]: result,
         };
-        emit?.("adapter.workflow.step.completed", { id: step.id });
+        emit?.("adapter.workflow.step.completed", {
+          workflowId,
+          stepId,
+          actionId,
+        });
       } catch (error) {
         results.push({ id: step.id, ok: false });
-        emit?.("adapter.workflow.step.failed", { id: step.id });
+        const runtime =
+          error instanceof AdapterRuntimeError ? error : undefined;
+        context.step = {
+          id: step.id,
+          action: actionId,
+          ok: false,
+          error: {
+            kind: runtime?.code ?? "ADAPTER_ACTION_FAILED",
+            retryable: runtime?.retryable === true,
+          },
+        };
+        context.result = {
+          ...object(context.result),
+          [String(step.id)]: context.step,
+        };
+        emit?.("adapter.workflow.step.failed", {
+          workflowId,
+          stepId,
+          actionId,
+        });
         if (
           step.continue_on_error === true ||
           workflow.stop_on_failure === false
@@ -56,7 +96,7 @@ export const executeWorkflow = async (
         throw error;
       }
     }
-    emit?.("adapter.workflow.completed", {});
+    emit?.("adapter.workflow.completed", { workflowId });
     return { steps: results };
   } finally {
     clearTimeout(timer);

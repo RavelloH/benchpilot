@@ -21,11 +21,15 @@ export interface RuntimeAdapter {
 }
 
 export interface AdapterRuntimeContext {
-  adapter: RuntimeAdapter;
+  adapter: {
+    id: string;
+    version: string;
+    manifest: JsonObject;
+  };
   config: JsonObject;
   device: JsonObject;
   input: JsonObject;
-  project: JsonObject;
+  project: { root: string };
   platform: RuntimePlatform;
   home: string;
   temp: string;
@@ -33,7 +37,7 @@ export interface AdapterRuntimeContext {
   run?: { dir: string; id: string };
   tool: Record<string, JsonObject>;
   discovery: Record<string, JsonObject>;
-  environment: Record<string, NodeJS.ProcessEnv>;
+  environment: Record<string, JsonObject>;
   result: JsonObject;
   step?: JsonObject;
 }

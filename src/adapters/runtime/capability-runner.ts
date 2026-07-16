@@ -12,7 +12,7 @@ import { durationMs, planLaunch } from "./planning/launch-plan.js";
 import { collectArtifacts } from "./rules/artifact-collector.js";
 import { lookup, object, type RuleObject } from "./rules/template.js";
 import { ToolResolver, type ResolvedTool } from "./tools/resolver.js";
-import type { RuntimeAdapter } from "./types.js";
+import type { AdapterRuntimeContext, RuntimeAdapter } from "./types.js";
 import { AdapterDataValidator } from "./validation/data-validator.js";
 
 const abortAfter = async <T>(
@@ -69,7 +69,13 @@ export class DeclarativeCapabilityRunner {
       capabilityId,
       inputDefinition,
     );
-    const context: RuleObject = {
+    const context: AdapterRuntimeContext & RuleObject = {
+      adapter: {
+        id: this.adapter.bundle.id,
+        version: String(this.adapter.bundle.manifest.adapter_version),
+        manifest: this.adapter.bundle.manifest,
+      },
+      platform: runtimePlatform(),
       config: this.adapterConfig,
       device: this.deviceConfig,
       input: validatedInput,
@@ -142,17 +148,84 @@ export class DeclarativeCapabilityRunner {
         "ADAPTER_ACTION_FAILED",
         `Action does not exist: ${id}`,
       );
-    const actionContext = { ...context, input };
+    context.input = input;
+    const actionContext = context as RuleObject;
     const tool =
       action.type === "process"
-        ? await this.resolveTool(String(action.tool), actionContext)
+        ? await this.resolveTool(String(action.tool), actionContext, signal)
         : undefined;
-    const environment = await this.environments.resolve(
+    const environment = await this.environments.resolveDetailed(
       tool?.environmentId ?? "inherit",
       object(this.adapter.rules.environments),
       actionContext,
       signal,
     );
+    if (tool) {
+      const probed = await this.tools.probe(
+        tool,
+        object(this.adapter.rules.discoveries),
+        actionContext,
+        object(this.adapter.rules.parsers),
+        environment.environment,
+        this.adapter.bundle.id,
+        signal,
+      );
+      const resolvedTool = {
+        ...tool,
+        ...(Object.keys(probed).length
+          ? { probeResult: probed, probe: probed }
+          : {}),
+      };
+      (context.tool as Record<string, RuleObject>)[tool.toolId] = {
+        executable: resolvedTool.executable,
+        argsPrefix: resolvedTool.argsPrefix,
+        environmentId: resolvedTool.environmentId,
+        discoveryId: resolvedTool.discoveryId,
+        discoveredPath: resolvedTool.discoveredPath,
+        probe: probed,
+      };
+      (context.discovery as Record<string, RuleObject>)[tool.discoveryId] = {
+        path: tool.discoveredPath,
+        candidateId: tool.candidateId,
+        probe: probed,
+      };
+      (context.environment as Record<string, RuleObject>)[tool.environmentId] =
+        {
+          providerId: environment.providerId,
+          strategy: environment.strategy,
+          source: environment.source,
+          variables: this.environmentSummary(environment.environment),
+        };
+      return this.executePlannedAction(
+        id,
+        action,
+        actionContext,
+        operation,
+        signal,
+        resolvedTool,
+        environment.environment,
+      );
+    }
+    return this.executePlannedAction(
+      id,
+      action,
+      actionContext,
+      operation,
+      signal,
+      undefined,
+      environment.environment,
+    );
+  }
+
+  private async executePlannedAction(
+    id: string,
+    action: RuleObject,
+    actionContext: RuleObject,
+    operation: OperationContext,
+    signal: AbortSignal,
+    tool: ResolvedTool | undefined,
+    environment: NodeJS.ProcessEnv,
+  ): Promise<RuleObject> {
     const plan = planLaunch(action, actionContext, tool, environment);
     const result = await abortAfter(
       signal,
@@ -167,6 +240,7 @@ export class DeclarativeCapabilityRunner {
             parser,
             actionSignal,
             (event, data) => operation.emitEvent(event, data as Json),
+            operation.logger,
           );
           return execution.result;
         }
@@ -175,6 +249,10 @@ export class DeclarativeCapabilityRunner {
         return executeUnsupportedSerial();
       },
     );
+    actionContext.result = {
+      ...object(actionContext.result),
+      ...(result as RuleObject),
+    };
     if (plan.artifactSetId) {
       if (!operation.run)
         throw new AdapterRuntimeError(
@@ -199,6 +277,7 @@ export class DeclarativeCapabilityRunner {
   private async resolveTool(
     toolId: string,
     context: RuleObject,
+    signal: AbortSignal,
   ): Promise<ResolvedTool> {
     const tool = await this.tools.resolve(
       toolId,
@@ -206,8 +285,18 @@ export class DeclarativeCapabilityRunner {
       object(this.adapter.rules.discoveries),
       context,
       object(this.adapter.rules.parsers),
+      { probe: false, adapterId: this.adapter.bundle.id, signal },
     );
     return tool;
+  }
+
+  private environmentSummary(environment: NodeJS.ProcessEnv) {
+    return Object.fromEntries(
+      Object.entries(environment).map(([key, value]) => [
+        key,
+        value === undefined ? undefined : "[RESOLVED]",
+      ]),
+    );
   }
 
   private allowedRoots(operation: OperationContext) {

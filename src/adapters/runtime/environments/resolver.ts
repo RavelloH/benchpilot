@@ -75,14 +75,41 @@ export class EnvironmentResolver {
     context: RuleObject,
     signal: AbortSignal,
   ): Promise<NodeJS.ProcessEnv> {
-    if (id === "inherit") return { ...this.base };
+    return (await this.resolveDetailed(id, definitions, context, signal))
+      .environment;
+  }
+
+  async resolveDetailed(
+    id: string,
+    definitions: RuleObject,
+    context: RuleObject,
+    signal: AbortSignal,
+  ): Promise<{
+    environment: NodeJS.ProcessEnv;
+    providerId: string;
+    strategy: string;
+    source: string;
+  }> {
+    if (id === "inherit")
+      return {
+        environment: { ...this.base },
+        providerId: "inherit",
+        strategy: "inherit",
+        source: "process",
+      };
     const definition = object(definitions[id]);
     if (!Object.keys(definition).length)
       throw new AdapterRuntimeError(
         "ADAPTER_ENVIRONMENT_UNAVAILABLE",
         `Environment does not exist: ${id}`,
       );
-    if (definition.strategy === "inherit") return { ...this.base };
+    if (definition.strategy === "inherit")
+      return {
+        environment: { ...this.base },
+        providerId: "inherit",
+        strategy: "inherit",
+        source: "process",
+      };
     const providers = (
       Array.isArray(definition.providers) ? definition.providers : []
     )
@@ -95,7 +122,13 @@ export class EnvironmentResolver {
     for (const { provider } of providers) {
       try {
         const resolved = await this.resolveProvider(provider, context, signal);
-        if (resolved) return resolved;
+        if (resolved)
+          return {
+            environment: resolved,
+            providerId: String(provider.id),
+            strategy: String(definition.strategy),
+            source: String(provider.type),
+          };
       } catch (error) {
         if (error instanceof AdapterRuntimeError) continue;
         throw error;

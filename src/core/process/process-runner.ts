@@ -26,6 +26,8 @@ export interface ProcessRunResult {
   stdout?: string;
   stderr?: string;
   outputTruncated?: boolean;
+  stdoutTruncated?: boolean;
+  stderrTruncated?: boolean;
 }
 
 export interface StartedProcess {
@@ -165,30 +167,47 @@ export function startProcess(options: ProcessRunOptions): StartedProcess {
   // abort never resolves before the original child's streams are closed.
   const closed = new Promise<void>((resolve) => child.once("close", resolve));
   options.signal.removeEventListener("abort", onAbortDuringLaunch);
-  let stdout = "";
-  let stderr = "";
-  let outputTruncated = false;
-  const maxCaptureBytes = options.maxCaptureBytes ?? 1_048_576;
-  const append = (current: string, chunk: Buffer) => {
-    if (!options.captureOutput || outputTruncated) return current;
-    const remaining = maxCaptureBytes - Buffer.byteLength(current);
-    if (remaining <= 0) {
-      outputTruncated = true;
-      return current;
+  const maxCaptureBytes = options.maxCaptureBytes ?? 4 * 1024 * 1024;
+  class BoundedCapture {
+    private head = Buffer.alloc(0);
+    private tail = Buffer.alloc(0);
+    truncated = false;
+    constructor(private readonly limit: number) {}
+    append(chunk: Buffer) {
+      if (!options.captureOutput) return;
+      const headLimit = Math.min(
+        1024 * 1024,
+        Math.max(0, Math.floor(this.limit / 4)),
+      );
+      const tailLimit = Math.max(0, this.limit - headLimit);
+      let rest = chunk;
+      if (this.head.length < headLimit) {
+        const consumed = Math.min(headLimit - this.head.length, rest.length);
+        this.head = Buffer.concat([this.head, rest.subarray(0, consumed)]);
+        rest = rest.subarray(consumed);
+      }
+      if (!rest.length) return;
+      const combined = Buffer.concat([this.tail, rest]);
+      if (combined.length > tailLimit) {
+        this.tail = combined.subarray(Math.max(0, combined.length - tailLimit));
+        this.truncated = true;
+      } else this.tail = combined;
     }
-    const accepted = chunk.subarray(0, remaining).toString("utf8");
-    if (chunk.length > remaining) outputTruncated = true;
-    return current + accepted;
-  };
+    text() {
+      return Buffer.concat([this.head, this.tail]).toString("utf8");
+    }
+  }
+  const stdoutCapture = new BoundedCapture(maxCaptureBytes);
+  const stderrCapture = new BoundedCapture(maxCaptureBytes);
   child.stdout?.on("data", (chunk: Buffer) => {
     options.stdout?.write(chunk);
     options.onStdout?.(chunk);
-    stdout = append(stdout, chunk);
+    stdoutCapture.append(chunk);
   });
   child.stderr?.on("data", (chunk: Buffer) => {
     options.stderr?.write(chunk);
     options.onStderr?.(chunk);
-    stderr = append(stderr, chunk);
+    stderrCapture.append(chunk);
   });
 
   let settle!: (value: ProcessRunResult) => void;
@@ -283,7 +302,15 @@ export function startProcess(options: ProcessRunOptions): StartedProcess {
       code,
       signal,
       durationMs: Date.now() - started,
-      ...(options.captureOutput ? { stdout, stderr, outputTruncated } : {}),
+      ...(options.captureOutput
+        ? {
+            stdout: stdoutCapture.text(),
+            stderr: stderrCapture.text(),
+            stdoutTruncated: stdoutCapture.truncated,
+            stderrTruncated: stderrCapture.truncated,
+            outputTruncated: stdoutCapture.truncated || stderrCapture.truncated,
+          }
+        : {}),
     });
   });
   // Covers an abort after listener registration but before/while spawn returns.

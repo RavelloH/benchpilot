@@ -59,7 +59,7 @@ export const planLaunch = (
       throw new Error(`Resolved tool is required: ${String(action.tool)}`);
     return {
       kind: "process",
-      executable: tool.path,
+      executable: tool.executable ?? tool.path,
       args: [
         ...tool.prefixArgs,
         ...planActionArguments(action, context).map((argument) =>
