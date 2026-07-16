@@ -13,6 +13,7 @@ import {
 } from "../../core.js";
 import { DeclarativeCapabilityRunner } from "./capability-runner.js";
 import { discoverDevices } from "./devices/discovery.js";
+import { executeDeviceProbe } from "./devices/device-probe.js";
 import { EnvironmentResolver } from "./environments/resolver.js";
 import { AdapterRuntimeError } from "./errors.js";
 import { lookup, object, type RuleObject } from "./rules/template.js";
@@ -257,11 +258,39 @@ export const createDeclarativeAdapter = (runtime: RuntimeAdapter): Adapter => {
     redactDeviceConfig(config) {
       return redactSecrets(runtime.bundle.schemas.device, config) as Json;
     },
-    async discover(_context: AdapterContext) {
-      return (await discoverDevices(
+    async discover(context: AdapterContext) {
+      const devices = await discoverDevices(
         runtime.bundle.id,
         object(runtime.rules.devices),
-      )) as unknown as Json[];
+      );
+      const request = context.discovery;
+      const probe = object(object(runtime.rules.devices).probe);
+      if (request?.probe !== true || probe.enabled !== true)
+        return devices as unknown as Json[];
+      if (
+        (probe.may_reset_device === true || probe.destructive === true) &&
+        request.confirmDeviceProbe !== true
+      )
+        throw new BenchPilotError(
+          "ADAPTER_DISCOVERY_PROBE_REQUIRED",
+          7,
+          "This device probe can change hardware state and requires --confirm-device-probe.",
+          false,
+          undefined,
+          [
+            "Repeat with --probe --confirm-device-probe after verifying the device state.",
+          ],
+        );
+      return Promise.all(
+        devices.map(async (device) => ({
+          ...device,
+          probe: await executeDeviceProbe(
+            runtime,
+            context.adapterConfig as RuleObject,
+            device.fields,
+          ),
+        })),
+      ) as unknown as Json[];
     },
     async doctor(context: AdapterContext) {
       const checks: Json[] = [

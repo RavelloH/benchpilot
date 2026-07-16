@@ -265,7 +265,11 @@ export async function main(adapters?: Adapter[]) {
             try {
               return {
                 adapter: adapter.id,
-                devices: await registry.discover(adapter, config.value, paths),
+                devices: await registry.discover(adapter, config.value, paths, {
+                  probe: commandFlags.probe === true,
+                  confirmDeviceProbe:
+                    commandFlags["confirm-device-probe"] === true,
+                }),
               };
             } catch (error: unknown) {
               return {

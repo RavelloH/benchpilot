@@ -9,6 +9,11 @@ export interface DiscoveredDevice {
   fields: RuleObject;
   identity?: string;
   matchedRules: string[];
+  probe?: {
+    ok: boolean;
+    result?: RuleObject;
+    error?: { kind: string; retryable: boolean };
+  };
 }
 
 const match = (actual: unknown, rule: RuleObject) => {

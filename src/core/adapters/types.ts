@@ -6,6 +6,10 @@ import type { PathService } from "../paths/path-service.js";
 export interface AdapterContext {
   adapterConfig: Json;
   paths: PathService;
+  discovery?: {
+    probe: boolean;
+    confirmDeviceProbe: boolean;
+  };
 }
 
 export interface AdapterServices extends AdapterContext {}

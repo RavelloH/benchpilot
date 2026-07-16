@@ -16,6 +16,7 @@ import test from "node:test";
 import { AdapterBundleLoader } from "../dist/adapters/runtime/bundle-loader.js";
 import { createDeclarativeAdapter } from "../dist/adapters/runtime/declarative-adapter.js";
 import { discoverDevices } from "../dist/adapters/runtime/devices/discovery.js";
+import { executeDeviceProbe } from "../dist/adapters/runtime/devices/device-probe.js";
 import { AdapterRuntimeError } from "../dist/adapters/runtime/errors.js";
 import { EnvironmentResolver } from "../dist/adapters/runtime/environments/resolver.js";
 import { executeProcess } from "../dist/adapters/runtime/executors/process-executor.js";
@@ -33,6 +34,7 @@ import {
 } from "../dist/adapters/runtime/validation/data-validator.js";
 import {
   AdapterRegistry,
+  BenchPilotError,
   OperationRunner,
   PathService,
 } from "../dist/index.js";
@@ -288,6 +290,115 @@ test("passive device discovery scores, deduplicates, and orders stable identitie
       { identity: "second", score: 21, matchedRules: ["has-serial", "usb"] },
     ],
   );
+});
+
+test("device probes require explicit confirmation and run without a Core Run", async () => {
+  const platform = process.platform === "win32" ? "windows" : "linux";
+  const runtime = {
+    bundle: {
+      ...bundle,
+      id: "probe-demo",
+      manifest: { adapter_version: "1.0.0", display_name: "Probe" },
+    },
+    platform,
+    rules: {
+      devices: {
+        discovery: {
+          enabled: true,
+          sources: [
+            { id: "serial", type: "serial", records: [{ port: "COM8" }] },
+          ],
+          matchers: [
+            {
+              id: "port",
+              source: "serial",
+              field: "port",
+              operator: "exists",
+              score: 1,
+            },
+          ],
+          result: { minimum_score: 1 },
+        },
+        identity: { fields: ["device.port"], allow_port_fallback: true },
+        probe: {
+          enabled: true,
+          action: "probe",
+          parser: "probe",
+          may_reset_device: true,
+          destructive: false,
+        },
+      },
+      tools: {
+        node: {
+          discovery: "node",
+          launch: { mode: "direct", prefix_args: [], environment: "inherit" },
+        },
+      },
+      discoveries: {
+        node: {
+          validation: { path_type: "file", executable: true },
+          candidates: [
+            { id: "node", type: "fixed", paths: [process.execPath] },
+          ],
+        },
+      },
+      environments: {},
+      actions: {
+        probe: {
+          type: "process",
+          tool: "node",
+          cwd: "${project.root}",
+          timeout: "2s",
+          arguments: [
+            { kind: "value", value: "-e" },
+            { kind: "value", value: "process.stdout.write(process.argv[1])" },
+            { kind: "value", value: "${device.port}" },
+          ],
+        },
+      },
+      parsers: {
+        probe: {
+          success_exit_codes: [0],
+          extract: [
+            {
+              id: "port",
+              source: "stdout",
+              type: "regex",
+              pattern: "(?<port>.+)",
+              target: "port",
+              group: "port",
+              cast: "string",
+              required: true,
+            },
+          ],
+        },
+      },
+    },
+  };
+  assert.deepEqual(await executeDeviceProbe(runtime, {}, { port: "COM8" }), {
+    ok: true,
+    result: { port: "COM8" },
+  });
+  const adapter = createDeclarativeAdapter(runtime);
+  await assert.rejects(
+    adapter.discover({
+      adapterConfig: {},
+      paths: new PathService(),
+      discovery: { probe: true, confirmDeviceProbe: false },
+    }),
+    (error) =>
+      error instanceof BenchPilotError &&
+      error.kind === "ADAPTER_DISCOVERY_PROBE_REQUIRED",
+  );
+  const scanned = await adapter.discover({
+    adapterConfig: {},
+    paths: new PathService(),
+    discovery: { probe: true, confirmDeviceProbe: true },
+  });
+  assert.deepEqual(scanned[0].probe, {
+    ok: true,
+    result: { port: "COM8" },
+  });
 });
 
 test("tool discovery honors priority and rejects an invalid explicit path", async () => {

@@ -102,10 +102,16 @@ export class AdapterRegistry {
     });
   }
 
-  async discover(adapter: Adapter, config: Json, paths: PathService) {
+  async discover(
+    adapter: Adapter,
+    config: Json,
+    paths: PathService,
+    discovery?: { probe: boolean; confirmDeviceProbe: boolean },
+  ) {
     return adapter.discover({
       adapterConfig: this.configFor(adapter, config),
       paths,
+      discovery,
     });
   }
 
