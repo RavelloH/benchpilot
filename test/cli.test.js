@@ -164,6 +164,37 @@ test("declarative demo executes build, deploy, and capture", async () => {
     );
     assert.equal(inspection.ok, true);
     assert.equal(inspection.data.kind, "info");
+    const secretInspection = JSON.parse(
+      (
+        await run(
+          dir,
+          "device",
+          "demo",
+          "secret-inspect",
+          "--token",
+          "never-write-this",
+          "--json",
+        )
+      ).stdout,
+    );
+    assert.equal(secretInspection.ok, true);
+    assert.equal(
+      JSON.stringify(secretInspection).includes("never-write-this"),
+      false,
+    );
+    const dangerous = JSON.parse(
+      (
+        await run(
+          dir,
+          "device",
+          "demo",
+          "dangerous-reset",
+          "--confirm-dangerous-reset",
+          "--json",
+        )
+      ).stdout,
+    );
+    assert.equal(dangerous.dangerousEffectStarted, true);
     const doctor = JSON.parse(
       (await run(dir, "adapter", "demo", "doctor", "--json")).stdout,
     );

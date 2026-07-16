@@ -4,6 +4,22 @@
   "type": "object",
   "$defs": {
     "empty": { "type": "object", "additionalProperties": false },
-    "build": { "type": "object", "additionalProperties": false }
+    "build": { "type": "object", "additionalProperties": false },
+    "secret-inspect": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["token"],
+      "properties": {
+        "token": {
+          "type": "string",
+          "minLength": 1,
+          "x-benchpilot-cli": {
+            "flag": "--token",
+            "aliases": ["-t"],
+            "secret": true
+          }
+        }
+      }
+    }
   }
 }

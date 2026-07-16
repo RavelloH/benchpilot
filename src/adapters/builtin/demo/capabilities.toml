@@ -180,6 +180,42 @@ mode = "normal"
 windows = true
 linux = true
 macos = true
+
+[extensions.secret-inspect]
+enabled = true
+summary = "Validate a secret extension input."
+description = "Exercises schema-aware secret redaction without exposing the supplied value."
+handler = "action:info"
+input_schema = "secret-inspect"
+output_schema = "info"
+creates_run = false
+timeout = "10s"
+lock = "none"
+[extensions.secret-inspect.safety]
+mode = "normal"
+[extensions.secret-inspect.platforms]
+windows = true
+linux = true
+macos = true
+
+[extensions.dangerous-reset]
+enabled = true
+summary = "Simulate a dangerous reset."
+description = "Exercises dangerous-effect tracking without contacting hardware."
+handler = "action:reset"
+input_schema = "empty"
+output_schema = "reset"
+creates_run = true
+timeout = "30s"
+lock = "device"
+[extensions.dangerous-reset.safety]
+mode = "danger-flag"
+flag = "confirm-dangerous-reset"
+description = "Simulates a reset that may change device state."
+[extensions.dangerous-reset.platforms]
+windows = true
+linux = true
+macos = true
 [capabilities.selftest]
 enabled = false
 reason = "Not implemented by the declarative demo."
