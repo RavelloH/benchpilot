@@ -159,6 +159,19 @@ test("declarative demo executes build, deploy, and capture", async () => {
       1,
     );
     assert.equal(lines.at(-1).data.result.data.telemetry, 42);
+    const inspection = JSON.parse(
+      (await run(dir, "device", "demo", "inspect", "--json")).stdout,
+    );
+    assert.equal(inspection.ok, true);
+    assert.equal(inspection.data.kind, "info");
+    const doctor = JSON.parse(
+      (await run(dir, "adapter", "demo", "doctor", "--json")).stdout,
+    );
+    assert.ok(
+      doctor.checks.some(
+        (check) => check.id === "demo-tool-node" && check.status === "pass",
+      ),
+    );
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

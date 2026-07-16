@@ -13,6 +13,7 @@ import { pathToFileURL } from "node:url";
 import test from "node:test";
 import { AdapterBundleLoader } from "../dist/adapters/runtime/bundle-loader.js";
 import { createDeclarativeAdapter } from "../dist/adapters/runtime/declarative-adapter.js";
+import { discoverDevices } from "../dist/adapters/runtime/devices/discovery.js";
 import { AdapterRuntimeError } from "../dist/adapters/runtime/errors.js";
 import { EnvironmentResolver } from "../dist/adapters/runtime/environments/resolver.js";
 import { executeProcess } from "../dist/adapters/runtime/executors/process-executor.js";
@@ -235,6 +236,55 @@ test("execution deadlines reduce the timeout available to later actions", async 
   await new Promise((resolve) => setTimeout(resolve, 15));
   assert.ok(deadline.remainingMs() > 0);
   assert.ok(deadline.limit(60) < 30);
+});
+
+test("passive device discovery scores, deduplicates, and orders stable identities", async () => {
+  const devices = await discoverDevices("demo", {
+    discovery: {
+      enabled: true,
+      sources: [
+        {
+          id: "serial",
+          type: "serial",
+          records: [
+            { port: "/dev/ttyUSB2", serial_number: "second" },
+            { port: "/dev/ttyUSB1", serial_number: "first" },
+            { port: "/dev/ttyUSB9", serial_number: "first" },
+          ],
+        },
+      ],
+      matchers: [
+        {
+          id: "has-serial",
+          source: "serial",
+          field: "serial_number",
+          operator: "exists",
+          score: 20,
+        },
+        {
+          id: "usb",
+          source: "serial",
+          field: "port",
+          operator: "contains",
+          value: "USB",
+          score: 1,
+        },
+      ],
+      result: { minimum_score: 20 },
+    },
+    identity: { fields: ["device.serial_number"], allow_port_fallback: true },
+  });
+  assert.deepEqual(
+    devices.map((device) => ({
+      identity: device.identity,
+      score: device.score,
+      matchedRules: device.matchedRules,
+    })),
+    [
+      { identity: "first", score: 21, matchedRules: ["has-serial", "usb"] },
+      { identity: "second", score: 21, matchedRules: ["has-serial", "usb"] },
+    ],
+  );
 });
 
 test("tool discovery honors priority and rejects an invalid explicit path", async () => {
