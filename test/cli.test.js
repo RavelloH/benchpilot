@@ -7,6 +7,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { capabilityInput } from "../dist/cli/option-parser.js";
 import { parse } from "../dist/cli/parser.js";
+import { ApprovalManager, PathService } from "../dist/index.js";
 const exec = promisify(execFile);
 const cli = path.resolve("dist/cli/index.js");
 async function run(dir, ...args) {
@@ -203,6 +204,65 @@ test("declarative demo executes build, deploy, and capture", async () => {
         (check) => check.id === "demo-tool-node" && check.status === "pass",
       ),
     );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("secret approval bindings are redacted but matched by their real digest", async () => {
+  const dir = await mkdtemp(
+    path.join(os.tmpdir(), "benchpilot-secret-approval-"),
+  );
+  const token = "approval-secret-value";
+  try {
+    await run(dir, "init");
+    const pending = await run(
+      dir,
+      "device",
+      "demo",
+      "secret-approval",
+      "--token",
+      token,
+      "--approve-secret-approval",
+      "--json",
+    ).catch((error) => error);
+    const requested = JSON.parse(pending.stdout);
+    assert.equal(requested.kind, "HUMAN_APPROVAL_REQUIRED");
+    const paths = new PathService({
+      ...process.env,
+      BENCHPILOT_HOME: path.join(dir, "home"),
+    });
+    const approvals = new ApprovalManager(paths);
+    const record = await approvals.get(requested.details.approvalId);
+    assert.equal(JSON.stringify(record).includes(token), false);
+    assert.equal(record.binding.input.token, "[REDACTED]");
+    await approvals.change(record.id, "approved");
+    const approved = JSON.parse(
+      (
+        await run(
+          dir,
+          "device",
+          "demo",
+          "secret-approval",
+          "--token",
+          token,
+          "--approve-secret-approval",
+          "--json",
+        )
+      ).stdout,
+    );
+    assert.equal(approved.ok, true);
+    const different = await run(
+      dir,
+      "device",
+      "demo",
+      "secret-approval",
+      "--token",
+      "different-secret-value",
+      "--approve-secret-approval",
+      "--json",
+    ).catch((error) => error);
+    assert.equal(JSON.parse(different.stdout).kind, "HUMAN_APPROVAL_REQUIRED");
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

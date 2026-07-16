@@ -198,6 +198,25 @@ windows = true
 linux = true
 macos = true
 
+[extensions.secret-approval]
+enabled = true
+summary = "Run a secret-bound approval example."
+description = "Exercises secret input approval matching without persisting the supplied value."
+handler = "action:info"
+input_schema = "secret-inspect"
+output_schema = "info"
+creates_run = false
+timeout = "10s"
+lock = "none"
+[extensions.secret-approval.safety]
+mode = "human-approval"
+flag = "approve-secret-approval"
+description = "Simulates an approval-bound secret operation."
+[extensions.secret-approval.platforms]
+windows = true
+linux = true
+macos = true
+
 [extensions.dangerous-reset]
 enabled = true
 summary = "Simulate a dangerous reset."
