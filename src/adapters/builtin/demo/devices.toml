@@ -5,6 +5,7 @@ enabled = false
 [identity]
 fields = ["device.device_id"]
 allow_port_fallback = false
+allow_instance_fallback = true
 [probe]
 enabled = false
 reason = "The simulated adapter has no physical probe."

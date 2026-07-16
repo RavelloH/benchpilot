@@ -17,6 +17,7 @@ import { lookup, object, type RuleObject } from "./rules/template.js";
 import type { RuntimeAdapter } from "./types.js";
 import {
   AdapterDataValidator,
+  redactWithSchema,
   redactSecrets,
 } from "./validation/data-validator.js";
 
@@ -39,7 +40,7 @@ const physicalId = (rules: RuleObject, instance: string, device: Json) => {
   }
   if (identity.allow_port_fallback === true && typeof device.port === "string")
     return device.port;
-  return instance;
+  return identity.allow_instance_fallback === true ? instance : undefined;
 };
 
 const capabilityFor = (
@@ -48,6 +49,7 @@ const capabilityFor = (
   adapter: RuntimeAdapter,
   adapterConfig: Json,
   device: Json,
+  stableIdentity: boolean,
 ): Capability => {
   const validator = new AdapterDataValidator(adapter.bundle);
   const catalog = object(object(adapter.bundle.capabilityCatalog).capabilities);
@@ -72,9 +74,26 @@ const capabilityFor = (
       ...(safety.mode === "human-approval" ? { approvalTtlMs: 3_600_000 } : {}),
     },
     inputSchema: validatorSchema(validator, "input", id, inputDefinition),
+    redactInput(input) {
+      const root = adapter.bundle.schemas.inputs;
+      return redactWithSchema({
+        rootSchema: root,
+        schema: object(object(root).$defs)[inputDefinition] ?? root,
+        value: input,
+      }) as Json;
+    },
     outputSchema: validatorSchema(validator, "output", id, outputDefinition),
     async execute(context: OperationContext, input: Json) {
       try {
+        if (value.lock === "device" && !stableIdentity)
+          throw new AdapterRuntimeError(
+            "DEVICE_IDENTITY_UNAVAILABLE",
+            "A device lock requires a stable physical identity.",
+            false,
+            [
+              "Configure an identity field, enable port fallback, or use an explicitly simulated adapter.",
+            ],
+          );
         return await new DeclarativeCapabilityRunner(
           adapter,
           adapterConfig,
@@ -99,6 +118,7 @@ const capabilityFor = (
 
 class DeclarativeDevice implements DeviceRuntime {
   readonly identity;
+  private readonly stableIdentity: boolean;
 
   constructor(
     private readonly adapter: RuntimeAdapter,
@@ -106,9 +126,11 @@ class DeclarativeDevice implements DeviceRuntime {
     private readonly device: Json,
     private readonly adapterConfig: Json,
   ) {
+    const stable = physicalId(adapter.rules, instance, device);
+    this.stableIdentity = stable !== undefined;
     this.identity = {
       instance,
-      physicalId: physicalId(adapter.rules, instance, device),
+      physicalId: stable ?? `unstable:${instance}`,
       adapter: adapter.bundle.id,
     };
   }
@@ -127,6 +149,7 @@ class DeclarativeDevice implements DeviceRuntime {
             this.adapter,
             this.adapterConfig,
             this.device,
+            this.stableIdentity,
           ),
         ];
       },

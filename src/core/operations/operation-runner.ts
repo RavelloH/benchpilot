@@ -130,6 +130,10 @@ export class OperationRunner {
         "outside-project",
       configDigest: sha(this.s.config.value),
     };
+    const storedBinding: Json = {
+      ...binding,
+      input: capability.redactInput ? capability.redactInput(input) : input,
+    };
     const timeout = duration(this.s.flags.timeout, capability.defaultTimeoutMs);
     if (this.s.flags["dry-run"])
       return {
@@ -148,7 +152,11 @@ export class OperationRunner {
         (await approvals.findMatchingApproval(binding)) ||
         (await approvals.recoverMatchingStaleClaim(binding));
       if (!existing) {
-        const req = await approvals.request(binding, safety.approvalTtlMs);
+        const req = await approvals.request(
+          binding,
+          safety.approvalTtlMs,
+          storedBinding,
+        );
         fail(
           "HUMAN_APPROVAL_REQUIRED",
           7,

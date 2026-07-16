@@ -1,5 +1,14 @@
-import { cp, mkdir, realpath } from "node:fs/promises";
+import {
+  cp,
+  lstat,
+  mkdir,
+  realpath,
+  readdir,
+  rename,
+  rm,
+} from "node:fs/promises";
 import path from "node:path";
+import { randomBytes } from "node:crypto";
 import { AdapterRuntimeError } from "../errors.js";
 import type { CopyLaunchPlan } from "../planning/launch-plan.js";
 
@@ -8,9 +17,37 @@ const inside = (root: string, candidate: string) => {
   return !relative.startsWith("..") && !path.isAbsolute(relative);
 };
 
+const unsafe = (plan: CopyLaunchPlan, reason: string) =>
+  new AdapterRuntimeError(
+    "ADAPTER_ARTIFACT_UNSAFE",
+    `Unsafe copy operation: ${reason}.`,
+    false,
+    [],
+    { operation: "copy", from: plan.from, to: plan.to, reason },
+  );
+
+const nearestExistingParent = async (target: string): Promise<string> => {
+  let current = target;
+  while (true) {
+    if (await lstat(current).catch(() => undefined)) return current;
+    const parent = path.dirname(current);
+    if (parent === current) return current;
+    current = parent;
+  }
+};
+
+const assertNoSourceLinks = async (source: string): Promise<void> => {
+  const metadata = await lstat(source);
+  if (metadata.isSymbolicLink()) throw new Error("source symlink");
+  if (!metadata.isDirectory()) return;
+  for (const entry of await readdir(source))
+    await assertNoSourceLinks(path.join(source, entry));
+};
+
 export const executeCopy = async (
   plan: CopyLaunchPlan,
   allowedRoots: string[],
+  onWrite?: () => void,
 ): Promise<Record<string, unknown>> => {
   const from = path.resolve(plan.from);
   const to = path.resolve(plan.to);
@@ -22,16 +59,57 @@ export const executeCopy = async (
     })),
   );
   if (!source || !roots.some((root) => root.real && inside(root.real, source)))
-    throw new AdapterRuntimeError(
-      "ADAPTER_ARTIFACT_UNSAFE",
-      "Copy source is outside the allowed roots.",
-    );
+    throw unsafe(plan, "source-outside-allowed-roots");
   if (!roots.some((root) => inside(root.resolved, to)))
-    throw new AdapterRuntimeError(
-      "ADAPTER_ARTIFACT_UNSAFE",
-      "Copy destination is outside the allowed roots.",
+    throw unsafe(plan, "destination-outside-allowed-roots");
+  try {
+    await assertNoSourceLinks(from);
+  } catch {
+    throw unsafe(plan, "source-contains-symlink");
+  }
+  const parent = path.dirname(to);
+  const existingParent = await nearestExistingParent(parent);
+  const realExistingParent = await realpath(existingParent).catch(
+    () => undefined,
+  );
+  if (
+    !realExistingParent ||
+    !roots.some((root) => root.real && inside(root.real, realExistingParent))
+  )
+    throw unsafe(plan, "destination-parent-escapes-allowed-roots");
+  await mkdir(parent, { recursive: true });
+  const realParent = await realpath(parent).catch(() => undefined);
+  if (
+    !realParent ||
+    !roots.some((root) => root.real && inside(root.real, realParent))
+  )
+    throw unsafe(plan, "destination-parent-escapes-after-create");
+  const targetMeta = await lstat(to).catch(() => undefined);
+  if (targetMeta?.isSymbolicLink())
+    throw unsafe(plan, "destination-is-symlink");
+  if (targetMeta && !plan.overwrite)
+    throw unsafe(plan, "destination-exists-without-overwrite");
+  const temporary = path.join(
+    realParent,
+    `.${path.basename(to)}.benchpilot-${randomBytes(8).toString("hex")}.tmp`,
+  );
+  try {
+    onWrite?.();
+    await cp(source, temporary, {
+      recursive: plan.recursive,
+      force: false,
+      errorOnExist: true,
+      verbatimSymlinks: true,
+    });
+    if (targetMeta && plan.overwrite)
+      await rm(to, { recursive: targetMeta.isDirectory(), force: true });
+    await rename(temporary, to);
+  } catch (error) {
+    await rm(temporary, { recursive: true, force: true }).catch(
+      () => undefined,
     );
-  await mkdir(path.dirname(to), { recursive: true });
-  await cp(source, to, { recursive: plan.recursive, force: plan.overwrite });
+    if (error instanceof AdapterRuntimeError) throw error;
+    throw unsafe(plan, "copy-failed");
+  }
   return { from: source, to, copied: true };
 };

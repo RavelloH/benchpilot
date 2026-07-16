@@ -18,7 +18,18 @@ export const executeWorkflow = async (
   const onAbort = () => controller.abort(signal.reason);
   signal.addEventListener("abort", onAbort, { once: true });
   const timer = setTimeout(
-    () => controller.abort(new Error("Workflow timed out.")),
+    () =>
+      controller.abort(
+        new AdapterRuntimeError(
+          "ADAPTER_WORKFLOW_TIMEOUT",
+          "Workflow timed out.",
+          true,
+          [
+            "Retry the operation.",
+            "Increase the operation timeout if the device or tool is slow.",
+          ],
+        ),
+      ),
     durationMs(workflow.timeout),
   );
   const results: RuleObject[] = [];

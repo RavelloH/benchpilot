@@ -1,4 +1,5 @@
-import { cp, mkdir, realpath, stat } from "node:fs/promises";
+import { cp, lstat, mkdir, realpath, rename, rm, stat } from "node:fs/promises";
+import { randomBytes } from "node:crypto";
 import { glob } from "node:fs/promises";
 import path from "node:path";
 import type {
@@ -33,6 +34,8 @@ export const collectArtifacts = async (
   allowedRoots: string[],
   baseRoot = process.cwd(),
 ) => {
+  const maxFileBytes = 512 * 1024 * 1024;
+  const maxTotalBytes = 1024 * 1024 * 1024;
   const { plans, unsafe } = planArtifacts(set, context);
   if (unsafe)
     throw new AdapterRuntimeError(
@@ -47,6 +50,8 @@ export const collectArtifacts = async (
     ),
   );
   const artifacts = [];
+  const names = new Set<string>();
+  let totalBytes = 0;
   for (const plan of plans) {
     const matches = await sourcesFor(plan, baseRoot);
     if (!matches.length && plan.required)
@@ -60,22 +65,65 @@ export const collectArtifacts = async (
         `Artifact matched multiple files: ${String(plan.id)}`,
       );
     for (const [index, match] of matches.entries()) {
+      const sourceMeta = await lstat(match).catch(() => undefined);
+      if (sourceMeta?.isSymbolicLink())
+        throw new AdapterRuntimeError(
+          "ADAPTER_ARTIFACT_UNSAFE",
+          `Artifact source is a symbolic link: ${String(plan.id)}`,
+        );
       const source = await realpath(match).catch(() => undefined);
       if (!source || !roots.some((root) => inside(root, source)))
         throw new AdapterRuntimeError(
           "ADAPTER_ARTIFACT_UNSAFE",
           `Artifact path is outside the allowed roots: ${match}`,
         );
-      if (!(await stat(source)).isFile()) continue;
+      const metadata = await stat(source);
+      if (!metadata.isFile()) continue;
+      if (
+        metadata.size > maxFileBytes ||
+        totalBytes + metadata.size > maxTotalBytes
+      )
+        throw new AdapterRuntimeError(
+          "ADAPTER_ARTIFACT_TOO_LARGE",
+          `Artifact size limit exceeded: ${String(plan.id)}`,
+          false,
+          ["Reduce artifact output or collect a smaller result set."],
+          { entry: plan.id, size: metadata.size, maxFileBytes, maxTotalBytes },
+        );
       const name = `${String(plan.id)}${matches.length > 1 ? `-${index + 1}` : ""}${path.extname(source)}`;
+      if (names.has(name))
+        throw new AdapterRuntimeError(
+          "ADAPTER_ARTIFACT_UNSAFE",
+          `Artifact destination collides: ${name}`,
+        );
+      names.add(name);
       const destination = path.join(targetRoot, name);
-      await cp(source, destination, { force: false });
+      const temporary = path.join(
+        targetRoot,
+        `.${name}.${randomBytes(6).toString("hex")}.tmp`,
+      );
+      try {
+        await cp(source, temporary, {
+          force: false,
+          errorOnExist: true,
+          verbatimSymlinks: true,
+        });
+        await rename(temporary, destination);
+      } catch (error) {
+        await rm(temporary, { force: true }).catch(() => undefined);
+        throw error;
+      }
+      totalBytes += metadata.size;
       artifacts.push(
         await registry.register({
           name,
           kind: "adapter-output",
           path: destination,
-          metadata: { adapterEntry: String(plan.id) },
+          metadata: {
+            adapterEntry: String(plan.id),
+            sourceRelativePath: path.relative(baseRoot, source),
+            sourceSize: metadata.size,
+          },
         }),
       );
     }

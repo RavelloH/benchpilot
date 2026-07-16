@@ -5,3 +5,4 @@ enabled = false
 [identity]
 fields = ["device.id"]
 allow_port_fallback = false
+allow_instance_fallback = false

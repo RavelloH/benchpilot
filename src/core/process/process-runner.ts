@@ -12,6 +12,7 @@ export interface ProcessRunOptions {
   stderr?: Writable;
   onStdout?: (chunk: Buffer) => void;
   onStderr?: (chunk: Buffer) => void;
+  onStarted?: () => void;
   gracefulKillMs?: number;
   forceKillMs?: number;
   killTree?: boolean;
@@ -163,6 +164,7 @@ export function startProcess(options: ProcessRunOptions): StartedProcess {
     detached: process.platform !== "win32" && (options.killTree ?? true),
     stdio: ["ignore", "pipe", "pipe"],
   });
+  child.once("spawn", () => options.onStarted?.());
   // `exitCode` is set before `close`. Capture this from spawn time so an
   // abort never resolves before the original child's streams are closed.
   const closed = new Promise<void>((resolve) => child.once("close", resolve));

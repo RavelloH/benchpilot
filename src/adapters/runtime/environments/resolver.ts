@@ -1,6 +1,7 @@
 import { realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import { runProcess } from "../../../core/process/process-runner.js";
+import { sha, stable } from "../../../core/utilities/stable-json.js";
 import { AdapterRuntimeError } from "../errors.js";
 import {
   object,
@@ -35,6 +36,13 @@ const mergeEnvironment = (base: NodeJS.ProcessEnv, values: RuleObject) => {
   return output;
 };
 
+const envValue = (base: NodeJS.ProcessEnv, name: string) =>
+  Object.entries(base).find(([key]) =>
+    process.platform === "win32"
+      ? key.toLowerCase() === name.toLowerCase()
+      : key === name,
+  )?.[1];
+
 const captureCommand = (shell: unknown, script: string) => {
   const sentinel = "__BENCHPILOT_ENV__";
   const emit =
@@ -46,20 +54,37 @@ const captureCommand = (shell: unknown, script: string) => {
         "-NoProfile",
         "-NonInteractive",
         "-Command",
-        `& { . $args[0]; node -e \"${emit}\" }`,
+        "& { . $args[0]; & $args[1] -e $args[2] }",
         script,
+        process.execPath,
+        emit,
       ],
       sentinel,
     };
   if (shell === "cmd")
     return {
       command: "cmd.exe",
-      args: ["/d", "/s", "/c", `call \"%~1\" && node -e \"${emit}\"`, script],
+      args: [
+        "/d",
+        "/s",
+        "/c",
+        'call "%~1" && "%~2" -e "%~3"',
+        script,
+        process.execPath,
+        emit,
+      ],
       sentinel,
     };
   return {
     command: "sh",
-    args: ["-c", `. "$1"; node -e "$2"`, "benchpilot-capture", script, emit],
+    args: [
+      "-c",
+      `. "$1"; "$2" -e "$3"`,
+      "benchpilot-capture",
+      script,
+      process.execPath,
+      emit,
+    ],
     sentinel,
   };
 };
@@ -151,8 +176,8 @@ export class EnvironmentResolver {
         : [];
       return required.every(
         (name) =>
-          typeof this.base[String(name)] === "string" &&
-          this.base[String(name)],
+          typeof envValue(this.base, String(name)) === "string" &&
+          envValue(this.base, String(name)),
       )
         ? { ...this.base }
         : undefined;
@@ -188,7 +213,18 @@ export class EnvironmentResolver {
         "ADAPTER_ENVIRONMENT_UNAVAILABLE",
         "Capture-script path is invalid.",
       );
-    const key = `${provider.id}:${script}:${metadata.mtimeMs}`;
+    const key = sha(
+      stable({
+        adapterId: object(context.adapter).id,
+        platform: process.platform,
+        providerId: provider.id,
+        script,
+        mtimeMs: metadata.mtimeMs,
+        environment: Object.keys(this.base)
+          .sort()
+          .map((name) => [name, this.base[name]]),
+      }),
+    );
     const cached = this.cache.get(key);
     if (cached) return { ...cached };
     const command = captureCommand(provider.shell, script);

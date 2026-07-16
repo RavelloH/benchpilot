@@ -23,6 +23,7 @@ export interface Capability {
   options?: OptionDefinition[];
   inputSchema?: RuntimeSchema<Json>;
   outputSchema?: RuntimeSchema<Json>;
+  redactInput?(input: Json): Json;
   defaultTimeoutMs: number;
   lockMode: "none" | "exclusive";
   createsRun: boolean;

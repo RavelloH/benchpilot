@@ -60,7 +60,11 @@ export class ApprovalManager {
     );
   }
 
-  async request(binding: Json, ttl = 3_600_000): Promise<ApprovalRecord> {
+  async request(
+    binding: Json,
+    ttl = 3_600_000,
+    storedBinding: Json = binding,
+  ): Promise<ApprovalRecord> {
     await fs.mkdir(this.paths.approvalsRoot(), { recursive: true });
     const id = `approval-${randomBytes(5).toString("hex")}`;
     const record: ApprovalRecord = {
@@ -68,7 +72,7 @@ export class ApprovalManager {
       version: 1,
       id,
       digest: sha(binding),
-      binding,
+      binding: storedBinding,
       createdAt: new Date().toISOString(),
       expiresAt: new Date(Date.now() + ttl).toISOString(),
       status: "pending",

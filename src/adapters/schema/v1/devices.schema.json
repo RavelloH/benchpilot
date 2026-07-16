@@ -81,7 +81,8 @@
           "minItems": 1,
           "items": { "type": "string", "minLength": 1 }
         },
-        "allow_port_fallback": { "type": "boolean" }
+        "allow_port_fallback": { "type": "boolean" },
+        "allow_instance_fallback": { "type": "boolean", "default": false }
       }
     },
     "connection": {

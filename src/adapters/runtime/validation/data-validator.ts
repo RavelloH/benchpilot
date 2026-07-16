@@ -111,18 +111,96 @@ export class AdapterDataValidator {
   }
 }
 
-export const redactSecrets = (schema: unknown, value: unknown): unknown => {
-  if (Array.isArray(value)) return value.map((item) => redactSecrets({}, item));
-  if (!value || typeof value !== "object") return value;
-  const fields = object(object(schema).properties);
-  return Object.fromEntries(
-    Object.entries(value as JsonObject).map(([key, item]) => {
-      const field = object(fields[key]);
-      const cli = object(field["x-benchpilot-cli"]);
-      return [
-        key,
-        cli.secret === true ? "[REDACTED]" : redactSecrets(field, item),
-      ];
-    }),
-  );
+const pointer = (root: JsonObject, reference: string) =>
+  reference.startsWith("#/")
+    ? reference
+        .slice(2)
+        .split("/")
+        .reduce<unknown>(
+          (current, part) =>
+            object(current)[part.replace(/~1/g, "/").replace(/~0/g, "~")],
+          root,
+        )
+    : undefined;
+
+/**
+ * Redacts x-benchpilot-cli.secret values while following the JSON Schema
+ * structures supported by Adapter Format v1. Unknown references are treated
+ * conservatively: the value is retained only when no secret marker is known.
+ */
+export const redactWithSchema = ({
+  rootSchema,
+  schema,
+  value,
+}: {
+  rootSchema: unknown;
+  schema: unknown;
+  value: unknown;
+}): unknown => {
+  const root = object(rootSchema);
+  const visit = (
+    schemas: unknown[],
+    current: unknown,
+    references: Set<string>,
+  ): unknown => {
+    const expanded = schemas.flatMap((raw) => {
+      const node = object(raw);
+      if (typeof node.$ref === "string" && !references.has(node.$ref)) {
+        const target = pointer(root, node.$ref);
+        if (target !== undefined) return [node, object(target)];
+      }
+      return [node];
+    });
+    if (
+      expanded.some(
+        (node) => object(object(node)["x-benchpilot-cli"]).secret === true,
+      )
+    )
+      return "[REDACTED]";
+    const childReferences = new Set(references);
+    for (const node of expanded)
+      if (typeof object(node).$ref === "string")
+        childReferences.add(String(object(node).$ref));
+    if (Array.isArray(current))
+      return current.map((item, index) => {
+        const itemSchemas = expanded.flatMap((raw) => {
+          const node = object(raw);
+          const prefix = Array.isArray(node.prefixItems)
+            ? node.prefixItems[index]
+            : undefined;
+          return [prefix ?? node.items].filter(
+            (candidate) => candidate && typeof candidate === "object",
+          );
+        });
+        return visit(itemSchemas, item, childReferences);
+      });
+    if (!current || typeof current !== "object") return current;
+    return Object.fromEntries(
+      Object.entries(current as JsonObject).map(([key, item]) => {
+        const childSchemas = expanded.flatMap((raw) => {
+          const node = object(raw);
+          const direct = object(node.properties)[key];
+          const additional = node.additionalProperties;
+          const combined = [
+            direct,
+            typeof additional === "object" ? additional : undefined,
+          ];
+          for (const branch of ["allOf", "anyOf", "oneOf"] as const)
+            for (const child of Array.isArray(node[branch]) ? node[branch] : [])
+              combined.push(
+                object(child).properties &&
+                  object(object(child).properties)[key],
+              );
+          return combined.filter(
+            (candidate) => candidate && typeof candidate === "object",
+          );
+        });
+        return [key, visit(childSchemas, item, childReferences)];
+      }),
+    );
+  };
+  return visit([schema], value, new Set());
 };
+
+export const redactSecrets = (schema: unknown, value: unknown): unknown =>
+  redactWithSchema({ rootSchema: schema, schema, value });

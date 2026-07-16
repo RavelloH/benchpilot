@@ -23,14 +23,31 @@ const abortAfter = async <T>(
   const controller = new AbortController();
   const onAbort = () => controller.abort(signal.reason);
   signal.addEventListener("abort", onAbort, { once: true });
-  const timer = setTimeout(
-    () => controller.abort(new Error("Adapter action timed out.")),
-    timeoutMs,
-  );
+  let timedOut = false;
+  const timer =
+    timeoutMs > 0
+      ? setTimeout(() => {
+          timedOut = true;
+          controller.abort(new Error("Adapter action timed out."));
+        }, timeoutMs)
+      : undefined;
   try {
     return await execute(controller.signal);
+  } catch (error) {
+    if (signal.aborted) throw signal.reason ?? error;
+    if (timedOut)
+      throw new AdapterRuntimeError(
+        "ADAPTER_ACTION_TIMEOUT",
+        "Adapter action timed out.",
+        true,
+        [
+          "Retry the operation.",
+          "Increase the operation timeout if the device or tool is slow.",
+        ],
+      );
+    throw error;
   } finally {
-    clearTimeout(timer);
+    if (timer) clearTimeout(timer);
     signal.removeEventListener("abort", onAbort);
   }
 };
@@ -92,11 +109,23 @@ export class DeclarativeCapabilityRunner {
       result: {},
     };
     const handler = String(capability.handler);
+    const dangerous = object(capability.safety).mode !== "normal";
+    const capabilityTimeoutMs = durationMs(capability.timeout);
     const executeAction = (
       id: string,
       actionInput: RuleObject,
       signal: AbortSignal,
-    ) => this.executeAction(id, actionInput, context, operation, signal);
+    ) =>
+      this.executeAction(
+        id,
+        actionInput,
+        context,
+        operation,
+        signal,
+        dangerous,
+        capabilityId,
+        capabilityTimeoutMs,
+      );
     let result: RuleObject;
     if (handler.startsWith("action:"))
       result = await executeAction(
@@ -141,6 +170,9 @@ export class DeclarativeCapabilityRunner {
     context: RuleObject,
     operation: OperationContext,
     signal: AbortSignal,
+    dangerous: boolean,
+    capabilityId: string,
+    parentTimeoutMs: number,
   ): Promise<RuleObject> {
     const action = object(object(this.adapter.rules.actions)[id]);
     if (!Object.keys(action).length)
@@ -204,6 +236,9 @@ export class DeclarativeCapabilityRunner {
         signal,
         resolvedTool,
         environment.environment,
+        dangerous,
+        capabilityId,
+        parentTimeoutMs,
       );
     }
     return this.executePlannedAction(
@@ -214,6 +249,9 @@ export class DeclarativeCapabilityRunner {
       signal,
       undefined,
       environment.environment,
+      dangerous,
+      capabilityId,
+      parentTimeoutMs,
     );
   }
 
@@ -225,11 +263,16 @@ export class DeclarativeCapabilityRunner {
     signal: AbortSignal,
     tool: ResolvedTool | undefined,
     environment: NodeJS.ProcessEnv,
+    dangerous: boolean,
+    capabilityId: string,
+    parentTimeoutMs: number,
   ): Promise<RuleObject> {
     const plan = planLaunch(action, actionContext, tool, environment);
     const result = await abortAfter(
       signal,
-      plan.timeoutMs,
+      plan.timeoutMs > 0
+        ? Math.min(plan.timeoutMs, parentTimeoutMs)
+        : parentTimeoutMs,
       async (actionSignal) => {
         if (plan.kind === "process") {
           const parser = plan.parserId
@@ -241,11 +284,32 @@ export class DeclarativeCapabilityRunner {
             actionSignal,
             (event, data) => operation.emitEvent(event, data as Json),
             operation.logger,
+            dangerous
+              ? () =>
+                  operation.markDangerousEffectStarted({
+                    adapterId: this.adapter.bundle.id,
+                    capabilityId,
+                    actionId: id,
+                    actionType: "process",
+                  })
+              : undefined,
           );
           return execution.result;
         }
         if (plan.kind === "copy")
-          return await executeCopy(plan, this.allowedRoots(operation));
+          return await executeCopy(
+            plan,
+            this.allowedRoots(operation),
+            dangerous
+              ? () =>
+                  operation.markDangerousEffectStarted({
+                    adapterId: this.adapter.bundle.id,
+                    capabilityId,
+                    actionId: id,
+                    actionType: "copy",
+                  })
+              : undefined,
+          );
         return executeUnsupportedSerial();
       },
     );

@@ -41,7 +41,7 @@ export interface SerialLaunchPlan {
 
 export type LaunchPlan = ProcessLaunchPlan | CopyLaunchPlan | SerialLaunchPlan;
 
-export const durationMs = (value: unknown, fallback = 10_000) => {
+export const durationMs = (value: unknown, fallback = 0) => {
   const match = /^([1-9]\d*)(ms|s|m|h)$/.exec(String(value ?? ""));
   if (!match) return fallback;
   const scale = { ms: 1, s: 1_000, m: 60_000, h: 3_600_000 }[match[2]];

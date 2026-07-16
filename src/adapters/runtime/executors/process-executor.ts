@@ -144,6 +144,7 @@ export const executeProcess = async (
   signal: AbortSignal,
   emitProgress?: (event: string, data: RuleObject) => void,
   logger?: ProcessLogger,
+  onStarted?: () => void,
 ): Promise<ProcessExecutionResult> => {
   const streaming = new StreamingProgress(parser, emitProgress);
   const logs = new ProcessLogSink(logger);
@@ -163,6 +164,7 @@ export const executeProcess = async (
       streaming.stderrChunk(chunk);
       logs.write("stderr", chunk);
     },
+    onStarted,
   });
   streaming.finish();
   logs.finish();
@@ -232,6 +234,7 @@ export const executeProcessAction = (
   signal: AbortSignal,
   emitProgress?: (event: string, data: RuleObject) => void,
   logger?: ProcessLogger,
+  onStarted?: () => void,
 ) => {
   const plan = planLaunch(action, context, tool, environment);
   if (plan.kind !== "process")
@@ -239,5 +242,5 @@ export const executeProcessAction = (
       "ADAPTER_ACTION_FAILED",
       "Action is not a process action.",
     );
-  return executeProcess(plan, parser, signal, emitProgress, logger);
+  return executeProcess(plan, parser, signal, emitProgress, logger, onStarted);
 };
