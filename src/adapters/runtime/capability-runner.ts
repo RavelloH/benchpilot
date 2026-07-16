@@ -237,6 +237,7 @@ export class DeclarativeCapabilityRunner {
         environment.environment,
         this.adapter.bundle.id,
         signal,
+        (message) => operation.logger.debug(message),
       );
       const resolvedTool = {
         ...tool,

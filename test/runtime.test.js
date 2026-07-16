@@ -628,6 +628,7 @@ test("via-tool probes use the complete launch chain and isolate cache entries", 
       await realpath(script),
       await realpath(target),
     ]);
+    const debug = [];
     assert.equal(
       (
         await resolver.probe(
@@ -637,10 +638,17 @@ test("via-tool probes use the complete launch chain and isolate cache entries", 
           parsers,
           { ...process.env, PROBE_VALUE: "first" },
           "demo",
+          undefined,
+          (message) => debug.push(message),
         )
       ).value,
       `${await realpath(target)}|probe|first`,
     );
+    assert.equal(
+      debug.some((message) => message.includes("first")),
+      false,
+    );
+    assert.ok(debug.some((message) => message.includes("[REDACTED]")));
     assert.equal(
       (
         await resolver.probe(

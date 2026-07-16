@@ -105,6 +105,18 @@ const probeTimeoutMs = (value: unknown) => {
   return Math.min(10_000, Number(match[1]) * (scale ?? 1));
 };
 
+const redactProbeOutput = (value: string, environment: NodeJS.ProcessEnv) => {
+  const secrets = Object.values(environment)
+    .filter(
+      (item): item is string => typeof item === "string" && item.length >= 4,
+    )
+    .sort((left, right) => right.length - left.length);
+  return secrets.reduce(
+    (output, secret) => output.split(secret).join("[REDACTED]"),
+    value,
+  );
+};
+
 export class ToolResolver {
   private probes = new Map<string, RuleObject>();
   constructor(
@@ -162,6 +174,7 @@ export class ToolResolver {
     environment: NodeJS.ProcessEnv,
     adapterId: string,
     signal?: AbortSignal,
+    debugLog?: (message: string) => void,
   ): Promise<RuleObject> {
     const discovery = object(discoveries[tool.discoveryId]);
     const probe = object(discovery.probe);
@@ -210,6 +223,15 @@ export class ToolResolver {
         captureOutput: true,
         maxCaptureBytes: 4 * 1024 * 1024,
       });
+      for (const [source, output] of [
+        ["stdout", execution.stdout],
+        ["stderr", execution.stderr],
+      ] as const)
+        for (const line of (output ?? "").split(/\r?\n/))
+          if (line)
+            debugLog?.(
+              `Tool probe ${tool.toolId} ${source}: ${redactProbeOutput(line, environment)}`,
+            );
       const parsed = parseOutput(
         parser,
         execution.stdout ?? "",
