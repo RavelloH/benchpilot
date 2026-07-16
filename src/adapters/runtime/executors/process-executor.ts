@@ -63,11 +63,12 @@ class StreamingProgress {
     const tail = flush ? "" : (lines.pop() ?? "");
     for (const line of lines) this.publishLine(source, line);
     if (flush && tail) this.publishLine(source, tail);
-    if (tail.length > this.maxLineChars) {
-      this.publishLine(source, tail.slice(-this.maxLineChars));
-      return "";
-    }
-    return tail;
+    // Do not scan a logical line until it is complete. Keeping only its tail
+    // bounds memory without causing a progress rule to fire twice for a line
+    // split across large chunks.
+    return tail.length > this.maxLineChars
+      ? tail.slice(-this.maxLineChars)
+      : tail;
   }
 
   private publishLine(source: "stdout" | "stderr", line: string) {
@@ -112,6 +113,7 @@ class ProcessLogSink {
   private readonly stderr = new TextDecoder();
   private stdoutTail = "";
   private stderrTail = "";
+  private readonly maxLineChars = 1024 * 1024;
   constructor(private readonly logger: ProcessLogger | undefined) {}
   write(source: "stdout" | "stderr", chunk: Buffer) {
     if (!this.logger) return;
@@ -122,8 +124,10 @@ class ProcessLogSink {
     );
     const tail = lines.pop() ?? "";
     for (const line of lines) this.log(source, line);
-    if (source === "stdout") this.stdoutTail = tail;
-    else this.stderrTail = tail;
+    const bounded =
+      tail.length > this.maxLineChars ? tail.slice(-this.maxLineChars) : tail;
+    if (source === "stdout") this.stdoutTail = bounded;
+    else this.stderrTail = bounded;
   }
   finish() {
     if (!this.logger) return;

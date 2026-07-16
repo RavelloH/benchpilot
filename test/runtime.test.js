@@ -800,6 +800,40 @@ test("process launch plans use argv and parse structured output", async () => {
   );
 });
 
+test("process parsing retains tail errors while capture stays bounded", async () => {
+  await assert.rejects(
+    executeProcess(
+      {
+        kind: "process",
+        executable: process.execPath,
+        args: [
+          "-e",
+          "process.stdout.write('x'.repeat(5 * 1024 * 1024) + 'FATAL: tail')",
+        ],
+        cwd: process.cwd(),
+        env: process.env,
+        timeoutMs: 10_000,
+      },
+      {
+        success_exit_codes: [0],
+        errors: [
+          {
+            kind: "tail-error",
+            source: "stdout",
+            pattern: "FATAL: tail",
+            priority: 1,
+          },
+        ],
+      },
+      new AbortController().signal,
+    ),
+    (error) =>
+      error instanceof AdapterRuntimeError &&
+      error.code === "ADAPTER_PARSER_FAILED" &&
+      error.message === "Parser matched tail-error.",
+  );
+});
+
 test("workflow execution is ordered and honors continue_on_error", async () => {
   const order = [];
   const context = { result: {} };
