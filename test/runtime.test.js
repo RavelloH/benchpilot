@@ -22,6 +22,7 @@ import { executeProcess } from "../dist/adapters/runtime/executors/process-execu
 import { executeCopy } from "../dist/adapters/runtime/executors/copy-executor.js";
 import { executeUnsupportedSerial } from "../dist/adapters/runtime/executors/unsupported-executor.js";
 import { executeWorkflow } from "../dist/adapters/runtime/executors/workflow-executor.js";
+import { collectArtifacts } from "../dist/adapters/runtime/rules/artifact-collector.js";
 import { ExecutionDeadline } from "../dist/adapters/runtime/capability-runner.js";
 import { planLaunch } from "../dist/adapters/runtime/planning/launch-plan.js";
 import { RuntimeAdapterRegistry } from "../dist/adapters/runtime/registry.js";
@@ -635,6 +636,80 @@ test(
         new AbortController().signal,
       );
       assert.equal(environment.BENCHPILOT_CAPTURED, "ok");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+);
+
+test(
+  "artifact collection filters unsafe matches before cardinality and cleans failed registrations",
+  { skip: process.platform === "win32" },
+  async () => {
+    const root = await mkdtemp(join(tmpdir(), "benchpilot-artifacts-"));
+    try {
+      const runDir = join(root, "run");
+      await mkdir(runDir);
+      await writeFile(join(root, "firmware.bin"), "firmware");
+      await symlink(join(root, "firmware.bin"), join(root, "linked.bin"));
+      const set = {
+        base: ".",
+        entries: [
+          {
+            id: "firmware",
+            kind: "firmware",
+            glob: "*.bin",
+            required: true,
+            multiple: false,
+          },
+        ],
+      };
+      const artifacts = await collectArtifacts(
+        set,
+        {},
+        { dir: runDir },
+        {
+          register: async (record) => ({ id: "artifact", ...record }),
+        },
+        [root],
+        root,
+      );
+      assert.equal(artifacts.length, 1);
+      assert.equal(artifacts[0].metadata.sourceRelativePath, "firmware.bin");
+      await assert.rejects(
+        collectArtifacts(
+          {
+            ...set,
+            entries: [{ ...set.entries[0], glob: "linked.bin" }],
+          },
+          {},
+          { dir: runDir },
+          { register: async (record) => ({ id: "artifact", ...record }) },
+          [root],
+          root,
+        ),
+        (error) =>
+          error instanceof AdapterRuntimeError &&
+          error.code === "ADAPTER_ARTIFACT_UNSAFE",
+      );
+      await assert.rejects(
+        collectArtifacts(
+          set,
+          {},
+          { dir: join(root, "failed-run") },
+          {
+            register: async () => {
+              throw new Error("registry unavailable");
+            },
+          },
+          [root],
+          root,
+        ),
+      );
+      assert.deepEqual(
+        await readdir(join(root, "failed-run", "artifacts")),
+        [],
+      );
     } finally {
       await rm(root, { recursive: true, force: true });
     }

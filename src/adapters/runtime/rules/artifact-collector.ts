@@ -59,36 +59,46 @@ export const collectArtifacts = async (
         "ADAPTER_ARTIFACT_MISSING",
         `Required artifact is missing: ${String(plan.id)}`,
       );
-    if (matches.length > 1 && plan.multiple !== true)
+    const safe: Array<{ source: string; size: number }> = [];
+    let rejectedUnsafe = false;
+    for (const match of matches) {
+      const sourceMeta = await lstat(match).catch(() => undefined);
+      if (sourceMeta?.isSymbolicLink()) {
+        rejectedUnsafe = true;
+        continue;
+      }
+      const source = await realpath(match).catch(() => undefined);
+      if (!source || !roots.some((root) => inside(root, source))) {
+        rejectedUnsafe = true;
+        continue;
+      }
+      const metadata = await stat(source);
+      if (metadata.isFile()) safe.push({ source, size: Number(metadata.size) });
+    }
+    if (!safe.length && plan.required) {
+      if (rejectedUnsafe)
+        throw new AdapterRuntimeError(
+          "ADAPTER_ARTIFACT_UNSAFE",
+          `All matches for required artifact are unsafe: ${String(plan.id)}`,
+        );
+      throw new AdapterRuntimeError(
+        "ADAPTER_ARTIFACT_MISSING",
+        `Required artifact is missing: ${String(plan.id)}`,
+      );
+    }
+    if (safe.length > 1 && plan.multiple !== true)
       throw new AdapterRuntimeError(
         "ADAPTER_ARTIFACT_MISSING",
         `Artifact matched multiple files: ${String(plan.id)}`,
       );
-    for (const [index, match] of matches.entries()) {
-      const sourceMeta = await lstat(match).catch(() => undefined);
-      if (sourceMeta?.isSymbolicLink())
-        throw new AdapterRuntimeError(
-          "ADAPTER_ARTIFACT_UNSAFE",
-          `Artifact source is a symbolic link: ${String(plan.id)}`,
-        );
-      const source = await realpath(match).catch(() => undefined);
-      if (!source || !roots.some((root) => inside(root, source)))
-        throw new AdapterRuntimeError(
-          "ADAPTER_ARTIFACT_UNSAFE",
-          `Artifact path is outside the allowed roots: ${match}`,
-        );
-      const metadata = await stat(source);
-      if (!metadata.isFile()) continue;
-      if (
-        metadata.size > maxFileBytes ||
-        totalBytes + metadata.size > maxTotalBytes
-      )
+    for (const [index, { source, size }] of safe.entries()) {
+      if (size > maxFileBytes || totalBytes + size > maxTotalBytes)
         throw new AdapterRuntimeError(
           "ADAPTER_ARTIFACT_TOO_LARGE",
           `Artifact size limit exceeded: ${String(plan.id)}`,
           false,
           ["Reduce artifact output or collect a smaller result set."],
-          { entry: plan.id, size: metadata.size, maxFileBytes, maxTotalBytes },
+          { entry: plan.id, size, maxFileBytes, maxTotalBytes },
         );
       const name = `${String(plan.id)}${matches.length > 1 ? `-${index + 1}` : ""}${path.extname(source)}`;
       if (names.has(name))
@@ -102,6 +112,7 @@ export const collectArtifacts = async (
         targetRoot,
         `.${name}.${randomBytes(6).toString("hex")}.tmp`,
       );
+      let copied = false;
       try {
         await cp(source, temporary, {
           force: false,
@@ -109,23 +120,25 @@ export const collectArtifacts = async (
           verbatimSymlinks: true,
         });
         await rename(temporary, destination);
-      } catch (error) {
-        await rm(temporary, { force: true }).catch(() => undefined);
-        throw error;
-      }
-      totalBytes += metadata.size;
-      artifacts.push(
-        await registry.register({
+        copied = true;
+        const record = await registry.register({
           name,
           kind: "adapter-output",
           path: destination,
           metadata: {
             adapterEntry: String(plan.id),
             sourceRelativePath: path.relative(baseRoot, source),
-            sourceSize: metadata.size,
+            sourceSize: size,
           },
-        }),
-      );
+        });
+        artifacts.push(record);
+      } catch (error) {
+        await rm(temporary, { force: true }).catch(() => undefined);
+        if (copied)
+          await rm(destination, { force: true }).catch(() => undefined);
+        throw error;
+      }
+      totalBytes += size;
     }
   }
   return artifacts;
