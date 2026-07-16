@@ -44,6 +44,12 @@ export const collectArtifacts = async (
     );
   const targetRoot = path.join(run.dir, "artifacts");
   await mkdir(targetRoot, { recursive: true });
+  // On macOS /var is commonly a symlink to /private/var. Sources are
+  // canonicalized before registration, so canonicalize the base as well to
+  // keep sourceRelativePath portable and inside the declared root.
+  const resolvedBaseRoot = await realpath(baseRoot).catch(() =>
+    path.resolve(baseRoot),
+  );
   const roots = await Promise.all(
     allowedRoots.map(async (root) =>
       realpath(root).catch(() => path.resolve(root)),
@@ -127,7 +133,7 @@ export const collectArtifacts = async (
           path: destination,
           metadata: {
             adapterEntry: String(plan.id),
-            sourceRelativePath: path.relative(baseRoot, source),
+            sourceRelativePath: path.relative(resolvedBaseRoot, source),
             sourceSize: size,
           },
         });
