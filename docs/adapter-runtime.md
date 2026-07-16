@@ -27,3 +27,21 @@ The built-in Demo intentionally invokes only fixed `node -e` scripts declared
 in the shipped Bundle. User input is passed as data, never inserted into script
 source. Its build action writes only inside the operation Run and registers a
 firmware artifact.
+
+## Runtime Context and safety boundary
+
+Every execution starts with `adapter`, `platform`, `config`, `device`, `input`,
+`project`, `home`, `temp`, `env`, optional `run`, and empty `tool`,
+`discovery`, `environment`, and `result` namespaces. Tool resolution and
+Parser output update that live Context. Workflow steps are rendered one at a
+time, so a following step can use `${result.previous.value}` and
+`${step.result.value}` safely.
+
+Process output is mirrored to RLog, while the parser receives the same stream.
+The runtime retains a bounded head/tail capture (4 MiB per stream) and records
+whether either stream was truncated. It never uses `console.log` for tool
+output. Serial execution remains deliberately unavailable.
+
+Dangerous process actions mark the Core effect boundary only after `spawn`;
+dangerous copy actions mark it immediately before their first write. Core keeps
+approval consumption, cleanup, lock release and quarantine ownership.

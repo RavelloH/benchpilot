@@ -39,3 +39,9 @@ In the production runtime, Process Runner chunks are decoded with
 exit. Final parser validation still uses bounded stdout and stderr buffers, so
 required extracts, error priority and success exit codes have the same shared
 semantics as declaration cases.
+
+Line-mode progress is incremental: each complete line is scanned exactly once,
+including a final unterminated line. Incomplete UTF-8 sequences stay in the
+decoder until complete. The final parser receives the retained beginning and
+end of each stream; JSON Pointer extraction rejects truncated output rather
+than parsing a partial document.

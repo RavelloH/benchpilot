@@ -50,6 +50,7 @@
       "type": "object",
       "required": [
         "capabilities",
+        "extensions",
         "tools",
         "discoveries",
         "environments",
@@ -62,6 +63,7 @@
       "additionalProperties": false,
       "properties": {
         "capabilities": { "type": "object" },
+        "extensions": { "type": "object" },
         "tools": { "type": "object" },
         "discoveries": { "type": "object" },
         "environments": { "type": "object" },

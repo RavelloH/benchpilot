@@ -12,9 +12,12 @@ import {
   type RuntimeSchema,
 } from "../../core.js";
 import { DeclarativeCapabilityRunner } from "./capability-runner.js";
+import { discoverDevices } from "./devices/discovery.js";
+import { EnvironmentResolver } from "./environments/resolver.js";
 import { AdapterRuntimeError } from "./errors.js";
 import { lookup, object, type RuleObject } from "./rules/template.js";
 import type { RuntimeAdapter } from "./types.js";
+import { ToolResolver } from "./tools/resolver.js";
 import {
   AdapterDataValidator,
   redactWithSchema,
@@ -56,9 +59,45 @@ const capabilityFor = (
   const safety = object(value.safety);
   const inputDefinition = String(value.input_schema);
   const outputDefinition = String(value.output_schema);
+  const inputRoot = adapter.bundle.schemas.inputs;
+  const inputSchema =
+    object(object(inputRoot).$defs)[inputDefinition] ?? inputRoot;
+  const optionSchema = (schema: Json): RuntimeSchema<unknown> => ({
+    parse: (item) => item,
+    describe: () => schema,
+  });
+  const options = Object.entries(
+    object(object(inputSchema).properties),
+  ).flatMap(([name, raw]) => {
+    const schema = object(raw);
+    const cli = object(schema["x-benchpilot-cli"]);
+    if (cli.hidden === true && cli.flag === false) return [];
+    const positional =
+      typeof cli.positional === "number" ? cli.positional : undefined;
+    return [
+      {
+        name: typeof cli.flag === "string" ? cli.flag : name,
+        summary: String(schema.description ?? name),
+        required: Array.isArray(object(inputSchema).required)
+          ? (object(inputSchema).required as unknown[]).includes(name)
+          : false,
+        schema: optionSchema(schema),
+        aliases: Array.isArray(cli.aliases)
+          ? cli.aliases.map(String)
+          : undefined,
+        positional,
+        secret: cli.secret === true,
+        repeatable: cli.repeatable === true || schema.type === "array",
+        hidden: cli.hidden === true,
+      },
+    ];
+  });
   return {
     id,
-    summary: String(object(catalog[id]).description ?? id),
+    summary: String(value.summary ?? object(catalog[id]).description ?? id),
+    description:
+      typeof value.description === "string" ? value.description : undefined,
+    options,
     defaultTimeoutMs: duration(value.timeout, 10_000),
     lockMode: value.lock === "device" ? "exclusive" : "none",
     createsRun: value.creates_run === true,
@@ -78,7 +117,7 @@ const capabilityFor = (
       const root = adapter.bundle.schemas.inputs;
       return redactWithSchema({
         rootSchema: root,
-        schema: object(object(root).$defs)[inputDefinition] ?? root,
+        schema: inputSchema,
         value: input,
       }) as Json;
     },
@@ -137,23 +176,24 @@ class DeclarativeDevice implements DeviceRuntime {
 
   capabilities(): Capability[] {
     const current = adapterPlatform();
-    return Object.entries(object(this.adapter.rules.capabilities)).flatMap(
-      ([id, raw]) => {
-        const value = object(raw);
-        if (value.enabled !== true || object(value.platforms)[current] !== true)
-          return [];
-        return [
-          capabilityFor(
-            id,
-            value,
-            this.adapter,
-            this.adapterConfig,
-            this.device,
-            this.stableIdentity,
-          ),
-        ];
-      },
-    );
+    return Object.entries({
+      ...object(this.adapter.rules.capabilities),
+      ...object(this.adapter.rules.extensions),
+    }).flatMap(([id, raw]) => {
+      const value = object(raw);
+      if (value.enabled !== true || object(value.platforms)[current] !== true)
+        return [];
+      return [
+        capabilityFor(
+          id,
+          value,
+          this.adapter,
+          this.adapterConfig,
+          this.device,
+          this.stableIdentity,
+        ),
+      ];
+    });
   }
 }
 
@@ -163,6 +203,30 @@ const adapterPlatform = () =>
     : process.platform === "darwin"
       ? "macos"
       : "linux";
+
+const doctorContext = (
+  runtime: RuntimeAdapter,
+  adapterConfig: Json,
+  paths: AdapterContext["paths"],
+): RuleObject => ({
+  adapter: {
+    id: runtime.bundle.id,
+    version: runtime.bundle.manifest.adapter_version,
+    manifest: runtime.bundle.manifest,
+  },
+  platform: runtime.platform,
+  config: adapterConfig,
+  device: {},
+  input: {},
+  project: { root: process.cwd() },
+  home: paths.home,
+  temp: process.env.TMPDIR ?? "",
+  env: process.env,
+  tool: {},
+  discovery: {},
+  environment: {},
+  result: {},
+});
 
 /** Turns a validated compiled bundle into the legacy Core Adapter contract. */
 export const createDeclarativeAdapter = (runtime: RuntimeAdapter): Adapter => {
@@ -191,16 +255,98 @@ export const createDeclarativeAdapter = (runtime: RuntimeAdapter): Adapter => {
       return redactSecrets(runtime.bundle.schemas.device, config) as Json;
     },
     async discover(_context: AdapterContext) {
-      return [];
+      return (await discoverDevices(
+        runtime.bundle.id,
+        object(runtime.rules.devices),
+      )) as unknown as Json[];
     },
-    async doctor(_context: AdapterContext) {
-      return [
+    async doctor(context: AdapterContext) {
+      const checks: Json[] = [
         {
           id: `${runtime.bundle.id}-bundle`,
           status: "pass",
           message: `Adapter bundle ready for ${runtime.platform}.`,
         },
       ];
+      const rules = runtime.rules;
+      const resolver = new ToolResolver(runtime.platform, process.env);
+      const environments = new EnvironmentResolver();
+      const runtimeContext = doctorContext(
+        runtime,
+        context.adapterConfig,
+        context.paths,
+      );
+      for (const [id, raw] of Object.entries(object(rules.tools))) {
+        const tool = object(raw);
+        if (tool.required !== true) continue;
+        try {
+          const launch = await resolver.resolve(
+            String(id),
+            object(rules.tools),
+            object(rules.discoveries),
+            runtimeContext,
+            object(rules.parsers),
+            { probe: false, adapterId: runtime.bundle.id },
+          );
+          const environment = await environments.resolveDetailed(
+            launch.environmentId,
+            object(rules.environments),
+            runtimeContext,
+            new AbortController().signal,
+          );
+          const probe = await resolver.probe(
+            launch,
+            object(rules.discoveries),
+            runtimeContext,
+            object(rules.parsers),
+            environment.environment,
+            runtime.bundle.id,
+          );
+          checks.push({
+            id: `${runtime.bundle.id}-tool-${id}`,
+            status: "pass",
+            message: "Required tool resolved.",
+            details: { tool: id, probe },
+          });
+        } catch (error) {
+          checks.push({
+            id: `${runtime.bundle.id}-tool-${id}`,
+            status: "fail",
+            message: "Required tool check failed.",
+          });
+        }
+      }
+      for (const [id, raw] of Object.entries(object(rules.environments))) {
+        try {
+          await environments.resolveDetailed(
+            String(id),
+            object(rules.environments),
+            runtimeContext,
+            new AbortController().signal,
+          );
+          checks.push({
+            id: `${runtime.bundle.id}-environment-${id}`,
+            status: "pass",
+            message: "Environment resolved.",
+          });
+        } catch {
+          checks.push({
+            id: `${runtime.bundle.id}-environment-${id}`,
+            status: "fail",
+            message: "Environment could not be resolved.",
+          });
+        }
+      }
+      const discovery = object(object(rules.devices).discovery);
+      checks.push({
+        id: `${runtime.bundle.id}-device-sources`,
+        status: discovery.enabled === true ? "pass" : "warn",
+        message:
+          discovery.enabled === true
+            ? "Passive device discovery is enabled."
+            : "Device discovery is disabled.",
+      });
+      return checks;
     },
     async createDevice(
       instance: string,

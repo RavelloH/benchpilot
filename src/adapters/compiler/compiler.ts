@@ -179,6 +179,7 @@ export const compileAdapter = async (
     } = adapter.files["devices.toml"];
     const base = {
       capabilities: adapter.files["capabilities.toml"].capabilities,
+      extensions: adapter.files["capabilities.toml"].extensions ?? {},
       tools: adapter.files["tools.toml"].tools,
       discoveries: adapter.files["tool-discovery.toml"].discoveries,
       environments: adapter.files["environments.toml"].environments,

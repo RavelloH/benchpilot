@@ -86,6 +86,7 @@ export async function handleDeviceCommand({
       rawOptions,
       definition.options || [],
       definition.safety.flag,
+      parts.slice(3),
     );
     if (definition.safety.mode !== "normal" && definition.safety.flag)
       flags[definition.safety.flag] = optionEnabled(

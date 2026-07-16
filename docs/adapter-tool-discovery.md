@@ -11,12 +11,18 @@ A discovery probe declares fixture-safe arguments, a timeout and a Parser ID;
 that parser must exist in `parsers.toml`. Likewise, a tool launch environment
 must name a declared environment provider set.
 
-At runtime probes use the resolved executable, the shared Process Runner and
-`shell: false`. A successful probe is parsed and cached for the current
-process. A failed probe rejects that candidate; if no candidate succeeds the
-runtime returns `ADAPTER_TOOL_PROBE_FAILED`. An explicitly configured invalid
-path still returns `ADAPTER_TOOL_CONFIG_INVALID` and never silently falls back
-to PATH.
+At runtime a resolved Tool is a complete Launch: `executable`, `argsPrefix`,
+its own discovery result and its environment ID. For `via-tool`, the executable
+comes from the parent Tool and `argsPrefix` is the parent prefix followed by the
+child prefix. A probe runs only after that full launch and its environment have
+been resolved, through the shared Process Runner with `shell: false`. Probe
+caches include adapter/platform, executable realpath, prefix, environment and
+probe arguments. Probe output is debug-only and never exposes the resolved
+environment.
+
+Windows environment lookup is case-insensitive. Capture scripts run the current
+`process.execPath`, rather than a literal `node`, and script path, executable,
+and emit program are passed as separate process arguments.
 
 Artifact planning preserves the declaration kind: a path entry produces
 `{ "path": "..." }`, while a glob entry produces `{ "glob": "..." }`.

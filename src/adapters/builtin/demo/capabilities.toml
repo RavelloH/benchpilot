@@ -163,6 +163,23 @@ reason = "Not implemented by the declarative demo."
 windows = false
 linux = false
 macos = false
+
+[extensions.inspect]
+enabled = true
+summary = "Inspect the simulated adapter."
+description = "A small extension capability used to verify dynamic capability routing."
+handler = "action:info"
+input_schema = "empty"
+output_schema = "info"
+creates_run = false
+timeout = "10s"
+lock = "none"
+[extensions.inspect.safety]
+mode = "normal"
+[extensions.inspect.platforms]
+windows = true
+linux = true
+macos = true
 [capabilities.selftest]
 enabled = false
 reason = "Not implemented by the declarative demo."

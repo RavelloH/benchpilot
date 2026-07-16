@@ -125,6 +125,7 @@ export class DeclarativeCapabilityRunner {
         dangerous,
         capabilityId,
         capabilityTimeoutMs,
+        true,
       );
     let result: RuleObject;
     if (handler.startsWith("action:"))
@@ -146,7 +147,18 @@ export class DeclarativeCapabilityRunner {
         workflow,
         context,
         operation.signal,
-        executeAction,
+        (id, actionInput, signal) =>
+          this.executeAction(
+            id,
+            actionInput,
+            context,
+            operation,
+            signal,
+            dangerous,
+            capabilityId,
+            capabilityTimeoutMs,
+            false,
+          ),
         (event, data) => operation.emitEvent(event, data as Json),
       );
       result = object(context.result);
@@ -173,6 +185,7 @@ export class DeclarativeCapabilityRunner {
     dangerous: boolean,
     capabilityId: string,
     parentTimeoutMs: number,
+    retainActionResult: boolean,
   ): Promise<RuleObject> {
     const action = object(object(this.adapter.rules.actions)[id]);
     if (!Object.keys(action).length)
@@ -239,6 +252,7 @@ export class DeclarativeCapabilityRunner {
         dangerous,
         capabilityId,
         parentTimeoutMs,
+        retainActionResult,
       );
     }
     return this.executePlannedAction(
@@ -252,6 +266,7 @@ export class DeclarativeCapabilityRunner {
       dangerous,
       capabilityId,
       parentTimeoutMs,
+      retainActionResult,
     );
   }
 
@@ -266,6 +281,7 @@ export class DeclarativeCapabilityRunner {
     dangerous: boolean,
     capabilityId: string,
     parentTimeoutMs: number,
+    retainActionResult: boolean,
   ): Promise<RuleObject> {
     const plan = planLaunch(action, actionContext, tool, environment);
     const result = await abortAfter(
@@ -313,6 +329,7 @@ export class DeclarativeCapabilityRunner {
         return executeUnsupportedSerial();
       },
     );
+    const previousResult = object(actionContext.result);
     actionContext.result = {
       ...object(actionContext.result),
       ...(result as RuleObject),
@@ -335,6 +352,7 @@ export class DeclarativeCapabilityRunner {
         plan.kind === "process" ? plan.cwd : operation.run.dir,
       );
     }
+    if (!retainActionResult) actionContext.result = previousResult;
     return result as RuleObject;
   }
 

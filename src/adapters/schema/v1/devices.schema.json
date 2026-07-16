@@ -20,7 +20,7 @@
     "source": {
       "type": "object",
       "required": ["id", "type"],
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "id": { "$ref": "#/$defs/id" },
         "type": { "enum": ["serial", "usb", "network", "command"] }

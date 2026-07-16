@@ -14,6 +14,11 @@ export interface OptionDefinition {
   summary: string;
   required?: boolean;
   schema?: RuntimeSchema<unknown>;
+  aliases?: string[];
+  positional?: number;
+  secret?: boolean;
+  repeatable?: boolean;
+  hidden?: boolean;
 }
 
 export interface Capability {

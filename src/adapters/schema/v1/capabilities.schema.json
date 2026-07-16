@@ -78,7 +78,9 @@
         "lock": { "enum": ["none", "device"] },
         "safety": { "$ref": "#/$defs/safety" },
         "platforms": { "$ref": "#/$defs/platforms" },
-        "platform_reasons": { "$ref": "#/$defs/platformReasons" }
+        "platform_reasons": { "$ref": "#/$defs/platformReasons" },
+        "summary": { "type": "string", "minLength": 1 },
+        "description": { "type": "string", "minLength": 1 }
       },
       "allOf": [
         {
