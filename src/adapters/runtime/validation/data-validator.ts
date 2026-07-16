@@ -143,20 +143,35 @@ export const redactWithSchema = ({
     current: unknown,
     references: Set<string>,
   ): unknown => {
-    const expanded = schemas.flatMap((raw) => {
-      const node = object(raw);
-      if (typeof node.$ref === "string" && !references.has(node.$ref)) {
-        const target = pointer(root, node.$ref);
-        if (target !== undefined) return [node, object(target)];
-      }
-      return [node];
-    });
+    let unresolvedReference = false;
+    const expand = (rawSchemas: unknown[], seen: Set<string>): JsonObject[] =>
+      rawSchemas.flatMap((raw) => {
+        const node = object(raw);
+        const output = [node];
+        if (typeof node.$ref === "string") {
+          if (seen.has(node.$ref)) unresolvedReference = true;
+          else {
+            const target = pointer(root, node.$ref);
+            if (target === undefined) unresolvedReference = true;
+            else
+              output.push(...expand([target], new Set([...seen, node.$ref])));
+          }
+        }
+        for (const branch of ["allOf", "anyOf", "oneOf"] as const)
+          if (Array.isArray(node[branch]))
+            output.push(...expand(node[branch] as unknown[], seen));
+        return output;
+      });
+    const expanded = expand(schemas, references);
     if (
       expanded.some(
         (node) => object(object(node)["x-benchpilot-cli"]).secret === true,
       )
     )
       return "[REDACTED]";
+    // Schema validation normally rejects this before execution. Should a bad
+    // Bundle still reach redaction, prefer hiding a value to leaking a secret.
+    if (unresolvedReference) return "[REDACTED]";
     const childReferences = new Set(references);
     for (const node of expanded)
       if (typeof object(node).$ref === "string")
@@ -185,12 +200,6 @@ export const redactWithSchema = ({
             direct,
             typeof additional === "object" ? additional : undefined,
           ];
-          for (const branch of ["allOf", "anyOf", "oneOf"] as const)
-            for (const child of Array.isArray(node[branch]) ? node[branch] : [])
-              combined.push(
-                object(child).properties &&
-                  object(object(child).properties)[key],
-              );
           return combined.filter(
             (candidate) => candidate && typeof candidate === "object",
           );

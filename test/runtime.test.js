@@ -158,6 +158,59 @@ test("runtime data validation applies defaults without removing unknown fields",
   );
 });
 
+test("schema-aware redaction follows refs, arrays, and composition branches", () => {
+  const schema = {
+    $defs: {
+      credentials: {
+        type: "object",
+        properties: {
+          token: { "x-benchpilot-cli": { secret: true } },
+        },
+      },
+      recursive: {
+        type: "object",
+        properties: {
+          value: { "x-benchpilot-cli": { secret: true } },
+          next: { $ref: "#/$defs/recursive" },
+        },
+      },
+    },
+    type: "object",
+    properties: {
+      auth: { $ref: "#/$defs/credentials" },
+      tokens: {
+        type: "array",
+        items: { $ref: "#/$defs/credentials" },
+      },
+      alternate: {
+        oneOf: [
+          {
+            type: "object",
+            properties: {
+              password: { "x-benchpilot-cli": { secret: true } },
+            },
+          },
+        ],
+      },
+      recursive: { $ref: "#/$defs/recursive" },
+    },
+  };
+  assert.deepEqual(
+    redactSecrets(schema, {
+      auth: { token: "one" },
+      tokens: [{ token: "two" }],
+      alternate: { password: "three" },
+      recursive: { value: "four", next: { value: "five" } },
+    }),
+    {
+      auth: { token: "[REDACTED]" },
+      tokens: [{ token: "[REDACTED]" }],
+      alternate: { password: "[REDACTED]" },
+      recursive: { value: "[REDACTED]", next: "[REDACTED]" },
+    },
+  );
+});
+
 test("workflow without a local timeout retains the capability deadline and event id", async () => {
   const events = [];
   const context = { result: {} };
@@ -326,6 +379,120 @@ test("tool probes parse output and reject an unsuccessful candidate", async () =
       error instanceof AdapterRuntimeError &&
       error.code === "ADAPTER_TOOL_PROBE_FAILED",
   );
+});
+
+test("via-tool probes use the complete launch chain and isolate cache entries", async () => {
+  const root = await mkdtemp(join(tmpdir(), "benchpilot-via-tool-"));
+  try {
+    const script = join(root, "runner.js");
+    const target = join(root, "target.js");
+    await writeFile(
+      script,
+      "process.stdout.write(`${process.argv.slice(2).join('|')}|${process.env.PROBE_VALUE}`)",
+    );
+    await writeFile(target, "// declared target\n");
+    const resolver = new ToolResolver(
+      process.platform === "win32" ? "windows" : "linux",
+      process.env,
+    );
+    const tools = {
+      node: {
+        discovery: "node",
+        launch: { mode: "direct", prefix_args: [], environment: "inherit" },
+      },
+      script: {
+        discovery: "script",
+        launch: {
+          mode: "via-tool",
+          tool: "node",
+          prefix_args: ["${discovery.path}"],
+          environment: "probe",
+        },
+      },
+      target: {
+        discovery: "target",
+        launch: {
+          mode: "via-tool",
+          tool: "script",
+          prefix_args: ["${discovery.path}"],
+          environment: "probe",
+        },
+      },
+    };
+    const discoveries = {
+      node: {
+        validation: { path_type: "file", executable: true },
+        candidates: [{ id: "node", type: "fixed", paths: [process.execPath] }],
+      },
+      script: {
+        validation: { path_type: "file", executable: false },
+        candidates: [{ id: "script", type: "fixed", paths: [script] }],
+      },
+      target: {
+        validation: { path_type: "file", executable: false },
+        candidates: [{ id: "target", type: "fixed", paths: [target] }],
+        probe: { args: ["probe"], parser: "value", timeout: "2s" },
+      },
+    };
+    const parsers = {
+      value: {
+        success_exit_codes: [0],
+        extract: [
+          {
+            id: "value",
+            source: "stdout",
+            type: "regex",
+            pattern: "(?<value>[^\\n]+)",
+            target: "value",
+            group: "value",
+            cast: "string",
+            required: true,
+          },
+        ],
+      },
+    };
+    const launch = await resolver.resolve(
+      "target",
+      tools,
+      discoveries,
+      {},
+      parsers,
+      { probe: false },
+    );
+    assert.equal(launch.executable, await realpath(process.execPath));
+    assert.deepEqual(launch.argsPrefix, [
+      await realpath(script),
+      await realpath(target),
+    ]);
+    assert.equal(
+      (
+        await resolver.probe(
+          launch,
+          discoveries,
+          {},
+          parsers,
+          { ...process.env, PROBE_VALUE: "first" },
+          "demo",
+        )
+      ).value,
+      `${await realpath(target)}|probe|first`,
+    );
+    assert.equal(
+      (
+        await resolver.probe(
+          launch,
+          discoveries,
+          {},
+          parsers,
+          { ...process.env, PROBE_VALUE: "second" },
+          "demo",
+        )
+      ).value,
+      `${await realpath(target)}|probe|second`,
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test("environment resolution supports active, static, and provider fallback", async () => {
