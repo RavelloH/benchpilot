@@ -44,3 +44,10 @@ port fallback is next, and `allow_instance_fallback` defaults to `false`.
 Capabilities that lock a device fail with `DEVICE_IDENTITY_UNAVAILABLE` when no
 stable identity is available. The simulated Demo explicitly opts into instance
 fallback.
+
+Device Discovery is passive by default. A `devices.toml` Probe is never run by
+ordinary `devices scan` or Doctor. Users must request it with `--probe`; a
+Probe declaring `may_reset_device` or `destructive` requires the additional
+`--confirm-device-probe` confirmation. The v1 runtime currently allows only a
+shell-free process Action for a Device Probe. It does not open serial ports,
+toggle DTR/RTS, or implement a serial executor.

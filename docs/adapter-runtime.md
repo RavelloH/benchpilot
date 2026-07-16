@@ -59,6 +59,12 @@ Core operation cancellation remains the outer boundary and retains its own
 `benchpilot devices scan` is passive. The bundled runtime only enumerates
 available serial path candidates on POSIX and can consume declared static
 records for fixtures; it neither opens a serial port nor changes DTR/RTS.
+An Adapter Probe is never part of an ordinary scan. It is requested explicitly
+with `benchpilot devices scan --probe`; a Probe marked `may_reset_device` or
+`destructive` also requires `--confirm-device-probe`. Probes run without a
+Core Run, accept only the shell-free process executor, and return a redacted
+structured status for each candidate. Doctor always performs passive discovery
+only.
 There is no serial executor or ESP-IDF adapter in this release. Device identity
 uses declared physical fields, then an explicit port fallback. Instance fallback
 is disabled by default and is enabled only by the simulated Demo.

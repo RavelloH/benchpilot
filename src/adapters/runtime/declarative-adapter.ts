@@ -376,14 +376,32 @@ export const createDeclarativeAdapter = (runtime: RuntimeAdapter): Adapter => {
         }
       }
       const discovery = object(object(rules.devices).discovery);
-      checks.push({
-        id: `${runtime.bundle.id}-device-sources`,
-        status: discovery.enabled === true ? "pass" : "warn",
-        message:
-          discovery.enabled === true
-            ? "Passive device discovery is enabled."
-            : "Device discovery is disabled.",
-      });
+      if (discovery.enabled !== true)
+        checks.push({
+          id: `${runtime.bundle.id}-device-sources`,
+          status: "warn",
+          message: "Device discovery is disabled.",
+        });
+      else {
+        try {
+          const devices = await discoverDevices(
+            runtime.bundle.id,
+            object(rules.devices),
+          );
+          checks.push({
+            id: `${runtime.bundle.id}-device-sources`,
+            status: "pass",
+            message: "Passive device discovery is available.",
+            details: { candidates: devices.length },
+          });
+        } catch {
+          checks.push({
+            id: `${runtime.bundle.id}-device-sources`,
+            status: "fail",
+            message: "Passive device discovery could not be initialized.",
+          });
+        }
+      }
       return checks;
     },
     async createDevice(

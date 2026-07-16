@@ -24,6 +24,12 @@ Windows environment lookup is case-insensitive. Capture scripts run the current
 `process.execPath`, rather than a literal `node`, and script path, executable,
 and emit program are passed as separate process arguments.
 
+Device probes use the same resolved Tool and Environment model but are separate
+from Tool Discovery probes. They are opt-in scan work, never create a Run, and
+are capped at ten seconds. A failed candidate reports only a structured error
+kind and retryability; raw process output and resolved environment values are
+not emitted by scan output.
+
 Artifact planning preserves the declaration kind: a path entry produces
 `{ "path": "..." }`, while a glob entry produces `{ "glob": "..." }`.
 Planning performs no filesystem reads, glob expansion, copying or collection,
