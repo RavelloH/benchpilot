@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import {
   mkdtemp,
+  mkdir,
   readFile,
   readdir,
   realpath,
   rm,
+  symlink,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -818,6 +820,94 @@ test("copy actions stay inside their allowed roots", async () => {
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test(
+  "copy rejects symlink escapes and replaces an existing file safely",
+  { skip: process.platform === "win32" },
+  async () => {
+    const root = await mkdtemp(join(tmpdir(), "benchpilot-copy-links-"));
+    const outside = await mkdtemp(join(tmpdir(), "benchpilot-copy-outside-"));
+    try {
+      const source = join(root, "source.txt");
+      await writeFile(source, "new");
+      const escaped = join(root, "escaped");
+      await symlink(outside, escaped);
+      await assert.rejects(
+        executeCopy(
+          {
+            kind: "copy",
+            from: source,
+            to: join(escaped, "target.txt"),
+            recursive: false,
+            overwrite: false,
+            timeoutMs: 1_000,
+          },
+          [root],
+        ),
+        (error) =>
+          error instanceof AdapterRuntimeError &&
+          error.code === "ADAPTER_ARTIFACT_UNSAFE",
+      );
+      const linkedTarget = join(root, "linked.txt");
+      await symlink(join(outside, "external.txt"), linkedTarget);
+      await assert.rejects(
+        executeCopy(
+          {
+            kind: "copy",
+            from: source,
+            to: linkedTarget,
+            recursive: false,
+            overwrite: true,
+            timeoutMs: 1_000,
+          },
+          [root],
+        ),
+        (error) =>
+          error instanceof AdapterRuntimeError &&
+          error.code === "ADAPTER_ARTIFACT_UNSAFE",
+      );
+      const sourceDirectory = join(root, "source-directory");
+      await mkdir(sourceDirectory);
+      await symlink(
+        join(outside, "external.txt"),
+        join(sourceDirectory, "link"),
+      );
+      await assert.rejects(
+        executeCopy(
+          {
+            kind: "copy",
+            from: sourceDirectory,
+            to: join(root, "copied-directory"),
+            recursive: true,
+            overwrite: false,
+            timeoutMs: 1_000,
+          },
+          [root],
+        ),
+        (error) =>
+          error instanceof AdapterRuntimeError &&
+          error.code === "ADAPTER_ARTIFACT_UNSAFE",
+      );
+      const target = join(root, "target.txt");
+      await writeFile(target, "old");
+      await executeCopy(
+        {
+          kind: "copy",
+          from: source,
+          to: target,
+          recursive: false,
+          overwrite: true,
+          timeoutMs: 1_000,
+        },
+        [root],
+      );
+      assert.equal(await readFile(target, "utf8"), "new");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+      await rm(outside, { recursive: true, force: true });
+    }
+  },
+);
 
 test("declarative adapters execute through the Core operation lifecycle", async () => {
   const root = await mkdtemp(join(tmpdir(), "benchpilot-declarative-core-"));

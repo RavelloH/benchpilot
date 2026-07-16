@@ -93,6 +93,11 @@ export const executeCopy = async (
     realParent,
     `.${path.basename(to)}.benchpilot-${randomBytes(8).toString("hex")}.tmp`,
   );
+  const backup = path.join(
+    realParent,
+    `.${path.basename(to)}.benchpilot-${randomBytes(8).toString("hex")}.bak`,
+  );
+  let movedTarget = false;
   try {
     onWrite?.();
     await cp(source, temporary, {
@@ -101,13 +106,21 @@ export const executeCopy = async (
       errorOnExist: true,
       verbatimSymlinks: true,
     });
-    if (targetMeta && plan.overwrite)
-      await rm(to, { recursive: targetMeta.isDirectory(), force: true });
+    if (targetMeta && plan.overwrite) {
+      // Re-check immediately before moving the existing target. A destination
+      // replaced with a link after planning must never be followed or removed.
+      if ((await lstat(to)).isSymbolicLink())
+        throw unsafe(plan, "destination-is-symlink");
+      await rename(to, backup);
+      movedTarget = true;
+    }
     await rename(temporary, to);
+    if (movedTarget) await rm(backup, { recursive: true, force: true });
   } catch (error) {
     await rm(temporary, { recursive: true, force: true }).catch(
       () => undefined,
     );
+    if (movedTarget) await rename(backup, to).catch(() => undefined);
     if (error instanceof AdapterRuntimeError) throw error;
     throw unsafe(plan, "copy-failed");
   }
