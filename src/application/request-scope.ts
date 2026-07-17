@@ -75,6 +75,11 @@ export async function openApplicationRequest(
     request.configPath,
   );
   const application = createApplication(request.adapters);
+  const lifecycle = {
+    locks: new LockManager(paths),
+    approvals: new ApprovalManager(paths),
+    runs: (projectKey: string) => new RunManager(paths, projectKey),
+  };
   const runner = new OperationRunner({
     paths,
     registry: application.registry,
@@ -82,13 +87,9 @@ export async function openApplicationRequest(
     project,
     flags: request.flags,
     eventWriter: request.eventWriter,
-    lifecycle: {
-      locks: new LockManager(paths),
-      approvals: new ApprovalManager(paths),
-      runs: (projectKey) => new RunManager(paths, projectKey),
-    },
+    lifecycle,
   });
-  const runtime = createRuntimeUseCases({ paths, project, config });
+  const runtime = createRuntimeUseCases({ paths, project, config, lifecycle });
   const runtimeCommands = createRuntimeCommandUseCases(runtime);
   const queries = createQueryUseCases({
     registry: application.registry,

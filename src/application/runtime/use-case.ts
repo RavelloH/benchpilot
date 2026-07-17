@@ -1,22 +1,21 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import {
-  ApprovalManager,
   duration,
   fail,
   type Json,
-  LockManager,
+  type OperationLifecycleFactories,
   type PathService,
   projectStorageKey,
   readJson,
   type ResolvedConfig,
-  RunManager,
 } from "../../core.js";
 
 export interface RuntimeUseCaseDependencies {
   paths: PathService;
   project: Awaited<ReturnType<PathService["project"]>>;
   config: ResolvedConfig;
+  lifecycle: OperationLifecycleFactories;
 }
 
 export interface PruneRunsInput {
@@ -48,15 +47,15 @@ export class RuntimeUseCases {
   }
 
   private runs() {
-    return new RunManager(this.dependencies.paths, this.storageKey);
+    return this.dependencies.lifecycle.runs(this.storageKey);
   }
 
   private locks() {
-    return new LockManager(this.dependencies.paths);
+    return this.dependencies.lifecycle.locks;
   }
 
   private approvals() {
-    return new ApprovalManager(this.dependencies.paths);
+    return this.dependencies.lifecycle.approvals;
   }
 
   async listRuns(input: { status?: Json; limit?: number } = {}) {

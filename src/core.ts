@@ -58,6 +58,7 @@ export type {
 export type {
   OperationContext,
   OperationServices,
+  OperationLifecycleFactories,
   OperationExecutionOptions,
 } from "./core/operations/types.js";
 export { runCleanupWithGrace } from "./core/operations/cleanup.js";
