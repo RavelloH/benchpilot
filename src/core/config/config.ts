@@ -1,8 +1,4 @@
-import { promises as fs } from "node:fs";
-import path from "node:path";
-import TOML from "@iarna/toml";
-import { BenchPilotError, fail } from "../errors/benchpilot-error.js";
-import { PathService } from "../paths/path-service.js";
+import { fail } from "../errors/benchpilot-error.js";
 import { sha } from "../utilities/stable-json.js";
 
 export type Json = Record<string, unknown>;
@@ -91,90 +87,6 @@ export const merge = (low: Json, high: Json): Json => {
   }
   return out;
 };
-function leaves(value: unknown, prefix = ""): string[] {
-  if (!object(value)) return prefix ? [prefix] : [];
-  return Object.entries(value).flatMap(([k, v]) =>
-    leaves(v, prefix ? `${prefix}.${k}` : k),
-  );
-}
-function envConfig(env: NodeJS.ProcessEnv): {
-  value: Json;
-  names: Map<string, string>;
-} {
-  const value: Json = {},
-    names = new Map<string, string>();
-  for (const [name, raw] of Object.entries(env))
-    if (name.startsWith("BENCHPILOT_") && !["BENCHPILOT_HOME"].includes(name)) {
-      const parts = name.slice("BENCHPILOT_".length).toLowerCase().split("__");
-      if (parts.some(unsafeKey))
-        fail(
-          "INVALID_CONFIG",
-          3,
-          `Unsafe configuration environment variable: ${name}`,
-        );
-      let cur = value;
-      for (const p of parts.slice(0, -1)) cur = (cur[p] ||= {}) as Json;
-      let parsed: unknown = raw;
-      if (raw === "true" || raw === "false") parsed = raw === "true";
-      else if (raw && /^-?\d+(\.\d+)?$/.test(raw)) parsed = Number(raw);
-      else
-        try {
-          parsed = JSON.parse(raw!);
-        } catch {}
-      cur[parts.at(-1)!] = parsed;
-      names.set(parts.join("."), name);
-    }
-  return { value, names };
-}
-async function toml(file: string): Promise<Json | undefined> {
-  try {
-    const x = TOML.parse(await fs.readFile(file, "utf8"));
-    if (!object(x))
-      fail("INVALID_CONFIG", 3, `${file} must contain a TOML object.`);
-    return safeObject(x);
-  } catch (e: unknown) {
-    if ((e as NodeJS.ErrnoException).code === "ENOENT") return undefined;
-    if (e instanceof BenchPilotError) throw e;
-    fail("INVALID_TOML", 3, `Cannot parse ${file}: ${(e as Error).message}`);
-  }
-}
-export async function loadConfig(
-  paths: PathService,
-  project: { root: string; config: string } | undefined,
-  explicit?: string,
-): Promise<ResolvedConfig> {
-  const layers: ResolvedConfig["layers"] = [
-    { scope: "default", value: { version: 1, defaults: { timeout: "30s" } } },
-  ];
-  const add = async (scope: Scope, file?: string) => {
-    if (!file) return;
-    const value = await toml(file);
-    if (value) layers.push({ scope, path: file, value });
-  };
-  await add("global", paths.globalConfig());
-  await add("project", project?.config);
-  await add(
-    "project-local",
-    project && path.join(project.root, ".benchpilot", "config.local.toml"),
-  );
-  await add("explicit", explicit);
-  const ev = envConfig(paths.env);
-  if (Object.keys(ev.value).length)
-    layers.push({ scope: "environment", value: ev.value });
-  let value: Json = {},
-    origins = new Map<string, Origin>();
-  for (const layer of layers) {
-    value = merge(value, layer.value);
-    for (const key of leaves(layer.value))
-      origins.set(key, {
-        scope: layer.scope,
-        path: layer.path,
-        environmentVariable: ev.names.get(key),
-      });
-  }
-  validateConfig(value);
-  return { value, origins, layers };
-}
 export function getKey(obj: Json, key: string): unknown {
   assertSafeKeyPath(key);
   return key

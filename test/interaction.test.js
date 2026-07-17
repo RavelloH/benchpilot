@@ -249,3 +249,14 @@ test("only the CLI presentation layer imports screen localization", async () => 
     }
   }
 });
+
+test("core does not import TOML parsing", async () => {
+  const root = join(process.cwd(), "src", "core");
+  const files = (await readdir(root, { recursive: true })).filter((file) =>
+    file.endsWith(".ts"),
+  );
+  for (const file of files) {
+    const source = await readFile(join(root, file), "utf8");
+    assert.doesNotMatch(source, /@iarna\/toml/);
+  }
+});

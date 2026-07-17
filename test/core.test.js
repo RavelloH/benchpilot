@@ -21,7 +21,6 @@ import {
   RunManager,
   SchemaValidationError,
   lockIdentity,
-  loadConfig,
   isSupportedNodeVersion,
   LockManager,
   objectSchema,
@@ -34,6 +33,7 @@ import {
   setKey,
   stringSchema,
 } from "../dist/index.js";
+import { loadApplicationConfig } from "../dist/application/config/loader.js";
 
 test("operation sessions only allow the lifecycle order", () => {
   const session = new OperationSession("device.fixture");
@@ -114,7 +114,7 @@ test("BENCHPILOT_HOME keeps persistent and runtime paths isolated for tests", ()
 
 test("BENCHPILOT_ environment configuration preserves the first key segment", async () => {
   const root = path.join(os.tmpdir(), "benchpilot-env-config");
-  const config = await loadConfig(
+  const config = await loadApplicationConfig(
     new PathService(
       {
         BENCHPILOT_DEVICES__ESP32S3: '{"adapter":"esp-idf","port":"COM8"}',

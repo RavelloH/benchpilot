@@ -99,7 +99,6 @@ export {
   deleteKey,
   duration,
   getKey,
-  loadConfig,
   merge,
   projectStorageKey,
   redactResolvedConfig,

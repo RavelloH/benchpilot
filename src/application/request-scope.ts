@@ -2,7 +2,6 @@ import {
   type Adapter,
   type BenchPilotEventWriter,
   type Json,
-  loadConfig,
   LockManager,
   OperationRunner,
   PathService,
@@ -10,6 +9,7 @@ import {
   type ResolvedConfig,
   RunManager,
 } from "../core.js";
+import { loadApplicationConfig } from "./config/loader.js";
 import { createApplication } from "./application.js";
 import {
   createRuntimeUseCases,
@@ -64,7 +64,11 @@ export async function openApplicationRequest(
 ): Promise<ApplicationRequestScope> {
   const paths = new PathService();
   const project = await paths.project(request.cwd, request.configPath);
-  const config = await loadConfig(paths, project, request.configPath);
+  const config = await loadApplicationConfig(
+    paths,
+    project,
+    request.configPath,
+  );
   const application = createApplication(request.adapters);
   const runner = new OperationRunner({
     paths,
