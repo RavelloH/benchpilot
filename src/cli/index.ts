@@ -197,14 +197,24 @@ export async function main(adapters?: Adapter[]) {
     const configuredLocale = (config.value.cli as Json | undefined)?.locale;
     const locale = isLocale(configuredLocale) ? configuredLocale : "en";
     presentationLocale = locale;
+    const menuChoices = (values: readonly string[]) =>
+      values.map((value) => ({
+        value,
+        label: t(locale, `menu.action.${value}`),
+      }));
     if (isCommandGroup(parts[0]) && parts.length === 1) {
       const session = interactive(locale, parts);
       const group = parts[0];
       if (group === "config") {
         const sub = await session.choose(
-          ["get", "set", "unset", "resolved", "explain", "validate"].map(
-            (value) => ({ value }),
-          ),
+          menuChoices([
+            "get",
+            "set",
+            "unset",
+            "resolved",
+            "explain",
+            "validate",
+          ]),
         );
         parts.push(sub);
         const existingKey = async () => {
@@ -221,27 +231,27 @@ export async function main(adapters?: Adapter[]) {
           parts.push(await existingKey());
         if (sub === "set") {
           const keyMode = await session.choose([
-            { value: "existing", label: "select an existing key" },
-            { value: "new", label: "enter a new key" },
+            { value: "existing", label: t(locale, "menu.config.existing") },
+            { value: "new", label: t(locale, "menu.config.new") },
           ]);
           parts.push(
             keyMode === "existing"
               ? await existingKey()
-              : await session.value("key"),
+              : await session.value(t(locale, "menu.field.key")),
           );
-          parts.push(await session.value("value"));
+          parts.push(await session.value(t(locale, "menu.field.value")));
         }
       } else if (group === "runs") {
-        const sub = await session.choose([
-          { value: "list" },
-          { value: "prune" },
-        ]);
+        const sub = await session.choose(menuChoices(["list", "prune"]));
         parts.push(sub);
         if (sub === "prune") {
           const mode = await session.choose([
-            { value: "keep", label: "keep newest runs" },
-            { value: "older-than", label: "remove runs older than a duration" },
-            { value: "all", label: "remove all run records" },
+            { value: "keep", label: t(locale, "menu.runs.keep") },
+            {
+              value: "older-than",
+              label: t(locale, "menu.runs.older-than"),
+            },
+            { value: "all", label: t(locale, "menu.runs.all") },
           ]);
           if (mode === "all")
             commandFlags = {
@@ -256,14 +266,10 @@ export async function main(adapters?: Adapter[]) {
         }
       } else if (group === "adapters") parts.push("list");
       else if (group === "devices")
-        parts.push(
-          await session.choose([{ value: "list" }, { value: "scan" }]),
-        );
+        parts.push(await session.choose(menuChoices(["list", "scan"])));
       else if (group === "systems") parts.push("list");
       else if (group === "locks")
-        parts.push(
-          await session.choose([{ value: "list" }, { value: "clear-stale" }]),
-        );
+        parts.push(await session.choose(menuChoices(["list", "clear-stale"])));
       else if (group === "approvals") parts.push("list");
       else if (group === "adapter") {
         const adapters = queries.listAdapters().adapters;
@@ -275,10 +281,7 @@ export async function main(adapters?: Adapter[]) {
             label: `${adapter.id} — ${adapter.summary}`,
           })),
         );
-        parts.push(
-          id,
-          await session.choose([{ value: "info" }, { value: "doctor" }]),
-        );
+        parts.push(id, await session.choose(menuChoices(["info", "doctor"])));
       } else if (group === "device") {
         const deviceNodes = await catalog.children(["device"]);
         if (!deviceNodes.length)
@@ -327,11 +330,7 @@ export async function main(adapters?: Adapter[]) {
           await session.choose(
             runs.runs.map((run) => ({ value: run.id, label: run.id })),
           ),
-          await session.choose([
-            { value: "show" },
-            { value: "logs" },
-            { value: "artifacts" },
-          ]),
+          await session.choose(menuChoices(["show", "logs", "artifacts"])),
         );
       } else if (group === "lock") {
         const locks = await runtime.listLocks();
@@ -344,7 +343,7 @@ export async function main(adapters?: Adapter[]) {
               label: lock.lockId,
             })),
           ),
-          await session.choose([{ value: "show" }, { value: "clear" }]),
+          await session.choose(menuChoices(["show", "clear"])),
         );
       } else if (group === "approval") {
         const approvals = await runtime.listApprovals();
@@ -357,11 +356,7 @@ export async function main(adapters?: Adapter[]) {
               label: `${approval.id} — ${approval.status}`,
             })),
           ),
-          await session.choose([
-            { value: "inspect" },
-            { value: "approve" },
-            { value: "reject" },
-          ]),
+          await session.choose(menuChoices(["inspect", "approve", "reject"])),
         );
       }
     }
