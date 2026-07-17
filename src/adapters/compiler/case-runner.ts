@@ -9,7 +9,7 @@ import {
   planActionEnvironment,
 } from "../runtime/planning/action-planner.js";
 import { planWorkflow } from "../runtime/planning/workflow-planner.js";
-import { planArtifacts } from "../runtime/rules/artifacts.js";
+import { planArtifacts } from "../contract/artifacts.js";
 import { parseOutput } from "../contract/rules.js";
 import { object, renderTemplate } from "../runtime/rules/template.js";
 
