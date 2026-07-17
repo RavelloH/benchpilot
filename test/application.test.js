@@ -13,6 +13,7 @@ import path from "node:path";
 import { BenchPilotError, loadConfig, PathService } from "../dist/index.js";
 import { initializeProject } from "../dist/application/init/use-case.js";
 import { CommandCatalog } from "../dist/application/commands/catalog.js";
+import { configurationKeyPaths } from "../dist/application/queries/use-case.js";
 import {
   executeSystemCapability,
   systemCapabilityIntersection,
@@ -76,6 +77,17 @@ test("command catalog reloads dynamic capabilities before execution", async () =
     (error) =>
       error instanceof BenchPilotError &&
       error.kind === "UNSUPPORTED_CAPABILITY",
+  );
+});
+
+test("configuration key selectors expose stable existing leaf paths", () => {
+  assert.deepEqual(
+    configurationKeyPaths({
+      project: { name: "Demo", tags: ["fixture"] },
+      adapters: { demo: {} },
+      version: 1,
+    }),
+    ["adapters.demo", "project.name", "project.tags", "version"],
   );
 });
 

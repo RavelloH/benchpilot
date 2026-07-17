@@ -17,6 +17,30 @@ export interface QueryUseCaseDependencies {
   nodeVersion: string;
 }
 
+/** Stable leaf paths for selectors; arrays and empty objects remain values. */
+export function configurationKeyPaths(value: Json): string[] {
+  const paths: string[] = [];
+  const visit = (candidate: Json, prefix = "") => {
+    if (
+      !candidate ||
+      typeof candidate !== "object" ||
+      Array.isArray(candidate)
+    ) {
+      if (prefix) paths.push(prefix);
+      return;
+    }
+    const entries = Object.entries(candidate);
+    if (!entries.length) {
+      if (prefix) paths.push(prefix);
+      return;
+    }
+    for (const [key, child] of entries)
+      visit(child as Json, prefix ? `${prefix}.${key}` : key);
+  };
+  visit(value);
+  return paths.sort((left, right) => left.localeCompare(right));
+}
+
 /** Read-only command semantics and dynamic catalog queries. */
 export class QueryUseCases {
   constructor(private readonly dependencies: QueryUseCaseDependencies) {}
@@ -32,6 +56,10 @@ export class QueryUseCases {
         ? this.dependencies.config.origins.get(key)
         : undefined,
     };
+  }
+
+  configurationKeys() {
+    return { keys: configurationKeyPaths(this.dependencies.config.value) };
   }
 
   resolvedConfiguration() {

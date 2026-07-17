@@ -207,10 +207,28 @@ export async function main(adapters?: Adapter[]) {
           ),
         );
         parts.push(sub);
+        const existingKey = async () => {
+          const keys = queries.configurationKeys().keys;
+          if (!keys.length)
+            fail(
+              "CONFIG_KEY_NOT_FOUND",
+              3,
+              "No configured keys are available.",
+            );
+          return session.choose(keys.map((value) => ({ value })));
+        };
         if (["get", "unset", "explain"].includes(sub))
-          parts.push(await session.value("key"));
+          parts.push(await existingKey());
         if (sub === "set") {
-          parts.push(await session.value("key"));
+          const keyMode = await session.choose([
+            { value: "existing", label: "select an existing key" },
+            { value: "new", label: "enter a new key" },
+          ]);
+          parts.push(
+            keyMode === "existing"
+              ? await existingKey()
+              : await session.value("key"),
+          );
           parts.push(await session.value("value"));
         }
       } else if (group === "runs") {
