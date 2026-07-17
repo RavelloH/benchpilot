@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdir, mkdtemp, readdir, rm, writeFile } from "node:fs/promises";
+import {
+  access,
+  mkdir,
+  mkdtemp,
+  readdir,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -50,7 +57,28 @@ try {
       encoding: "utf8",
     });
   assert.match(run("--version"), /0\.0\.0/);
-  assert.match(run(), /Agent-first device lifecycle CLI/);
+  assert.match(run("help"), /Agent-first device lifecycle CLI/);
+  await access(
+    path.join(
+      project,
+      "node_modules",
+      "benchpilot",
+      "dist",
+      "i18n",
+      "zh-CN.js",
+    ),
+  );
+  await access(
+    path.join(
+      project,
+      "node_modules",
+      "benchpilot",
+      "dist",
+      "adapters",
+      "bundles",
+      "index.json",
+    ),
+  );
   run(
     "init",
     "--project-id",
