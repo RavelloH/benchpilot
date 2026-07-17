@@ -550,6 +550,10 @@ test("declarative demo aborts an action when the operation times out", async () 
       "--json",
     ).catch((error) => error);
     assert.equal(JSON.parse(failed.stdout).kind, "OPERATION_TIMEOUT");
+    assert.equal(
+      JSON.parse(failed.stdout).diagnosticId,
+      "core.operation-timeout",
+    );
     assert.deepEqual(
       JSON.parse((await run(dir, "locks", "list", "--json")).stdout).data.locks,
       [],
