@@ -1,5 +1,13 @@
 import assert from "node:assert/strict";
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  cp,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -30,6 +38,28 @@ const catalog = join(
   "catalog",
   "capabilities.toml",
 );
+
+test("compiler and runtime source trees do not import each other", async () => {
+  const compilerRoot = join(process.cwd(), "src", "adapters", "compiler");
+  const runtimeRoot = join(process.cwd(), "src", "adapters", "runtime");
+  const compilerFiles = (
+    await readdir(compilerRoot, { recursive: true })
+  ).filter((file) => file.endsWith(".ts"));
+  const runtimeFiles = (await readdir(runtimeRoot, { recursive: true })).filter(
+    (file) => file.endsWith(".ts"),
+  );
+  for (const file of compilerFiles)
+    assert.doesNotMatch(
+      await readFile(join(compilerRoot, file), "utf8"),
+      /runtime\//,
+    );
+  for (const file of runtimeFiles)
+    assert.doesNotMatch(
+      await readFile(join(runtimeRoot, file), "utf8"),
+      /compiler\//,
+    );
+});
+
 const temporaryAdapter = async () => {
   const root = await mkdtemp(join(tmpdir(), "benchpilot-adapter-"));
   const adapterRoot = join(root, "template");
