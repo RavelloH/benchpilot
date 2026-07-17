@@ -13,6 +13,10 @@ import {
   type RuntimeUseCases,
 } from "./runtime/use-case.js";
 import { createQueryUseCases, type QueryUseCases } from "./queries/use-case.js";
+import {
+  createDeviceUseCases,
+  type DeviceUseCases,
+} from "./devices/use-case.js";
 
 export interface ApplicationRequest {
   cwd: string;
@@ -31,6 +35,7 @@ export interface ApplicationRequestScope {
   runner: OperationRunner;
   runtime: RuntimeUseCases;
   queries: QueryUseCases;
+  devices: DeviceUseCases;
 }
 
 /** Builds process-independent request services. CLI supplies only explicit input. */
@@ -57,5 +62,20 @@ export async function openApplicationRequest(
     config,
     nodeVersion: request.nodeVersion,
   });
-  return { application, paths, project, config, runner, runtime, queries };
+  const devices = createDeviceUseCases({
+    registry: application.registry,
+    runner,
+    config,
+    paths,
+  });
+  return {
+    application,
+    paths,
+    project,
+    config,
+    runner,
+    runtime,
+    queries,
+    devices,
+  };
 }

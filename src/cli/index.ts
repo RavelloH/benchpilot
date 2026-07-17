@@ -194,8 +194,7 @@ export async function main(adapters?: Adapter[]) {
       nodeVersion: process.versions.node,
       eventWriter: flags.jsonl ? new EventWriter(stdout) : undefined,
     });
-    const { registry } = scope.application;
-    const { project, config, runner, runtime, queries } = scope;
+    const { project, config, runner, runtime, queries, devices } = scope;
     const configuredLocale = (config.value.cli as Json | undefined)?.locale;
     const locale = isLocale(configuredLocale) ? configuredLocale : "en";
     presentationLocale = locale;
@@ -476,10 +475,7 @@ export async function main(adapters?: Adapter[]) {
         parts,
         flags,
         rawOptions,
-        registry,
-        runner,
-        config,
-        paths,
+        devices,
       })
     )
       return;
