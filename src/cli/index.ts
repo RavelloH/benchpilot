@@ -5,9 +5,7 @@ import {
   BenchPilotError,
   EventWriter,
   fail,
-  getKey,
   Json,
-  isSupportedNodeVersion,
   PathService,
 } from "../core.js";
 import { loadBuiltinAdapters } from "../adapters/runtime/builtin-adapters.js";
@@ -202,10 +200,11 @@ export async function main(adapters?: Adapter[]) {
       configPath: flags.config as string | undefined,
       flags,
       adapters: declared,
+      nodeVersion: process.versions.node,
       eventWriter: flags.jsonl ? new EventWriter(stdout) : undefined,
     });
     const { registry } = scope.application;
-    const { project, config, runner, runtime } = scope;
+    const { project, config, runner, runtime, queries } = scope;
     const configuredLocale = (config.value.cli as Json | undefined)?.locale;
     const locale = isLocale(configuredLocale) ? configuredLocale : "en";
     if (isCommandGroup(parts[0]) && parts.length === 1) {
@@ -266,21 +265,11 @@ export async function main(adapters?: Adapter[]) {
         );
       } else if (group === "device") {
         const id = await session.value("device id");
-        const rawDevice = (config.value.devices as Json | undefined)?.[id];
-        if (!rawDevice || typeof rawDevice !== "object")
-          fail("DEVICE_NOT_FOUND", 3, `Device not found: ${id}`);
-        const adapter = registry.get(String((rawDevice as Json).adapter));
-        const device = await registry.createDevice(
-          adapter,
-          id,
-          rawDevice as Json,
-          config.value,
-          paths,
-        );
+        const catalog = await queries.deviceCapabilities(id);
         parts.push(
           id,
           await session.choose(
-            device.capabilities().map((capability) => ({
+            catalog.capabilities.map((capability) => ({
               value: capability.id,
               label: `${capability.id} — ${capability.summary}`,
             })),
@@ -327,51 +316,27 @@ export async function main(adapters?: Adapter[]) {
       if (["get", "explain"].includes(sub) && !key)
         fail("USAGE_ERROR", 2, `config ${sub} requires <key>.`);
       if (sub === "get") {
-        const value = getKey(config.value, key);
-        if (value === undefined)
-          fail(
-            "CONFIG_KEY_NOT_FOUND",
-            3,
-            `Configuration key not found: ${key}`,
-          );
-        write(
-          {
-            key,
-            value,
-            origin: commandFlags["show-origin"]
-              ? config.origins.get(key)
-              : undefined,
-          },
-          flags,
-          String(value),
+        const result = queries.getConfiguration(
+          key,
+          commandFlags["show-origin"] === true,
         );
+        write(result, flags, String(result.value));
         return;
       }
       if (sub === "resolved") {
-        write(
-          { config: config.value, origins: Object.fromEntries(config.origins) },
-          flags,
-        );
+        write(queries.resolvedConfiguration(), flags);
         return;
       }
       if (sub === "explain") {
-        write(
-          {
-            key,
-            value: getKey(config.value, key),
-            origin: config.origins.get(key),
-            layers: config.layers.map((x) => ({
-              scope: x.scope,
-              path: x.path,
-              value: getKey(x.value, key),
-            })),
-          },
-          flags,
-        );
+        write(queries.explainConfiguration(key), flags);
         return;
       }
       if (sub === "validate") {
-        write({ valid: true }, flags, "Configuration is valid.");
+        write(
+          queries.validateConfiguration(),
+          flags,
+          "Configuration is valid.",
+        );
         return;
       }
       if (sub === "set" || sub === "unset") {
@@ -396,69 +361,37 @@ export async function main(adapters?: Adapter[]) {
       fail("USAGE_ERROR", 2, `Unknown config command: ${sub}`);
     }
     if (parts[0] === "doctor") {
-      const checks: Json[] = [];
-      checks.push({
-        id: "node",
-        status: isSupportedNodeVersion(process.versions.node) ? "pass" : "fail",
-        message: `Node.js ${process.version}`,
-      });
-      checks.push({
-        id: "project",
-        status: project ? "pass" : "warn",
-        message: project ? project.root : "No project discovered",
-      });
-      checks.push({
-        id: "config",
-        status: "pass",
-        message: "TOML and configuration schema valid",
-      });
-      for (const d of registry.list())
-        checks.push(...(await registry.doctor(d, config.value, paths)));
       if (commandFlags.save) {
         /* doctor is intentionally read-only unless explicit save; its diagnostics are returned */
       }
+      const result = await queries.doctor();
       write(
-        { checks },
+        result,
         flags,
-        checks.map((c) => `${c.status}: ${c.id} — ${c.message}`).join("\n"),
+        result.checks
+          .map(
+            (check) =>
+              `${String(check.status)}: ${String(check.id)} — ${String(check.message)}`,
+          )
+          .join("\n"),
       );
       return;
     }
     if (parts[0] === "adapters" && parts[1] === "list") {
-      write(
-        {
-          adapters: registry
-            .list()
-            .map((a) => ({ id: a.id, version: a.version, summary: a.summary })),
-        },
-        flags,
-      );
+      write(queries.listAdapters(), flags);
       return;
     }
     if (parts[0] === "adapter" && parts[1]) {
-      const adapter = registry.get(parts[1]);
+      const adapter = queries.adapterInfo(parts[1]);
       if (parts.length === 2) {
         stdout.write(
           `benchpilot adapter ${adapter.id} — ${adapter.summary}\n\nCommands: info, doctor\n`,
         );
         return;
       }
-      if (parts[2] === "info")
-        write(
-          {
-            id: adapter.id,
-            version: adapter.version,
-            summary: adapter.summary,
-          },
-          flags,
-        );
+      if (parts[2] === "info") write(adapter, flags);
       else if (parts[2] === "doctor")
-        write(
-          {
-            checks: await registry.doctor(adapter, config.value, paths),
-          },
-          flags,
-        );
+        write(await queries.adapterDoctor(parts[1]), flags);
       else fail("USAGE_ERROR", 2, "Unknown adapter command.");
       return;
     }
@@ -468,61 +401,18 @@ export async function main(adapters?: Adapter[]) {
         return;
       }
       if (parts[1] === "list") {
-        write(
-          {
-            devices: Object.entries((config.value.devices || {}) as Json).map(
-              ([id, v]) => ({ id, ...(v as Json) }),
-            ),
-          },
-          flags,
-        );
+        write(queries.listConfiguredDevices(), flags);
         return;
       }
       if (parts[1] === "scan") {
-        if (
-          commandFlags.probe === true ||
-          commandFlags["confirm-device-probe"] === true
-        )
-          fail(
-            "DEVICE_PROBE_CAPABILITY_REQUIRED",
-            2,
-            "Device probes must run as declared capabilities through the Operation Runner.",
-          );
-        const adapters = commandFlags.adapter
-          ? [registry.get(String(commandFlags.adapter))]
-          : registry.list();
-        const scans = await Promise.all(
-          adapters.map(async (adapter) => {
-            try {
-              const result = await registry.discoverDetailed(
-                adapter,
-                config.value,
-                paths,
-                undefined,
-              );
-              return {
-                adapter: adapter.id,
-                devices: result.devices,
-                sources: result.diagnostics,
-              };
-            } catch (error: unknown) {
-              return {
-                adapter: adapter.id,
-                devices: [],
-                error: (error as Error).message,
-              };
-            }
-          }),
-        );
         write(
-          {
-            devices: scans.flatMap((scan) => scan.devices),
-            adapters: scans.map(({ adapter, error, sources }) => ({
-              adapter,
-              error,
-              ...(sources ? { sources } : {}),
-            })),
-          },
+          await queries.scanDevices(
+            commandFlags.adapter === undefined
+              ? undefined
+              : String(commandFlags.adapter),
+            commandFlags.probe === true ||
+              commandFlags["confirm-device-probe"] === true,
+          ),
           flags,
         );
         return;
@@ -541,14 +431,7 @@ export async function main(adapters?: Adapter[]) {
     )
       return;
     if (parts[0] === "systems" && parts[1] === "list") {
-      write(
-        {
-          systems: Object.entries((config.value.systems || {}) as Json).map(
-            ([id, v]) => ({ id, ...(v as Json) }),
-          ),
-        },
-        flags,
-      );
+      write(queries.listSystems(), flags);
       return;
     }
     if (parts[0] === "system" && parts[1]) {

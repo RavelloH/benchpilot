@@ -12,12 +12,14 @@ import {
   createRuntimeUseCases,
   type RuntimeUseCases,
 } from "./runtime/use-case.js";
+import { createQueryUseCases, type QueryUseCases } from "./queries/use-case.js";
 
 export interface ApplicationRequest {
   cwd: string;
   configPath?: string;
   flags: Json;
   adapters: Adapter[];
+  nodeVersion: string;
   eventWriter?: BenchPilotEventWriter;
 }
 
@@ -28,6 +30,7 @@ export interface ApplicationRequestScope {
   config: ResolvedConfig;
   runner: OperationRunner;
   runtime: RuntimeUseCases;
+  queries: QueryUseCases;
 }
 
 /** Builds process-independent request services. CLI supplies only explicit input. */
@@ -47,5 +50,12 @@ export async function openApplicationRequest(
     eventWriter: request.eventWriter,
   });
   const runtime = createRuntimeUseCases({ paths, project, config });
-  return { application, paths, project, config, runner, runtime };
+  const queries = createQueryUseCases({
+    registry: application.registry,
+    paths,
+    project,
+    config,
+    nodeVersion: request.nodeVersion,
+  });
+  return { application, paths, project, config, runner, runtime, queries };
 }
