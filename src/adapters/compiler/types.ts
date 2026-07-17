@@ -20,5 +20,3 @@ export interface LoadedAdapter {
   files: Record<string, JsonObject>;
   schemas: Record<string, JsonObject>;
 }
-
-export type { CompiledAdapterBundleV2 as CompiledAdapterBundleV1 } from "../contract/bundle.js";

@@ -18,6 +18,7 @@ import {
   validateAdapter,
 } from "../dist/adapters/compiler/compiler.js";
 import { mergePlatform } from "../dist/adapters/contract/platform.js";
+import { bundleSha256 } from "../dist/adapters/contract/bundle.js";
 import { runCases } from "../dist/adapters/compiler/case-runner.js";
 import { loadAdapter } from "../dist/adapters/compiler/loader.js";
 import { validateSemantics } from "../dist/adapters/compiler/semantic-validator.js";
@@ -142,12 +143,20 @@ test("bulk compilation excludes the template and writes the builtin index", asyn
     await writeFile(join(output, "keep.txt"), "keep\n");
     const result = await compileAll(output);
     assert.deepEqual(result.diagnostics, []);
+    const index = JSON.parse(
+      await readFile(join(output, "index.json"), "utf8"),
+    );
     assert.deepEqual(
-      JSON.parse(await readFile(join(output, "index.json"), "utf8")).map(
-        (entry) => entry.id,
-      ),
+      index.map((entry) => entry.id),
       ["demo", "esp-idf"],
     );
+    for (const entry of index) {
+      const bundle = JSON.parse(
+        await readFile(join(output, entry.path), "utf8"),
+      );
+      assert.equal(bundle.bundleSha256, entry.bundleSha256);
+      assert.equal(bundle.bundleSha256, bundleSha256(bundle));
+    }
     await assert.rejects(readFile(join(output, "template.json"), "utf8"));
     await assert.rejects(readFile(join(output, "stale.json"), "utf8"));
     await assert.rejects(readFile(join(output, "keep.txt"), "utf8"));

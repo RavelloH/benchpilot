@@ -18,7 +18,7 @@ import { validateBundle, validateSchemas } from "./schema-validator.js";
 import { validateSemantics } from "./semantic-validator.js";
 import type {
   AdapterDiagnostic,
-  CompiledAdapterBundleV1,
+  CompiledAdapterBundleV2,
   JsonObject,
   LoadedAdapter,
 } from "./types.js";
@@ -172,7 +172,7 @@ export const compileAdapter = async (
   root: string,
   catalogPath = catalog,
 ): Promise<{
-  bundle?: CompiledAdapterBundleV1;
+  bundle?: CompiledAdapterBundleV2;
   diagnostics: AdapterDiagnostic[];
 }> => {
   const { adapter, diagnostics } = await validateAdapter(root, catalogPath);
@@ -210,7 +210,7 @@ export const compileAdapter = async (
       .sort()
       .map(async (file) => [file, await readFile(resolve(root, file), "utf8")]),
   );
-  const unsigned: Omit<CompiledAdapterBundleV1, "bundleSha256"> = {
+  const unsigned: Omit<CompiledAdapterBundleV2, "bundleSha256"> = {
     schema: "benchpilot.adapter-bundle",
     schemaVersion: 2,
     id: adapter.id,
@@ -222,7 +222,7 @@ export const compileAdapter = async (
     schemas: adapter.schemas,
     platforms,
   };
-  const bundle: CompiledAdapterBundleV1 = {
+  const bundle: CompiledAdapterBundleV2 = {
     ...unsigned,
     bundleSha256: bundleSha256(unsigned),
   };
@@ -290,10 +290,15 @@ export const compileAll = async (
     for (const bundle of bundles) {
       const published = JSON.parse(
         await readFile(resolve(staging, `${bundle.id}.json`), "utf8"),
-      ) as CompiledAdapterBundleV1;
+      ) as CompiledAdapterBundleV2;
       if (published.bundleSha256 !== bundleSha256(published))
         throw new Error(`Bundle hash validation failed for ${bundle.id}.`);
     }
+    const publishedIndex = JSON.parse(
+      await readFile(resolve(staging, "index.json"), "utf8"),
+    );
+    if (stable(publishedIndex) !== stable(index))
+      throw new Error("Bundle index serialization validation failed.");
     await rename(outputRoot, backup).catch((error: NodeJS.ErrnoException) => {
       if (error.code !== "ENOENT") throw error;
     });
