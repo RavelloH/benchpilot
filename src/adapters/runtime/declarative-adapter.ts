@@ -1,7 +1,5 @@
 import {
   BenchPilotError,
-  LockManager,
-  lockIdentity,
   duration,
   objectSchema,
   type Adapter,
@@ -19,7 +17,6 @@ import {
   discoverDevicesDetailed,
 } from "./devices/discovery.js";
 import { executeDeviceCommandSource } from "./devices/command-source.js";
-import { executeDeviceProbe } from "./devices/device-probe.js";
 import { normalizePortIdentity } from "./devices/identity.js";
 import {
   EnvironmentResolver,
@@ -324,79 +321,14 @@ export const createDeclarativeAdapter = (runtime: RuntimeAdapter): Adapter => {
           undefined,
           ["Use a passive scan or wait for the controlled Probe Runtime."],
         );
-      // Probes are deliberately serial. It is conservative but guarantees
-      // that duplicate candidates for one physical device never race.
-      const probed = [];
-      for (const device of devices) {
-        probed.push(
-          await (async () => {
-            if (!device.identity)
-              return {
-                ...device,
-                probe: {
-                  ok: false,
-                  error: {
-                    kind: "DEVICE_IDENTITY_UNAVAILABLE",
-                    retryable: false,
-                  },
-                },
-              };
-            const identity = {
-              adapter: runtime.bundle.id,
-              kind: "device",
-              physicalId: device.identity,
-            };
-            const locks = new LockManager(context.paths);
-            let lock;
-            let lease;
-            const controller = new AbortController();
-            try {
-              lock = await locks.acquire(
-                lockIdentity(identity),
-                "device.probe",
-                undefined,
-                identity,
-              );
-              lease = locks.startHeartbeat(lock, 2_000, 10_000);
-              void lease.lost.catch((error) => {
-                if (!controller.signal.aborted) controller.abort(error);
-              });
-              return {
-                ...device,
-                probe: await executeDeviceProbe(
-                  runtime,
-                  context.adapterConfig as RuleObject,
-                  device.fields,
-                  controller.signal,
-                ),
-              };
-            } catch (error) {
-              return {
-                ...device,
-                probe: {
-                  ok: false,
-                  error: {
-                    kind:
-                      error instanceof BenchPilotError
-                        ? error.kind
-                        : "ADAPTER_DISCOVERY_FAILED",
-                    retryable:
-                      error instanceof BenchPilotError && error.retryable,
-                  },
-                },
-              };
-            } finally {
-              if (lease) await lease.stop().catch(() => {});
-              if (lock) await locks.release(lock).catch(() => {});
-            }
-          })(),
-        );
-      }
-      devices = probed;
-      return {
-        devices: devices as unknown as Json[],
-        diagnostics: detailed.sources as unknown as Json[],
-      };
+      throw new BenchPilotError(
+        "DEVICE_PROBE_CAPABILITY_REQUIRED",
+        7,
+        "Device probes must run as declared capabilities through the Operation Runner.",
+        false,
+        undefined,
+        ["Use passive scan or configure a dedicated probe capability."],
+      );
     },
     async doctor(context: AdapterContext) {
       const checks: Json[] = [
