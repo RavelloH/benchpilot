@@ -13,7 +13,7 @@ import { diagnostic, hasErrors } from "./diagnostics.js";
 import { validateAdapterLayout } from "./layout.js";
 import { fixedFiles } from "./layout.js";
 import { loadAdapter } from "./loader.js";
-import { mergePlatform } from "./platform-merger.js";
+import { mergePlatform } from "../contract/platform.js";
 import { validateBundle, validateSchemas } from "./schema-validator.js";
 import { validateSemantics } from "./semantic-validator.js";
 import type {

@@ -1,7 +1,9 @@
-import type { JsonObject } from "./types.js";
+import type { JsonObject } from "./bundle.js";
 
 const object = (value: unknown): value is JsonObject =>
   Boolean(value) && typeof value === "object" && !Array.isArray(value);
+
+/** Deterministic platform overlay merge: objects merge recursively, arrays replace. */
 export const mergePlatform = (
   base: JsonObject,
   overlay: JsonObject,

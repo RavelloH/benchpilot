@@ -17,7 +17,7 @@ import {
   compileAll,
   validateAdapter,
 } from "../dist/adapters/compiler/compiler.js";
-import { mergePlatform } from "../dist/adapters/compiler/platform-merger.js";
+import { mergePlatform } from "../dist/adapters/contract/platform.js";
 import { runCases } from "../dist/adapters/compiler/case-runner.js";
 import { loadAdapter } from "../dist/adapters/compiler/loader.js";
 import { validateSemantics } from "../dist/adapters/compiler/semantic-validator.js";

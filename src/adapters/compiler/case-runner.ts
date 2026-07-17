@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import type { AdapterDiagnostic, LoadedAdapter } from "./types.js";
 import { diagnostic } from "./diagnostics.js";
 import { ensureInside } from "./layout.js";
-import { mergePlatform } from "./platform-merger.js";
+import { mergePlatform } from "../contract/platform.js";
 import {
   planActionArguments,
   planActionEnvironment,
