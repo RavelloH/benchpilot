@@ -1,7 +1,8 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { randomUUID } from "node:crypto";
 import TOML from "@iarna/toml";
-import { BenchPilotError, fail, type Json } from "../../core.js";
+import { fail, type Json } from "../../core.js";
 import type { Locale } from "../../i18n/index.js";
 
 export interface InitializeProjectInput {
@@ -11,10 +12,25 @@ export interface InitializeProjectInput {
   locale: Locale;
 }
 
-async function writeAtomic(file: string, content: string) {
-  const temporary = `${file}.${process.pid}.tmp`;
-  await fs.writeFile(temporary, content, "utf8");
-  await fs.rename(temporary, file);
+async function exists(file: string) {
+  try {
+    await fs.access(file);
+    return true;
+  } catch (error: unknown) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw error;
+  }
+}
+
+/** Creates a target without replacing an existing user-owned file. */
+async function writeNewAtomic(file: string, content: string) {
+  const temporary = `${file}.${process.pid}.${randomUUID()}.tmp`;
+  try {
+    await fs.writeFile(temporary, content, { encoding: "utf8", flag: "wx" });
+    await fs.link(temporary, file);
+  } finally {
+    await fs.rm(temporary, { force: true }).catch(() => {});
+  }
 }
 
 /** Creates the minimal project skeleton; presentation and prompts live in CLI. */
@@ -22,16 +38,12 @@ export async function initializeProject(
   input: InitializeProjectInput,
 ): Promise<Json> {
   const config = path.join(input.cwd, "benchpilot.toml");
-  try {
-    await fs.access(config);
+  if (await exists(config))
     fail(
       "CONFIG_EXISTS",
       3,
       `${config} already exists; refusing to overwrite it.`,
     );
-  } catch (error) {
-    if (error instanceof BenchPilotError) throw error;
-  }
   if (!/^[a-zA-Z][\w-]*$/.test(input.projectId))
     fail(
       "INVALID_PROJECT_ID",
@@ -43,26 +55,37 @@ export async function initializeProject(
 
   const localDir = path.join(input.cwd, ".benchpilot");
   const local = path.join(localDir, "config.local.toml");
+  const gitignore = path.join(localDir, ".gitignore");
+  if ((await exists(local)) || (await exists(gitignore)))
+    fail(
+      "INIT_TARGET_EXISTS",
+      3,
+      `${localDir} already contains initialization files; refusing to overwrite them.`,
+    );
+  const localDirExisted = await exists(localDir);
+  const created: string[] = [];
   await fs.mkdir(localDir, { recursive: true });
   try {
-    await writeAtomic(
+    await writeNewAtomic(
       config,
       TOML.stringify({
         version: 1,
         project: { id: input.projectId, name: input.projectName },
       } as never),
     );
-    await writeAtomic(
+    created.push(config);
+    await writeNewAtomic(
       local,
       TOML.stringify({ cli: { locale: input.locale } } as never),
     );
-    await fs.writeFile(
-      path.join(localDir, ".gitignore"),
-      "*\n!.gitignore\n",
-      "utf8",
-    );
+    created.push(local);
+    await writeNewAtomic(gitignore, "*\n!.gitignore\n");
+    created.push(gitignore);
   } catch (error) {
-    await fs.rm(config, { force: true }).catch(() => {});
+    await Promise.all(
+      created.reverse().map((file) => fs.rm(file, { force: true })),
+    );
+    if (!localDirExisted) await fs.rmdir(localDir).catch(() => {});
     throw error;
   }
   return {

@@ -1,10 +1,77 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import {
+  access,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+  mkdir,
+} from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { BenchPilotError } from "../dist/index.js";
+import { initializeProject } from "../dist/application/init/use-case.js";
 import {
   executeSystemCapability,
   systemCapabilityIntersection,
 } from "../dist/application/systems/use-case.js";
+
+test("init creates the minimum project files and preserves them on repeat", async () => {
+  const cwd = await mkdtemp(path.join(os.tmpdir(), "benchpilot-init-"));
+  try {
+    const result = await initializeProject({
+      cwd,
+      projectId: "demo",
+      projectName: "Demo project",
+      locale: "zh-CN",
+    });
+    assert.deepEqual(result.project, { id: "demo", name: "Demo project" });
+    const config = path.join(cwd, "benchpilot.toml");
+    const local = path.join(cwd, ".benchpilot", "config.local.toml");
+    const gitignore = path.join(cwd, ".benchpilot", ".gitignore");
+    assert.match(await readFile(config, "utf8"), /id = "demo"/);
+    assert.match(await readFile(local, "utf8"), /locale = "zh-CN"/);
+    assert.equal(await readFile(gitignore, "utf8"), "*\n!.gitignore\n");
+    const before = await readFile(config, "utf8");
+    await assert.rejects(
+      initializeProject({
+        cwd,
+        projectId: "other",
+        projectName: "Other",
+        locale: "en",
+      }),
+      (error) =>
+        error instanceof BenchPilotError && error.kind === "CONFIG_EXISTS",
+    );
+    assert.equal(await readFile(config, "utf8"), before);
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
+
+test("init refuses to overwrite local initialization files before creating a project", async () => {
+  const cwd = await mkdtemp(path.join(os.tmpdir(), "benchpilot-init-target-"));
+  try {
+    await mkdir(path.join(cwd, ".benchpilot"));
+    const local = path.join(cwd, ".benchpilot", "config.local.toml");
+    await writeFile(local, '[cli]\nlocale = "en"\n');
+    await assert.rejects(
+      initializeProject({
+        cwd,
+        projectId: "demo",
+        projectName: "Demo",
+        locale: "en",
+      }),
+      (error) =>
+        error instanceof BenchPilotError && error.kind === "INIT_TARGET_EXISTS",
+    );
+    await assert.rejects(access(path.join(cwd, "benchpilot.toml")));
+    assert.match(await readFile(local, "utf8"), /locale = "en"/);
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
 
 test("system capability preflight rejects before any member executes", async () => {
   const executed = [];
