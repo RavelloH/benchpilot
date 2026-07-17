@@ -112,6 +112,12 @@ test("screen catalogs are complete and leave machine protocol out of translation
   assert.match(fullHelp(["config"]).summary, /Read, explain/);
 });
 
+test("root help does not repeat the executable name", () => {
+  assert.deepEqual(fullHelp([]).examples, ["benchpilot --json"]);
+  assert.match(humanFull([]), /benchpilot —/);
+  assert.doesNotMatch(humanFull([]), /benchpilot  —/);
+});
+
 test("interactive sessions keep one conversation alive for sequential choices", async () => {
   prompts.inject(["set", "project.name"]);
   const session = new InteractionSession("en");
