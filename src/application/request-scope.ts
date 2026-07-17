@@ -21,6 +21,10 @@ import {
   createSystemUseCases,
   type SystemUseCases,
 } from "./systems/use-case.js";
+import {
+  createConfigurationUseCases,
+  type ConfigurationUseCases,
+} from "./config/use-case.js";
 
 export interface ApplicationRequest {
   cwd: string;
@@ -41,6 +45,7 @@ export interface ApplicationRequestScope {
   queries: QueryUseCases;
   devices: DeviceUseCases;
   systems: SystemUseCases;
+  configuration: ConfigurationUseCases;
 }
 
 /** Builds process-independent request services. CLI supplies only explicit input. */
@@ -74,6 +79,7 @@ export async function openApplicationRequest(
     paths,
   });
   const systems = createSystemUseCases({ runner, config });
+  const configuration = createConfigurationUseCases({ paths, project });
   return {
     application,
     paths,
@@ -84,5 +90,6 @@ export async function openApplicationRequest(
     queries,
     devices,
     systems,
+    configuration,
   };
 }

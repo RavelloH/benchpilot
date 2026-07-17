@@ -19,6 +19,38 @@ export interface EditConfigInput {
   value?: string;
 }
 
+export interface ConfigurationUseCaseDependencies {
+  paths: PathService;
+  project: Awaited<ReturnType<PathService["project"]>>;
+}
+
+/** Request-scoped configuration mutations without CLI flag dependencies. */
+export class ConfigurationUseCases {
+  constructor(
+    private readonly dependencies: ConfigurationUseCaseDependencies,
+  ) {}
+
+  async edit(input: {
+    scopes: Array<"local" | "project" | "global">;
+    key: string;
+    value?: string;
+  }) {
+    if (input.scopes.length > 1)
+      fail("USAGE_ERROR", 2, "Choose only one configuration scope.");
+    return editConfiguration({
+      paths: this.dependencies.paths,
+      project: this.dependencies.project,
+      scope: input.scopes[0],
+      key: input.key,
+      value: input.value,
+    });
+  }
+}
+
+export const createConfigurationUseCases = (
+  dependencies: ConfigurationUseCaseDependencies,
+) => new ConfigurationUseCases(dependencies);
+
 /** Mutates a declared configuration scope without CLI or terminal dependencies. */
 export async function editConfiguration(input: EditConfigInput): Promise<Json> {
   const scope = input.scope || (input.project ? "local" : "global");

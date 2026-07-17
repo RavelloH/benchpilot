@@ -1,13 +1,6 @@
 #!/usr/bin/env node
 import { stdin, stdout } from "node:process";
-import {
-  Adapter,
-  BenchPilotError,
-  EventWriter,
-  fail,
-  Json,
-  PathService,
-} from "../core.js";
+import { Adapter, BenchPilotError, EventWriter, fail, Json } from "../core.js";
 import { loadBuiltinAdapters } from "../adapters/runtime/builtin-adapters.js";
 import { createApplication } from "../application/application.js";
 import { openApplicationRequest } from "../application/request-scope.js";
@@ -19,7 +12,6 @@ import {
   isCommandGroup,
 } from "./help-renderer.js";
 import { parse } from "./parser.js";
-import { editConfig } from "./commands/config-editor.js";
 import { handleDeviceCommand } from "./commands/device.js";
 import { handleRuntimeCommand } from "./commands/runtime.js";
 import { commandOptionFlags } from "./option-parser.js";
@@ -107,7 +99,6 @@ export async function main(adapters?: Adapter[]) {
       write(fullHelp([]), flags, brief("root"));
       return;
     }
-    const paths = new PathService();
     if (parts[0] === "init") {
       const suppliedLocale = commandFlags.locale;
       const initLocale: Locale = isLocale(suppliedLocale)
@@ -188,7 +179,7 @@ export async function main(adapters?: Adapter[]) {
       nodeVersion: process.versions.node,
       eventWriter: flags.jsonl ? new EventWriter(stdout) : undefined,
     });
-    const { project, config, runtime, queries, devices, systems } = scope;
+    const { config, runtime, queries, devices, systems, configuration } = scope;
     const configuredLocale = (config.value.cli as Json | undefined)?.locale;
     const locale = isLocale(configuredLocale) ? configuredLocale : "en";
     presentationLocale = locale;
@@ -383,13 +374,13 @@ export async function main(adapters?: Adapter[]) {
             `config ${sub} requires a key${sub === "set" ? " and value" : ""}.`,
           );
         write(
-          await editConfig(
-            paths,
-            project,
-            commandFlags,
+          await configuration.edit({
+            scopes: ["local", "project", "global"].filter(
+              (scope) => commandFlags[scope],
+            ) as Array<"local" | "project" | "global">,
             key,
-            sub === "set" ? parts[3] : undefined,
-          ),
+            value: sub === "set" ? parts[3] : undefined,
+          }),
           flags,
         );
         return;
