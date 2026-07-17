@@ -15,7 +15,7 @@ import { parse } from "./parser.js";
 import { handleDeviceCommand } from "./commands/device.js";
 import { handleRuntimeCommand } from "./commands/runtime.js";
 import { commandOptionFlags } from "./option-parser.js";
-import { write } from "./output-renderer.js";
+import { write, writeFailure, writeText } from "./output-renderer.js";
 import { detectAgent } from "./agent/detector.js";
 import { interactionDecision } from "./interaction/policy.js";
 import {
@@ -71,7 +71,7 @@ export async function main(adapters?: Adapter[]) {
       return interaction;
     };
     if (flags.version) {
-      stdout.write(`${version}\n`);
+      writeText(`${version}\n`);
       return;
     }
     if (parts[0] === "help") {
@@ -502,7 +502,7 @@ export async function main(adapters?: Adapter[]) {
         ? new BenchPilotError(
             "INTERACTION_CANCELLED",
             130,
-            t("en", "cli.interaction.cancelled"),
+            t(presentationLocale, "cli.interaction.cancelled"),
           )
         : e instanceof BenchPilotError
           ? e
@@ -519,33 +519,30 @@ export async function main(adapters?: Adapter[]) {
       recovery: err.recovery,
       details: err.details,
     };
-    if (flags.json) stdout.write(`${JSON.stringify(result)}\n`);
-    else if (
-      flags.jsonl &&
-      !(err as BenchPilotError & { jsonlTerminalEmitted?: boolean })
-        .jsonlTerminalEmitted
-    ) {
-      const isOperation = ["device", "system"].includes(parsed?.path[0] || "");
-      stdout.write(
-        `${JSON.stringify({ schema: "benchpilot.event", version: 2, event: { type: isOperation ? "operation.failed" : "command.failed", timestamp: new Date().toISOString() }, context: {}, data: { error: result } })}\n`,
-      );
-    } else {
-      process.stderr.write(`${err.kind}: ${err.message}\n`);
-      if (
-        [
-          "AGENT_INTERACTION_UNSUPPORTED",
-          "INTERACTIVE_MACHINE_OUTPUT_UNSUPPORTED",
-          "INTERACTIVE_TERMINAL_REQUIRED",
-        ].includes(err.kind)
-      )
-        process.stderr.write(
-          `\n${humanFull(
-            ((err.details as { help?: { path?: string[] } } | undefined)?.help
-              ?.path || []) as string[],
-            presentationLocale,
-          )}\n`,
-        );
-    }
+    const needsHelp = [
+      "AGENT_INTERACTION_UNSUPPORTED",
+      "INTERACTIVE_MACHINE_OUTPUT_UNSUPPORTED",
+      "INTERACTIVE_TERMINAL_REQUIRED",
+    ].includes(err.kind);
+    writeFailure({
+      result,
+      flags,
+      isOperation: ["device", "system"].includes(parsed?.path[0] || ""),
+      terminalEmitted: Boolean(
+        (err as BenchPilotError & { jsonlTerminalEmitted?: boolean })
+          .jsonlTerminalEmitted,
+      ),
+      humanMessage: `${err.kind}: ${err.message}`,
+      ...(needsHelp
+        ? {
+            help: humanFull(
+              ((err.details as { help?: { path?: string[] } } | undefined)?.help
+                ?.path || []) as string[],
+              presentationLocale,
+            ),
+          }
+        : {}),
+    });
     process.exitCode = err.exitCode;
   } finally {
     interaction?.close();

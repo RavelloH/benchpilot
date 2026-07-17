@@ -9,6 +9,7 @@ import {
 } from "../dist/cli/interaction/prompter.js";
 import { fullHelp, humanFull } from "../dist/cli/help-renderer.js";
 import { commandRoots } from "../dist/application/commands/catalog.js";
+import { writeFailure } from "../dist/cli/output-renderer.js";
 import { assertCatalogCompleteness, t } from "../dist/i18n/index.js";
 
 test("agent detection only accepts fixed environment and file markers", () => {
@@ -103,6 +104,34 @@ test("interactive session treats EOF as cancellation", async () => {
   } finally {
     session.close();
   }
+});
+
+test("presenter keeps machine failures on stdout and human failures on stderr", () => {
+  const stdout = [];
+  const stderr = [];
+  const sink = {
+    stdout: { write: (value) => stdout.push(value) },
+    stderr: { write: (value) => stderr.push(value) },
+  };
+  writeFailure({
+    result: { ok: false, kind: "USAGE_ERROR" },
+    flags: { json: true },
+    isOperation: false,
+    terminalEmitted: false,
+    humanMessage: "USAGE_ERROR: invalid input",
+    sink,
+  });
+  assert.match(stdout.join(""), /USAGE_ERROR/);
+  assert.equal(stderr.join(""), "");
+  writeFailure({
+    result: { ok: false, kind: "USAGE_ERROR" },
+    flags: {},
+    isOperation: false,
+    terminalEmitted: false,
+    humanMessage: "USAGE_ERROR: invalid input",
+    sink,
+  });
+  assert.match(stderr.join(""), /invalid input/);
 });
 
 test("command catalog is the CLI root-menu source", () => {
