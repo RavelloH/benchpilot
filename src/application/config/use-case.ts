@@ -31,7 +31,7 @@ export async function editConfiguration(input: EditConfigInput): Promise<Json> {
         : input.paths.globalConfig();
   if (typeof file !== "string")
     fail("PROJECT_NOT_FOUND", 3, "--project requires a BenchPilot project.");
-  const targetFile = file;
+  const targetFile = file as string;
   let config: Json = {};
   try {
     config = TOML.parse(await fs.readFile(targetFile, "utf8")) as Json;
