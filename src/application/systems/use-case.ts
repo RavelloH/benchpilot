@@ -1,7 +1,9 @@
 import {
   BenchPilotError,
+  fail,
   type Json,
   type OperationRunner,
+  type ResolvedConfig,
 } from "../../core.js";
 
 export type SystemExecutionPolicy = "parallel" | "serial-fail-fast";
@@ -26,6 +28,87 @@ export interface SystemCapabilityDescriptor {
   lockMode: string;
   safety: Json;
 }
+
+export interface SystemUseCaseDependencies {
+  runner: OperationRunner;
+  config: ResolvedConfig;
+}
+
+/** System command semantics, including lifecycle event orchestration. */
+export class SystemUseCases {
+  constructor(private readonly dependencies: SystemUseCaseDependencies) {}
+
+  private members(name: string) {
+    const system = (
+      this.dependencies.config.value.systems as Json | undefined
+    )?.[name];
+    if (!system || typeof system !== "object")
+      fail("SYSTEM_NOT_FOUND", 3, `System not found: ${name}`);
+    const devices = (system as Json).devices;
+    if (
+      !Array.isArray(devices) ||
+      !devices.every((device) => typeof device === "string")
+    )
+      fail("SYSTEM_NOT_FOUND", 3, `System has no valid members: ${name}`);
+    return devices as string[];
+  }
+
+  async describe(name: string) {
+    const devices = this.members(name);
+    return {
+      name,
+      devices,
+      capabilities: await systemCapabilityIntersection({
+        devices,
+        runner: this.dependencies.runner,
+      }),
+    };
+  }
+
+  async execute(name: string, capability: string, capabilityInput?: Json) {
+    const devices = this.members(name);
+    this.dependencies.runner.emitSystemEvent("system.operation.started", {
+      system: name,
+      operation: capability,
+    });
+    try {
+      const result = await executeSystemCapability({
+        system: name,
+        capability,
+        devices,
+        runner: this.dependencies.runner,
+        capabilityInput,
+      });
+      if (result.results.some((item) => !item.ok))
+        throw Object.assign(
+          new BenchPilotError(
+            "SYSTEM_OPERATION_FAILED",
+            5,
+            `System operation failed: ${name}`,
+            false,
+            undefined,
+            [],
+            { result },
+          ),
+          { result },
+        );
+      this.dependencies.runner.emitSystemEvent("system.operation.completed", {
+        result,
+      });
+      return result as unknown as Json;
+    } catch (error) {
+      this.dependencies.runner.emitSystemEvent("system.operation.failed", {
+        error: (error as { result?: Json }).result ?? {
+          message: (error as Error).message,
+        },
+      });
+      throw Object.assign(error as Error, { jsonlTerminalEmitted: true });
+    }
+  }
+}
+
+export const createSystemUseCases = (dependencies: SystemUseCaseDependencies) =>
+  new SystemUseCases(dependencies);
 
 /** Returns only capabilities that are declared consistently by every member. */
 export async function systemCapabilityIntersection(input: {

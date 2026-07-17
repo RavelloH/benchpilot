@@ -17,6 +17,10 @@ import {
   createDeviceUseCases,
   type DeviceUseCases,
 } from "./devices/use-case.js";
+import {
+  createSystemUseCases,
+  type SystemUseCases,
+} from "./systems/use-case.js";
 
 export interface ApplicationRequest {
   cwd: string;
@@ -36,6 +40,7 @@ export interface ApplicationRequestScope {
   runtime: RuntimeUseCases;
   queries: QueryUseCases;
   devices: DeviceUseCases;
+  systems: SystemUseCases;
 }
 
 /** Builds process-independent request services. CLI supplies only explicit input. */
@@ -68,6 +73,7 @@ export async function openApplicationRequest(
     config,
     paths,
   });
+  const systems = createSystemUseCases({ runner, config });
   return {
     application,
     paths,
@@ -77,5 +83,6 @@ export async function openApplicationRequest(
     runtime,
     queries,
     devices,
+    systems,
   };
 }
