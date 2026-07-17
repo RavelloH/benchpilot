@@ -15,6 +15,10 @@ export interface OperationOutcome {
   primaryError?: BenchPilotError;
   cleanupErrors: CleanupError[];
   lockFinalStatus:
-    "not-required" | "released" | "quarantined" | "ownership-lost";
+    | "not-required"
+    | "released"
+    | "quarantined"
+    | "ownership-lost"
+    | "quarantine-failed";
   quarantinedLock?: { lockId: string; reason: Json };
 }

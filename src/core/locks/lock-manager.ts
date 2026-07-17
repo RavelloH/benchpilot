@@ -86,7 +86,9 @@ export class LockManager {
     return (
       record.schema === "benchpilot.lock" &&
       record.version === 2 &&
-      (record.state === "active" || record.state === "quarantined") &&
+      (record.state === "active" ||
+        record.state === "quarantined" ||
+        record.state === "quarantine-failed") &&
       typeof record.lockId === "string" &&
       typeof record.ownerToken === "string" &&
       typeof record.pid === "number" &&
@@ -178,7 +180,10 @@ export class LockManager {
         );
       }
       if (!this.isRecord(holder)) return this.corrupt(id);
-      if (holder.state === "quarantined")
+      if (
+        holder.state === "quarantined" ||
+        holder.state === "quarantine-failed"
+      )
         fail("DEVICE_QUARANTINED", 4, `Resource ${id} is quarantined.`, {
           lockId: id,
           quarantineReason: holder.quarantineReason,
@@ -305,13 +310,37 @@ export class LockManager {
     });
   }
 
+  async markQuarantineFailed(
+    lock: LockRecord,
+    reason: Omit<LockQuarantineReason, "quarantinedAt">,
+  ) {
+    return this.withGuard(lock.lockId, async () => {
+      const current = await readJson<LockRecord>(this.file(lock.lockId));
+      if (!current || current.ownerToken !== lock.ownerToken)
+        return ownershipLost(lock.lockId);
+      const failed: LockRecord = {
+        ...current,
+        state: "quarantine-failed",
+        quarantineReason: {
+          ...reason,
+          quarantinedAt: new Date().toISOString(),
+        },
+      };
+      await atomicJson(this.file(lock.lockId), failed);
+      return failed;
+    });
+  }
+
   async release(lock: LockRecord) {
     let tombstone: string | undefined;
     await this.withGuard(lock.lockId, async () => {
       const existing = await readJson<LockRecord>(this.file(lock.lockId));
       if (!existing) return;
       if (existing.ownerToken !== lock.ownerToken) ownershipLost(lock.lockId);
-      if (existing.state === "quarantined")
+      if (
+        existing.state === "quarantined" ||
+        existing.state === "quarantine-failed"
+      )
         fail("LOCK_QUARANTINED", 4, `Lock is quarantined: ${lock.lockId}`);
       await this.hooks.releaseRead?.(existing);
       const current = await readJson<LockRecord>(this.file(lock.lockId));
@@ -364,7 +393,11 @@ export class LockManager {
       const record = await readJson<LockRecord>(this.file(id));
       if (!record)
         throw new BenchPilotError("LOCK_NOT_FOUND", 3, `Lock not found: ${id}`);
-      if (record.state === "quarantined" && !dangerousQuarantined)
+      if (
+        (record.state === "quarantined" ||
+          record.state === "quarantine-failed") &&
+        !dangerousQuarantined
+      )
         fail(
           "DANGEROUS_CONFIRMATION_REQUIRED",
           7,

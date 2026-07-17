@@ -4,7 +4,7 @@ import type { PhysicalResourceIdentity } from "./lock-identity.js";
 export interface LockRecord {
   schema: "benchpilot.lock";
   version: 2;
-  state: "active" | "quarantined";
+  state: "active" | "quarantined" | "quarantine-failed";
   quarantineReason?: LockQuarantineReason;
   lockId: string;
   identity: PhysicalResourceIdentity;

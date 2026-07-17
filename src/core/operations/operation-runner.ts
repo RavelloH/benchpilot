@@ -256,8 +256,11 @@ export class OperationRunner {
     let dangerousEffectDetails: Json | undefined;
     let approvalFinalStatus: "released" | "consumed" | undefined;
     let lockFinalStatus:
-      "not-required" | "released" | "quarantined" | "ownership-lost" =
-      "not-required";
+      | "not-required"
+      | "released"
+      | "quarantined"
+      | "ownership-lost"
+      | "quarantine-failed" = "not-required";
     let quarantinedLock: { lockId: string; reason: Json } | undefined;
     const controller = new AbortController();
     const timer = setTimeout(() => {
@@ -547,6 +550,25 @@ export class OperationRunner {
       } catch (error: unknown) {
         if ((error as BenchPilotError).kind === "LOCK_OWNERSHIP_LOST")
           lockFinalStatus = "ownership-lost";
+        else if (physicalCleanupUnsafe) {
+          const reason = {
+            kind: "QUARANTINE_FAILED",
+            message: "Lock quarantine failed; manual recovery is required.",
+            cleanupErrors,
+            runId: run?.id,
+          };
+          try {
+            await new LockManager(this.s.paths).markQuarantineFailed(
+              lock,
+              reason,
+            );
+            lockFinalStatus = "quarantine-failed";
+            quarantinedLock = { lockId: lock.lockId, reason };
+            emit("lock.quarantine-failed", { lockId: lock.lockId, reason });
+          } catch {
+            lockFinalStatus = "quarantine-failed";
+          }
+        }
         cleanupErrors.push({
           name: "lock-release",
           critical: true,
