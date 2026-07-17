@@ -191,7 +191,7 @@ export async function main(adapters?: Adapter[]) {
       queries,
       devices,
       systems,
-      configuration,
+      configurationCommands,
       catalog,
     } = scope;
     const configuredLocale = (config.value.cli as Json | undefined)?.locale;
@@ -436,54 +436,26 @@ export async function main(adapters?: Adapter[]) {
         write(fullHelp(["config"]), flags, brief("config", locale));
         return;
       }
-      const sub = parts[1],
-        key = parts[2];
-      if (["get", "explain"].includes(sub) && !key)
-        fail("USAGE_ERROR", 2, `config ${sub} requires <key>.`);
-      if (sub === "get") {
-        const result = queries.getConfiguration(
-          key,
-          commandFlags["show-origin"] === true,
-        );
-        write(result, flags, String(result.value));
-        return;
-      }
-      if (sub === "resolved") {
-        write(queries.resolvedConfiguration(), flags);
-        return;
-      }
-      if (sub === "explain") {
-        write(queries.explainConfiguration(key), flags);
-        return;
-      }
-      if (sub === "validate") {
-        write(
-          queries.validateConfiguration(),
-          flags,
-          "Configuration is valid.",
-        );
-        return;
-      }
-      if (sub === "set" || sub === "unset") {
-        if (!key || (sub === "set" && !parts[3]))
-          fail(
-            "USAGE_ERROR",
-            2,
-            `config ${sub} requires a key${sub === "set" ? " and value" : ""}.`,
-          );
-        write(
-          await configuration.edit({
-            scopes: ["local", "project", "global"].filter(
-              (scope) => commandFlags[scope],
-            ) as Array<"local" | "project" | "global">,
-            key,
-            value: sub === "set" ? parts[3] : undefined,
-          }),
-          flags,
-        );
-        return;
-      }
-      fail("USAGE_ERROR", 2, `Unknown config command: ${sub}`);
+      const outcome = await configurationCommands.execute({
+        action: parts[1]!,
+        key: parts[2],
+        value: parts[3],
+        scopes: ["local", "project", "global"].filter(
+          (scope) => commandFlags[scope],
+        ) as Array<"local" | "project" | "global">,
+        showOrigin: commandFlags["show-origin"] === true,
+      });
+      const value = outcome.data as { value?: unknown };
+      write(
+        outcome.data,
+        flags,
+        outcome.kind === "config.get"
+          ? String(value.value)
+          : outcome.kind === "config.validate"
+            ? "Configuration is valid."
+            : undefined,
+      );
+      return;
     }
     if (parts[0] === "doctor") {
       if (commandFlags.save) {

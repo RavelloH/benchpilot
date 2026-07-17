@@ -28,6 +28,10 @@ import {
   createConfigurationUseCases,
   type ConfigurationUseCases,
 } from "./config/use-case.js";
+import {
+  createConfigurationCommandUseCases,
+  type ConfigurationCommandUseCases,
+} from "./config/command-use-case.js";
 import { CommandCatalog } from "./commands/catalog.js";
 
 export interface ApplicationRequest {
@@ -50,6 +54,7 @@ export interface ApplicationRequestScope {
   devices: DeviceUseCases;
   systems: SystemUseCases;
   configuration: ConfigurationUseCases;
+  configurationCommands: ConfigurationCommandUseCases;
   catalog: CommandCatalog;
 }
 
@@ -90,6 +95,10 @@ export async function openApplicationRequest(
   });
   const systems = createSystemUseCases({ runner, config });
   const configuration = createConfigurationUseCases({ paths, project });
+  const configurationCommands = createConfigurationCommandUseCases(
+    queries,
+    configuration,
+  );
   const catalog = new CommandCatalog({
     async configuredDevices() {
       return queries.listConfiguredDevices().devices.map((device) => ({
@@ -119,6 +128,7 @@ export async function openApplicationRequest(
     devices,
     systems,
     configuration,
+    configurationCommands,
     catalog,
   };
 }

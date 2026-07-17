@@ -14,6 +14,7 @@ import { BenchPilotError, loadConfig, PathService } from "../dist/index.js";
 import { initializeProject } from "../dist/application/init/use-case.js";
 import { CommandCatalog } from "../dist/application/commands/catalog.js";
 import { configurationKeyPaths } from "../dist/application/queries/use-case.js";
+import { ConfigurationCommandUseCases } from "../dist/application/config/command-use-case.js";
 import {
   executeSystemCapability,
   systemCapabilityIntersection,
@@ -151,6 +152,65 @@ test("configuration key selectors expose stable existing leaf paths", () => {
     }),
     ["adapters.demo", "project.name", "project.tags", "version"],
   );
+});
+
+test("configuration command use case owns action validation and mutation input", async () => {
+  const edits = [];
+  const commands = new ConfigurationCommandUseCases(
+    {
+      getConfiguration(key, showOrigin) {
+        return {
+          key,
+          value: "value",
+          origin: showOrigin ? { scope: "local" } : undefined,
+        };
+      },
+      resolvedConfiguration() {
+        return { config: { version: 1 }, origins: {} };
+      },
+      explainConfiguration(key) {
+        return { key, layers: [] };
+      },
+      validateConfiguration() {
+        return { valid: true };
+      },
+    },
+    {
+      async edit(input) {
+        edits.push(input);
+        return { ...input, changed: true };
+      },
+    },
+  );
+  assert.deepEqual(
+    await commands.execute({ action: "get", key: "project.name", scopes: [] }),
+    {
+      kind: "config.get",
+      data: { key: "project.name", value: "value", origin: undefined },
+    },
+  );
+  await assert.rejects(
+    commands.execute({ action: "set", key: "project.name", scopes: [] }),
+    (error) => error instanceof BenchPilotError && error.kind === "USAGE_ERROR",
+  );
+  await assert.rejects(
+    commands.execute({ action: "unknown", scopes: [] }),
+    (error) => error instanceof BenchPilotError && error.kind === "USAGE_ERROR",
+  );
+  const outcome = await commands.execute({
+    action: "set",
+    key: "project.name",
+    value: "Demo",
+    scopes: ["local"],
+  });
+  assert.equal(outcome.kind, "config.set");
+  assert.deepEqual(edits, [
+    {
+      scopes: ["local"],
+      key: "project.name",
+      value: "Demo",
+    },
+  ]);
 });
 
 test("init creates the minimum project files and preserves them on repeat", async () => {
