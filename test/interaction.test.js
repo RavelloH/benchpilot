@@ -7,6 +7,7 @@ import {
   InteractionCancelledError,
   InteractionSession,
 } from "../dist/cli/interaction/prompter.js";
+import { fullHelp, humanFull } from "../dist/cli/help-renderer.js";
 import { assertCatalogCompleteness, t } from "../dist/i18n/index.js";
 
 test("agent detection only accepts fixed environment and file markers", () => {
@@ -59,6 +60,11 @@ test("interaction policy keeps agent identity separate from terminal availabilit
 test("screen catalogs are complete and leave machine protocol out of translation", () => {
   assert.doesNotThrow(assertCatalogCompleteness);
   assert.equal(t("zh-CN", "init.done"), "BenchPilot 项目已初始化。");
+  assert.match(
+    humanFull(["config"], "zh-CN"),
+    /读取、解释、校验并安全编辑配置/,
+  );
+  assert.match(fullHelp(["config"]).summary, /Read, explain/);
 });
 
 test("interactive sessions keep one conversation alive for sequential choices", async () => {

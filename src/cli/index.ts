@@ -41,6 +41,7 @@ const version = "0.0.0";
 export async function main(adapters?: Adapter[]) {
   let parsed;
   let interaction: InteractionSession | undefined;
+  let presentationLocale: Locale = "en";
   try {
     parsed = parse(process.argv.slice(2));
     let parts = [...parsed.path];
@@ -209,6 +210,7 @@ export async function main(adapters?: Adapter[]) {
     const { project, config, runner, runtime, queries } = scope;
     const configuredLocale = (config.value.cli as Json | undefined)?.locale;
     const locale = isLocale(configuredLocale) ? configuredLocale : "en";
+    presentationLocale = locale;
     if (isCommandGroup(parts[0]) && parts.length === 1) {
       const session = interactive(locale, parts);
       const group = parts[0];
@@ -326,7 +328,7 @@ export async function main(adapters?: Adapter[]) {
     }
     if (parts[0] === "config") {
       if (parts.length === 1) {
-        stdout.write(brief("config"));
+        stdout.write(brief("config", locale));
         return;
       }
       const sub = parts[1],
@@ -415,7 +417,7 @@ export async function main(adapters?: Adapter[]) {
     }
     if (parts[0] === "devices") {
       if (parts.length === 1) {
-        stdout.write(brief("devices"));
+        stdout.write(brief("devices", locale));
         return;
       }
       if (parts[1] === "list") {
@@ -535,6 +537,7 @@ export async function main(adapters?: Adapter[]) {
           `\n${humanFull(
             ((err.details as { help?: { path?: string[] } } | undefined)?.help
               ?.path || []) as string[],
+            presentationLocale,
           )}\n`,
         );
     }
