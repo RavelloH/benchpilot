@@ -230,3 +230,20 @@ test("only the presenter owns CLI terminal writes", async () => {
     assert.doesNotMatch(source, /createInterface|node:readline/);
   }
 });
+
+test("only the CLI presentation layer imports screen localization", async () => {
+  const roots = [
+    join(process.cwd(), "src", "application"),
+    join(process.cwd(), "src", "core"),
+    join(process.cwd(), "src", "adapters"),
+  ];
+  for (const root of roots) {
+    const files = (await readdir(root, { recursive: true })).filter((file) =>
+      file.endsWith(".ts"),
+    );
+    for (const file of files) {
+      const source = await readFile(join(root, file), "utf8");
+      assert.doesNotMatch(source, /(?:from|import)\s+["'][^"']*i18n/);
+    }
+  }
+});
