@@ -149,6 +149,24 @@ test("agent approval confirmation is rejected before approval lookup", async () 
   }
 });
 
+test("unknown administrative subcommands are usage errors", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "benchpilot-admin-usage-"));
+  try {
+    for (const args of [
+      ["runs", "unknown"],
+      ["locks", "unknown"],
+      ["approvals", "unknown"],
+    ]) {
+      const error = await run(dir, ...args, "--json").catch(
+        (failure) => failure,
+      );
+      assert.equal(JSON.parse(error.stdout).kind, "USAGE_ERROR");
+    }
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("capability metadata maps long and short aliases back to schema fields", () => {
   const parsed = parse([
     "device",

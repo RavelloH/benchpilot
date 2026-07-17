@@ -58,6 +58,7 @@ export async function handleRuntimeCommand({
       );
       return true;
     }
+    fail("USAGE_ERROR", 2, "Unknown runs command.");
   }
   if (parts[0] === "run" && parts[1]) {
     if (parts.length === 2) {
@@ -82,12 +83,15 @@ export async function handleRuntimeCommand({
       write(fullHelp(["locks"]), flags, brief("locks"));
       return true;
     }
-    if (parts[1] === "list") write(await runtime.listLocks(), flags);
-    else if (parts[1] === "clear-stale") {
+    if (parts[1] === "list") {
+      write(await runtime.listLocks(), flags);
+      return true;
+    }
+    if (parts[1] === "clear-stale") {
       write(await runtime.clearStaleLocks(), flags);
       return true;
     }
-    return true;
+    fail("USAGE_ERROR", 2, "Unknown locks command.");
   }
   if (parts[0] === "lock" && parts[1]) {
     if (parts.length === 2) {
@@ -123,6 +127,8 @@ export async function handleRuntimeCommand({
     write(await runtime.listApprovals(), flags);
     return true;
   }
+  if (parts[0] === "approvals")
+    fail("USAGE_ERROR", 2, "Unknown approvals command.");
   if (parts[0] === "approval" && parts[1]) {
     if (parts.length === 2) {
       write(
