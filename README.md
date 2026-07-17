@@ -18,6 +18,13 @@ The command tree covers configuration, adapters/devices, systems, runs, locks an
 
 Configuration is merged in this order: CLI input, `BENCHPILOT_*`, `--config`, project-local, project `benchpilot.toml`, global config, defaults. Unsafe key segments (`__proto__`, `prototype`, and `constructor`) are rejected; run snapshots redact common credential keys. Global config and persistent state use `~/.benchpilot/` on every platform. `benchpilot init --project-id <id> --project-name <name> --locale <en|zh-CN>` creates a minimal project and a project-local display-language setting; it deliberately does not create a device configuration. Locks and Guards live in the system runtime/temp area and use a hashed physical-resource identity rather than raw device IDs in file names.
 
+Interactive command nodes use menu selections where a value can be discovered.
+They are for humans only: agent identity uses a fixed environment/file marker
+contract, not SSH, TTY, or CI heuristics. Agents should provide complete flags;
+an interactive request returns a structured error in `--json`/`--jsonl` mode.
+The future `benchpilot setup` environment wizard is intentionally not exposed in
+this release.
+
 The bundled Demo Adapter is declarative. It simulates `status`, `info`,
 `build`, `flash`, `reset`, `capture`, and `deploy` through fixed Node scripts
 with `shell: false`; it never contacts hardware or the network. `build` writes
