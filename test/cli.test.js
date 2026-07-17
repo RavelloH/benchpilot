@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFile, spawn } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -14,6 +14,17 @@ async function run(dir, ...args) {
   return exec(process.execPath, [cli, ...args], {
     cwd: dir,
     env: { ...process.env, BENCHPILOT_HOME: path.join(dir, "home") },
+    encoding: "utf8",
+  });
+}
+async function runAgent(dir, ...args) {
+  return exec(process.execPath, [cli, ...args], {
+    cwd: dir,
+    env: {
+      ...process.env,
+      AI_AGENT: "fixture-agent",
+      BENCHPILOT_HOME: path.join(dir, "home"),
+    },
     encoding: "utf8",
   });
 }
@@ -94,6 +105,25 @@ test("root command prints help without starting an interactive session", async (
       { schema: machine.schema, version: machine.version },
       { schema: "benchpilot.help", version: 2 },
     );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("agent init without parameters is rejected without writing project files", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "benchpilot-agent-init-"));
+  try {
+    const human = await runAgent(dir, "init").catch((error) => error);
+    assert.equal(human.code, 2);
+    assert.match(human.stderr, /AGENT_INTERACTION_UNSUPPORTED/);
+    await assert.rejects(access(path.join(dir, "benchpilot.toml")));
+    const machine = await runAgent(dir, "init", "--json").catch(
+      (error) => error,
+    );
+    const result = JSON.parse(machine.stdout);
+    assert.equal(result.kind, "AGENT_INTERACTION_UNSUPPORTED");
+    assert.equal(machine.stderr, "");
+    await assert.rejects(access(path.join(dir, "benchpilot.toml")));
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
