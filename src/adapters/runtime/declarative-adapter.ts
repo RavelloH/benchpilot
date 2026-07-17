@@ -298,29 +298,6 @@ export const createDeclarativeAdapter = (runtime: RuntimeAdapter): Adapter => {
           devices: devices as unknown as Json[],
           diagnostics: detailed.sources as unknown as Json[],
         };
-      if (
-        (probe.may_reset_device === true || probe.destructive === true) &&
-        request.confirmDeviceProbe !== true
-      )
-        throw new BenchPilotError(
-          "ADAPTER_DISCOVERY_PROBE_REQUIRED",
-          7,
-          "This device probe can change hardware state and requires --confirm-device-probe.",
-          false,
-          undefined,
-          [
-            "Repeat with --probe --confirm-device-probe after verifying the device state.",
-          ],
-        );
-      if (probe.may_reset_device === true || probe.destructive === true)
-        throw new BenchPilotError(
-          "ADAPTER_DISCOVERY_PROBE_REQUIRED",
-          7,
-          "Dangerous device probes are disabled until they can run in the controlled Probe Runtime.",
-          false,
-          undefined,
-          ["Use a passive scan or wait for the controlled Probe Runtime."],
-        );
       throw new BenchPilotError(
         "DEVICE_PROBE_CAPABILITY_REQUIRED",
         7,

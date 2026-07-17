@@ -533,7 +533,7 @@ test("device probes cannot execute in the Runtime discovery path", async () => {
     }),
     (error) =>
       error instanceof BenchPilotError &&
-      error.kind === "ADAPTER_DISCOVERY_PROBE_REQUIRED",
+      error.kind === "DEVICE_PROBE_CAPABILITY_REQUIRED",
   );
   await assert.rejects(
     adapter.discover({
@@ -543,7 +543,7 @@ test("device probes cannot execute in the Runtime discovery path", async () => {
     }),
     (error) =>
       error instanceof BenchPilotError &&
-      error.kind === "ADAPTER_DISCOVERY_PROBE_REQUIRED",
+      error.kind === "DEVICE_PROBE_CAPABILITY_REQUIRED",
   );
 });
 

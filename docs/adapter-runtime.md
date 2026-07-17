@@ -1,7 +1,7 @@
 # Declarative Adapter Runtime
 
-BenchPilot executes production adapters from compiled Bundle v1 files in
-`dist/adapters`. The runtime never reads an adapter's TOML files from a user
+BenchPilot executes production adapters from compiled Bundle v2 files in
+`dist/adapters/bundles`. The runtime never reads an adapter's TOML files from a user
 project and resolves the bundle directory relative to its own module, so npm
 installs work from any current directory.
 
@@ -62,12 +62,10 @@ or Core-injected passive USB/network providers; it neither opens a serial port
 nor changes DTR/RTS. Network sources never scan a LAN. A targeted `command`
 source reuses a declared shell-free Tool Action and Parser, with a ten-second
 ceiling, rather than accepting a command string from an adapter.
-An Adapter Probe is never part of an ordinary scan. It is requested explicitly
-with `benchpilot devices scan --probe`; a Probe marked `may_reset_device` or
-`destructive` also requires `--confirm-device-probe`. Probes run without a
-Core Run, accept only the shell-free process executor, and return a redacted
-structured status for each candidate. Doctor always performs passive discovery
-only.
+An Adapter Probe is never part of discovery. Probe declarations are not
+executed by this Runtime; hardware-affecting identification must be exposed as
+a declared Capability so it receives the full Core Run, Lock, approval, and
+cleanup lifecycle. Doctor always performs passive discovery only.
 There is no serial executor or ESP-IDF adapter in this release. Device identity
 uses declared physical fields, then an explicit port fallback. Instance fallback
 is disabled by default and is enabled only by the simulated Demo.

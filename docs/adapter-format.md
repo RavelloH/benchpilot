@@ -10,7 +10,8 @@ added. All identifiers are lowercase kebab-case. Rules cannot contain shell
 command strings or JavaScript expressions.
 
 `adapter:validate` writes diagnostics as JSON to stdout and exits non-zero for
-errors. `adapter:compile` emits deterministic bundles under `dist/adapters`.
+errors. `adapter:compile` emits deterministic Bundle v2 files under
+`dist/adapters/bundles`.
 
 Format v1 is schema-closed: JSON Schema checks fixed structure and primitive
 types, while semantic validation checks cross-file references, tool cycles,
@@ -46,11 +47,10 @@ stable identity is available. The simulated Demo explicitly opts into instance
 fallback.
 
 Device Discovery is passive by default. A `devices.toml` Probe is never run by
-ordinary `devices scan` or Doctor. Users must request it with `--probe`; a
-Probe declaring `may_reset_device` or `destructive` requires the additional
-`--confirm-device-probe` confirmation. The v1 runtime currently allows only a
-shell-free process Action for a Device Probe. It does not open serial ports,
-toggle DTR/RTS, or implement a serial executor.
+ordinary `devices scan` or Doctor, and the Runtime does not execute it through
+`--probe`. Hardware-affecting checks must instead be declared as Capabilities,
+which execute through the Core operation lifecycle. Passive discovery does not
+open serial ports, toggle DTR/RTS, or implement a serial executor.
 
 Discovery sources are `serial`, `usb`, `network`, or `command`. `serial` is a
 passive port-name listing (including a fixed Windows system query); `usb` may
