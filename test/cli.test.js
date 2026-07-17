@@ -123,6 +123,17 @@ test("agent init without parameters is rejected without writing project files", 
     const result = JSON.parse(machine.stdout);
     assert.equal(result.kind, "AGENT_INTERACTION_UNSUPPORTED");
     assert.equal(machine.stderr, "");
+    const stream = await runAgent(dir, "init", "--jsonl").catch(
+      (error) => error,
+    );
+    const events = stream.stdout
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    assert.equal(events.length, 1);
+    assert.equal(events[0].event.type, "command.failed");
+    assert.equal(events[0].data.error.kind, "AGENT_INTERACTION_UNSUPPORTED");
+    assert.equal(stream.stderr, "");
     await assert.rejects(access(path.join(dir, "benchpilot.toml")));
   } finally {
     await rm(dir, { recursive: true, force: true });
