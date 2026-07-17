@@ -1,6 +1,6 @@
 import { fail, type Json } from "../../core.js";
 import type { RuntimeUseCases } from "../../application/runtime/use-case.js";
-import { brief } from "../help-renderer.js";
+import { brief, fullHelp } from "../help-renderer.js";
 import type { Flags } from "../parser.js";
 import { write } from "../output-renderer.js";
 
@@ -24,7 +24,7 @@ export async function handleRuntimeCommand({
 }: RuntimeCommandContext): Promise<boolean> {
   if (parts[0] === "runs") {
     if (parts.length === 1) {
-      process.stdout.write(brief("runs"));
+      write(fullHelp(["runs"]), flags, brief("runs"));
       return true;
     }
     if (parts[1] === "list") {
@@ -61,7 +61,9 @@ export async function handleRuntimeCommand({
   }
   if (parts[0] === "run" && parts[1]) {
     if (parts.length === 2) {
-      process.stdout.write(
+      write(
+        fullHelp(["run"]),
+        flags,
         "benchpilot run <run-id> — Commands: show, logs, artifacts\n",
       );
       return true;
@@ -77,7 +79,7 @@ export async function handleRuntimeCommand({
   }
   if (parts[0] === "locks") {
     if (parts.length === 1) {
-      process.stdout.write(brief("locks"));
+      write(fullHelp(["locks"]), flags, brief("locks"));
       return true;
     }
     if (parts[1] === "list") write(await runtime.listLocks(), flags);
@@ -89,7 +91,9 @@ export async function handleRuntimeCommand({
   }
   if (parts[0] === "lock" && parts[1]) {
     if (parts.length === 2) {
-      process.stdout.write(
+      write(
+        fullHelp(["lock"]),
+        flags,
         "benchpilot lock <lock-id> — Commands: show, clear\n",
       );
       return true;
@@ -112,7 +116,7 @@ export async function handleRuntimeCommand({
     return true;
   }
   if (parts[0] === "approvals" && parts.length === 1) {
-    process.stdout.write(brief("approvals"));
+    write(fullHelp(["approvals"]), flags, brief("approvals"));
     return true;
   }
   if (parts[0] === "approvals" && parts[1] === "list") {
@@ -121,7 +125,9 @@ export async function handleRuntimeCommand({
   }
   if (parts[0] === "approval" && parts[1]) {
     if (parts.length === 2) {
-      process.stdout.write(
+      write(
+        fullHelp(["approval"]),
+        flags,
         "benchpilot approval <approval-id> — Commands: inspect, approve, reject\n",
       );
       return true;

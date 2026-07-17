@@ -105,7 +105,7 @@ export async function main(adapters?: Adapter[]) {
       return;
     }
     if (!parts.length) {
-      stdout.write(brief("root"));
+      write(fullHelp([]), flags, brief("root"));
       return;
     }
     const paths = new PathService();
@@ -346,7 +346,7 @@ export async function main(adapters?: Adapter[]) {
     }
     if (parts[0] === "config") {
       if (parts.length === 1) {
-        stdout.write(brief("config", locale));
+        write(fullHelp(["config"]), flags, brief("config", locale));
         return;
       }
       const sub = parts[1],
@@ -422,7 +422,9 @@ export async function main(adapters?: Adapter[]) {
     if (parts[0] === "adapter" && parts[1]) {
       const adapter = queries.adapterInfo(parts[1]);
       if (parts.length === 2) {
-        stdout.write(
+        write(
+          fullHelp(["adapter"]),
+          flags,
           `benchpilot adapter ${adapter.id} — ${adapter.summary}\n\nCommands: info, doctor\n`,
         );
         return;
@@ -435,7 +437,7 @@ export async function main(adapters?: Adapter[]) {
     }
     if (parts[0] === "devices") {
       if (parts.length === 1) {
-        stdout.write(brief("devices", locale));
+        write(fullHelp(["devices"]), flags, brief("devices", locale));
         return;
       }
       if (parts[1] === "list") {
@@ -472,7 +474,9 @@ export async function main(adapters?: Adapter[]) {
     if (parts[0] === "system" && parts[1]) {
       const system = await systems.describe(parts[1]);
       if (parts.length === 2) {
-        stdout.write(
+        write(
+          fullHelp(["system"]),
+          flags,
           `benchpilot system ${parts[1]} — Configured system\n\nCommands:\n${system.capabilities.map((capability) => `  ${capability.id}`).join("\n")}\n`,
         );
         return;

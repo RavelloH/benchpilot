@@ -89,6 +89,11 @@ test("root command prints help without starting an interactive session", async (
     const result = await run(dir);
     assert.match(result.stdout, /Agent-first device lifecycle CLI/);
     assert.equal(result.stderr, "");
+    const machine = JSON.parse((await run(dir, "--json")).stdout);
+    assert.deepEqual(
+      { schema: machine.schema, version: machine.version },
+      { schema: "benchpilot.help", version: 2 },
+    );
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

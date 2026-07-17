@@ -1,4 +1,3 @@
-import { stdout } from "node:process";
 import type { Json } from "../../core.js";
 import type { DeviceUseCases } from "../../application/devices/use-case.js";
 import {
@@ -25,7 +24,20 @@ export async function handleDeviceCommand({
   if (parts[0] === "device" && parts[1]) {
     const device = await devices.describe(parts[1]);
     if (parts.length === 2) {
-      stdout.write(
+      const help = {
+        schema: "benchpilot.help" as const,
+        version: 2 as const,
+        path: parts,
+        summary: device.adapter.summary,
+        description: device.adapter.summary,
+        options: [],
+        inputSchema: { type: "object" },
+        outputSchema: { type: "object" },
+        safety: { mode: "normal" },
+      };
+      write(
+        help,
+        flags,
         `benchpilot device ${parts[1]} — ${device.adapter.summary}\n\nCommands:\n${device.capabilities
           .map((x) => `  ${x.id.padEnd(17)} ${x.summary}`)
           .join("\n")}\n`,
