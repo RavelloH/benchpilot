@@ -1,0 +1,98 @@
+schema = "benchpilot.adapter.workflows"
+schema_version = 1
+
+[workflows.status]
+timeout = "30s"
+stop_on_failure = true
+[[workflows.status.steps]]
+id = "project"
+uses = "action:status"
+with = {}
+[[workflows.status.steps]]
+id = "python"
+uses = "action:python-version"
+with = {}
+[[workflows.status.steps]]
+id = "idf"
+uses = "action:idf-version"
+with = {}
+
+[workflows.info]
+timeout = "2m"
+stop_on_failure = true
+[[workflows.info.steps]]
+id = "detect"
+uses = "action:detect-esptool"
+with = {}
+[[workflows.info.steps]]
+id = "chip-v5"
+uses = "action:chip-id-v5"
+with = {}
+when = { path = "tool.esptool.probe.major", operator = "equals", value = 5 }
+[[workflows.info.steps]]
+id = "chip-v4"
+uses = "action:chip-id-v4"
+with = {}
+when = { path = "tool.esptool.probe.major", operator = "equals", value = 4 }
+[[workflows.info.steps]]
+id = "mac-v5"
+uses = "action:read-mac-v5"
+with = {}
+when = { path = "tool.esptool.probe.major", operator = "equals", value = 5 }
+[[workflows.info.steps]]
+id = "mac-v4"
+uses = "action:read-mac-v4"
+with = {}
+when = { path = "tool.esptool.probe.major", operator = "equals", value = 4 }
+[[workflows.info.steps]]
+id = "flash-v5"
+uses = "action:flash-id-v5"
+with = {}
+when = { path = "tool.esptool.probe.major", operator = "equals", value = 5 }
+[[workflows.info.steps]]
+id = "flash-v4"
+uses = "action:flash-id-v4"
+with = {}
+when = { path = "tool.esptool.probe.major", operator = "equals", value = 4 }
+
+[workflows.build]
+timeout = "30m"
+stop_on_failure = true
+[[workflows.build.steps]]
+id = "build"
+uses = "action:build"
+with = {}
+[[workflows.build.steps]]
+id = "metadata"
+uses = "action:build-metadata"
+with = {}
+
+[workflows.deploy]
+timeout = "45m"
+stop_on_failure = true
+[[workflows.deploy.steps]]
+id = "build"
+uses = "action:build"
+with = {}
+[[workflows.deploy.steps]]
+id = "flash"
+uses = "action:flash"
+with = {}
+
+[workflows.reset]
+timeout = "2m"
+stop_on_failure = true
+[[workflows.reset.steps]]
+id = "detect"
+uses = "action:detect-esptool"
+with = {}
+[[workflows.reset.steps]]
+id = "reset-v5"
+uses = "action:reset-v5"
+with = {}
+when = { path = "tool.esptool.probe.major", operator = "equals", value = 5 }
+[[workflows.reset.steps]]
+id = "reset-v4"
+uses = "action:reset-v4"
+with = {}
+when = { path = "tool.esptool.probe.major", operator = "equals", value = 4 }

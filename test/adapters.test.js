@@ -55,6 +55,33 @@ test("the adapter template validates and compiles deterministically", async () =
   }
 });
 
+test("capture-script providers allow a composed declared path template", async () => {
+  const root = await mkdtemp(join(tmpdir(), "benchpilot-adapter-"));
+  const adapterRoot = join(root, "complete");
+  try {
+    await cp(complete, adapterRoot, { recursive: true });
+    await writeFile(
+      join(adapterRoot, "environments.toml"),
+      (await readFile(join(adapterRoot, "environments.toml"), "utf8")).replace(
+        "${config.export_script}",
+        "${config.idf_path}/export.sh",
+      ),
+    );
+    await writeFile(
+      join(adapterRoot, "schemas", "config.schema.json"),
+      JSON.stringify({
+        $schema: "https://json-schema.org/draft/2020-12/schema",
+        type: "object",
+        additionalProperties: false,
+        properties: { idf_path: { type: "string" } },
+      }),
+    );
+    assert.deepEqual((await validateAdapter(adapterRoot)).diagnostics, []);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("catalog content contributes to bundle hashes without absolute paths", async () => {
   const root = await mkdtemp(join(tmpdir(), "benchpilot-catalog-"));
   try {
@@ -89,7 +116,7 @@ test("bulk compilation excludes the template and writes the builtin index", asyn
       JSON.parse(await readFile(join(output, "index.json"), "utf8")).map(
         (entry) => entry.id,
       ),
-      ["demo"],
+      ["demo", "esp-idf"],
     );
     await assert.rejects(readFile(join(output, "template.json"), "utf8"));
     await assert.rejects(readFile(join(output, "stale.json"), "utf8"));
@@ -412,7 +439,7 @@ test("template compilation boundary fixture excludes the template bundle", async
       JSON.parse(await readFile(join(output, "index.json"), "utf8")).map(
         (entry) => entry.id,
       ),
-      ["demo"],
+      ["demo", "esp-idf"],
     );
     await assert.rejects(readFile(join(output, fixture.absent), "utf8"));
   } finally {

@@ -134,7 +134,7 @@ test("declarative demo executes build, deploy, and capture", async () => {
     );
     assert.deepEqual(
       adapters.adapters.map((adapter) => adapter.id),
-      ["demo"],
+      ["demo", "esp-idf"],
     );
     const built = JSON.parse(
       (await run(dir, "device", "demo", "build", "--json")).stdout,

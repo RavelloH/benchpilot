@@ -1,0 +1,53 @@
+schema = "benchpilot.adapter.devices"
+schema_version = 1
+
+[discovery]
+enabled = true
+[[discovery.sources]]
+id = "pyserial"
+type = "command"
+action = "discover-ports"
+result = "devices"
+[[discovery.matchers]]
+id = "espressif-vid"
+source = "pyserial"
+field = "vid"
+operator = "equals-ignore-case"
+value = "303A"
+score = 100
+[[discovery.matchers]]
+id = "espressif-description"
+source = "pyserial"
+field = "description"
+operator = "regex"
+value = "(?i)espressif|usb jtag/serial debug unit"
+score = 80
+[[discovery.matchers]]
+id = "stable-serial"
+source = "pyserial"
+field = "serial_number"
+operator = "exists"
+score = 20
+[[discovery.matchers]]
+id = "usb-bridge"
+source = "pyserial"
+field = "description"
+operator = "regex"
+value = "(?i)cp210|ch340|ftdi"
+score = 10
+[discovery.result]
+minimum_score = 10
+
+[identity]
+fields = ["device.serial_number", "device.location", "device.port"]
+allow_port_fallback = true
+allow_instance_fallback = false
+
+[connections.serial]
+enabled = true
+address = "${device.port}"
+baud = "${device.monitor_baud}"
+
+[probe]
+enabled = false
+reason = "Passive discovery intentionally never opens a serial port; use the info capability for an explicitly confirmed esptool connection."

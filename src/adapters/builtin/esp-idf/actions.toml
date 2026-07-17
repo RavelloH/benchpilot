@@ -1,0 +1,279 @@
+schema = "benchpilot.adapter.actions"
+schema_version = 1
+
+[actions.discover-ports]
+type = "process"
+tool = "python"
+cwd = "${project.root}"
+timeout = "10s"
+parser = "discovery-json"
+arguments = [
+  { kind = "literal", value = "-c" },
+  { kind = "literal", value = '''import json
+from serial.tools import list_ports
+def text(value): return value if value is not None else ""
+def hex4(value): return f"{value:04X}" if value is not None else ""
+ports = [{"port": item.device, "description": text(item.description), "hwid": text(item.hwid), "vid": hex4(item.vid), "pid": hex4(item.pid), "serial_number": text(item.serial_number), "manufacturer": text(item.manufacturer), "product": text(item.product), "location": text(item.location)} for item in list_ports.comports()]
+print(json.dumps({"devices": ports}, sort_keys=True))''' }
+]
+
+[actions.status]
+type = "process"
+tool = "python"
+cwd = "${project.root}"
+timeout = "30s"
+parser = "status-json"
+arguments = [
+  { kind = "literal", value = "-c" },
+  { kind = "literal", value = '''import json, os, sys
+root = os.getcwd(); build = os.path.join(root, sys.argv[1])
+target = ""
+sdkconfig = os.path.join(root, "sdkconfig")
+if os.path.isfile(sdkconfig):
+  with open(sdkconfig, encoding="utf-8", errors="replace") as stream:
+    for line in stream:
+      if line.startswith("CONFIG_IDF_TARGET="):
+        target = line.partition("=")[2].strip().strip('"')
+        break
+print(json.dumps({"project": root, "cmake_lists": os.path.isfile(os.path.join(root, "CMakeLists.txt")), "sdkconfig": os.path.isfile(sdkconfig), "target": target, "build_dir": sys.argv[1], "project_description": os.path.isfile(os.path.join(build, "project_description.json")), "flasher_args": os.path.isfile(os.path.join(build, "flasher_args.json"))}, sort_keys=True))''' },
+  { kind = "value", value = "${config.build_dir}" }
+]
+
+[actions.python-version]
+type = "process"
+tool = "python"
+cwd = "${project.root}"
+timeout = "10s"
+parser = "python-version"
+arguments = [{ kind = "literal", value = "--version" }]
+
+[actions.idf-version]
+type = "process"
+tool = "idf"
+cwd = "${project.root}"
+timeout = "15s"
+parser = "idf-version"
+arguments = [{ kind = "literal", value = "--version" }]
+
+[actions.build]
+type = "process"
+tool = "idf"
+cwd = "${project.root}"
+timeout = "30m"
+artifact_set = "build"
+parser = "idf-build"
+arguments = [
+  { kind = "option", flag = "-B", value = "${config.build_dir}" },
+  { kind = "value", value = "-DIDF_TARGET=${config.target}" },
+  { kind = "literal", value = "build" }
+]
+
+[actions.build-metadata]
+type = "process"
+tool = "python"
+cwd = "${project.root}"
+timeout = "30s"
+parser = "metadata-json"
+arguments = [
+  { kind = "literal", value = "-c" },
+  { kind = "literal", value = '''import json, os, sys
+build = os.path.join(os.getcwd(), sys.argv[1])
+def load(name):
+  with open(os.path.join(build, name), encoding="utf-8") as stream: return json.load(stream)
+print(json.dumps({"project_description": load("project_description.json"), "flasher_args": load("flasher_args.json")}, sort_keys=True))''' },
+  { kind = "value", value = "${config.build_dir}" }
+]
+
+[actions.clean]
+type = "process"
+tool = "idf"
+cwd = "${project.root}"
+timeout = "10m"
+arguments = [
+  { kind = "option", flag = "-B", value = "${config.build_dir}" },
+  { kind = "literal", value = "clean" }
+]
+
+[actions.fullclean]
+type = "process"
+tool = "idf"
+cwd = "${project.root}"
+timeout = "10m"
+arguments = [
+  { kind = "option", flag = "-B", value = "${config.build_dir}" },
+  { kind = "literal", value = "fullclean" }
+]
+
+[actions.size]
+type = "process"
+tool = "idf"
+cwd = "${project.root}"
+timeout = "5m"
+parser = "idf-size"
+arguments = [
+  { kind = "option", flag = "-B", value = "${config.build_dir}" },
+  { kind = "literal", value = "size" }
+]
+
+[actions.detect-esptool]
+type = "process"
+tool = "esptool"
+cwd = "${project.root}"
+timeout = "30s"
+parser = "esptool-version"
+arguments = [{ kind = "literal", value = "version" }]
+
+[actions.chip-id-v5]
+type = "process"
+tool = "esptool"
+cwd = "${project.root}"
+timeout = "1m"
+parser = "esptool-info"
+arguments = [
+  { kind = "option", flag = "--chip", value = "${device.chip}" },
+  { kind = "option", flag = "--port", value = "${device.port}" },
+  { kind = "literal", value = "chip-id" }
+]
+
+[actions.chip-id-v4]
+type = "process"
+tool = "esptool"
+cwd = "${project.root}"
+timeout = "1m"
+parser = "esptool-info"
+arguments = [
+  { kind = "option", flag = "--chip", value = "${device.chip}" },
+  { kind = "option", flag = "--port", value = "${device.port}" },
+  { kind = "literal", value = "chip_id" }
+]
+
+[actions.read-mac-v5]
+type = "process"
+tool = "esptool"
+cwd = "${project.root}"
+timeout = "1m"
+parser = "esptool-info"
+arguments = [
+  { kind = "option", flag = "--chip", value = "${device.chip}" },
+  { kind = "option", flag = "--port", value = "${device.port}" },
+  { kind = "literal", value = "read-mac" }
+]
+
+[actions.read-mac-v4]
+type = "process"
+tool = "esptool"
+cwd = "${project.root}"
+timeout = "1m"
+parser = "esptool-info"
+arguments = [
+  { kind = "option", flag = "--chip", value = "${device.chip}" },
+  { kind = "option", flag = "--port", value = "${device.port}" },
+  { kind = "literal", value = "read_mac" }
+]
+
+[actions.flash-id-v5]
+type = "process"
+tool = "esptool"
+cwd = "${project.root}"
+timeout = "1m"
+parser = "esptool-info"
+arguments = [
+  { kind = "option", flag = "--chip", value = "${device.chip}" },
+  { kind = "option", flag = "--port", value = "${device.port}" },
+  { kind = "literal", value = "flash-id" }
+]
+
+[actions.flash-id-v4]
+type = "process"
+tool = "esptool"
+cwd = "${project.root}"
+timeout = "1m"
+parser = "esptool-info"
+arguments = [
+  { kind = "option", flag = "--chip", value = "${device.chip}" },
+  { kind = "option", flag = "--port", value = "${device.port}" },
+  { kind = "literal", value = "flash_id" }
+]
+
+[actions.flash]
+type = "process"
+tool = "idf"
+cwd = "${project.root}"
+timeout = "15m"
+parser = "idf-flash"
+arguments = [
+  { kind = "option", flag = "-B", value = "${config.build_dir}" },
+  { kind = "value", value = "-DIDF_TARGET=${config.target}" },
+  { kind = "option", flag = "-p", value = "${device.port}" },
+  { kind = "option", flag = "-b", value = "${config.flash_baud}" },
+  { kind = "literal", value = "flash" }
+]
+
+[actions.reset-v5]
+type = "process"
+tool = "esptool"
+cwd = "${project.root}"
+timeout = "2m"
+arguments = [
+  { kind = "option", flag = "--chip", value = "${device.chip}" },
+  { kind = "option", flag = "--port", value = "${device.port}" },
+  { kind = "option", flag = "--after", value = "hard-reset" },
+  { kind = "literal", value = "chip-id" }
+]
+
+[actions.reset-v4]
+type = "process"
+tool = "esptool"
+cwd = "${project.root}"
+timeout = "2m"
+arguments = [
+  { kind = "option", flag = "--chip", value = "${device.chip}" },
+  { kind = "option", flag = "--port", value = "${device.port}" },
+  { kind = "option", flag = "--after", value = "hard_reset" },
+  { kind = "literal", value = "chip_id" }
+]
+
+[actions.capture]
+type = "process"
+tool = "python"
+cwd = "${project.root}"
+timeout = "25s"
+parser = "serial-capture"
+arguments = [
+  { kind = "literal", value = "-c" },
+  { kind = "literal", value = '''import sys, time
+import serial
+
+port, baud, duration, max_lines = sys.argv[1], int(sys.argv[2]), float(sys.argv[3]), int(sys.argv[4])
+lines = []
+try:
+  connection = serial.Serial(port=port, baudrate=baud, timeout=0.2, rtscts=False, dsrdtr=False)
+  try:
+    connection.dtr = False
+    connection.rts = False
+  except (AttributeError, serial.SerialException):
+    pass
+  try:
+    deadline = time.monotonic() + duration
+    while time.monotonic() < deadline and len(lines) < max_lines:
+      raw = connection.readline()
+      if not raw:
+        continue
+      line = raw.decode("utf-8", errors="replace").rstrip("\\r\\n")
+      lines.append(line)
+      print(line, flush=True)
+      if "BENCHPILOT_ESP32S3_OK" in line:
+        break
+  finally:
+    connection.close()
+except (OSError, serial.SerialException) as error:
+  print(str(error), file=sys.stderr, flush=True)
+  raise SystemExit(2)
+
+print(f"capture.lines={len(lines)}")
+print(f"capture.marker={'true' if any('BENCHPILOT_ESP32S3_OK' in line for line in lines) else 'false'}")''' },
+  { kind = "value", value = "${device.port}" },
+  { kind = "value", value = "${input.baud}" },
+  { kind = "value", value = "${input.duration_seconds}" },
+  { kind = "value", value = "${input.max_lines}" }
+]

@@ -30,8 +30,8 @@ machine-readable JSON diagnostic result and are not passed to the case runner.
 `test/fixtures/adapters/complete` is a separate, executable conformance fixture:
 it exercises every v1 declaration category and all case-runner types, but is not
 a builtin adapter and is never published. The declarative Demo is the CLI and
-package-test default. ESP-IDF is not part of Format v1 and has not been
-implemented.
+package-test default. The `esp-idf` built-in demonstrates that ESP-IDF can be
+declared within Format v1 without Core branches for vendor tools.
 
 `[extensions.<id>]` uses the same capability declaration shape as standard
 capabilities but is retained as a separate Bundle field. Extensions are routed
@@ -59,3 +59,8 @@ be supplied by a Core provider without adding a native dependency; and
 `command` source must name a declared process Action and a Parser result key
 containing an array of records. It uses normal Tool and Environment resolution,
 has a ten-second maximum, and cannot contain an arbitrary shell command.
+
+Capture-script providers accept a fixed path template, including a safely
+composed path such as `${config.sdk_root}/export.sh`. The Runtime resolves that
+path and passes it as a separate argument to its fixed shell wrapper; adapter
+rules still cannot provide shell source or user-controlled command text.

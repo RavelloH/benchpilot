@@ -1,0 +1,32 @@
+schema = "benchpilot.adapter.tools"
+schema_version = 1
+
+[tools.python]
+description = "Python runtime used by ESP-IDF and passive serial discovery."
+required = true
+discovery = "python"
+[tools.python.launch]
+mode = "direct"
+command = "python"
+prefix_args = []
+environment = "inherit"
+
+[tools.idf]
+description = "ESP-IDF's idf.py frontend, launched through the resolved Python runtime."
+required = true
+discovery = "idf"
+[tools.idf.launch]
+mode = "via-tool"
+tool = "python"
+prefix_args = ["${discovery.path}"]
+environment = "idf"
+
+[tools.esptool]
+description = "esptool module launched through the resolved Python runtime."
+required = false
+discovery = "esptool"
+[tools.esptool.launch]
+mode = "via-tool"
+tool = "python"
+prefix_args = ["-m", "esptool"]
+environment = "inherit"

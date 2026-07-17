@@ -1,0 +1,5 @@
+esptool v5.3.0
+Serial port COM999:
+
+A fatal error occurred: Could not open COM999, the port is busy or doesn't exist.
+(could not open port 'COM999': FileNotFoundError(2, 'The system cannot find the file specified.', None, 2))

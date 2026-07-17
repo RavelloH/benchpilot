@@ -602,13 +602,13 @@ export const validateSemantics = async (
         );
       if (
         item.type === "capture-script" &&
-        (typeof item.script !== "string" || !/^\$\{[^}]+\}$/.test(item.script))
+        (typeof item.script !== "string" || !item.script.trim())
       )
         errors.push(
           diagnostic(
             "ADAPTER_SCHEMA_INVALID",
             "environments.toml",
-            `Capture script for ${key} must be a single path template`,
+            `Capture script for ${key} must be a non-empty path template`,
             undefined,
             adapter.id,
           ),

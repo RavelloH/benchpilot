@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "benchpilot://adapter/esp-idf/outputs",
+  "type": "object",
+  "$defs": {
+    "empty": { "type": "object", "additionalProperties": false },
+    "status": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["project", "python", "idf"],
+      "properties": {
+        "project": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "project",
+            "cmake_lists",
+            "sdkconfig",
+            "target",
+            "build_dir",
+            "project_description",
+            "flasher_args"
+          ],
+          "properties": {
+            "project": { "type": "string" },
+            "cmake_lists": { "type": "boolean" },
+            "sdkconfig": { "type": "boolean" },
+            "target": { "type": "string" },
+            "build_dir": { "type": "string" },
+            "project_description": { "type": "boolean" },
+            "flasher_args": { "type": "boolean" }
+          }
+        },
+        "python": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["version", "major", "minor"],
+          "properties": {
+            "version": { "type": "string" },
+            "major": { "type": "integer" },
+            "minor": { "type": "integer" }
+          }
+        },
+        "idf": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["version", "major"],
+          "properties": {
+            "version": { "type": "string" },
+            "major": { "type": "integer" }
+          }
+        }
+      }
+    },
+    "info": { "type": "object", "additionalProperties": true },
+    "build": { "type": "object", "additionalProperties": true },
+    "size": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["available"],
+      "properties": {
+        "available": { "type": "boolean", "default": true },
+        "flash_code_bytes": { "type": "integer", "minimum": 0 },
+        "flash_data_bytes": { "type": "integer", "minimum": 0 },
+        "ram_bytes": { "type": "integer", "minimum": 0 },
+        "diram_bytes": { "type": "integer", "minimum": 0 },
+        "dram_bytes": { "type": "integer", "minimum": 0 },
+        "iram_bytes": { "type": "integer", "minimum": 0 },
+        "image_bytes": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "capture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lines", "marker"],
+      "properties": {
+        "lines": { "type": "integer", "minimum": 0 },
+        "marker": { "type": "boolean" }
+      }
+    },
+    "reset": { "type": "object", "additionalProperties": true },
+    "deploy": { "type": "object", "additionalProperties": true }
+  }
+}

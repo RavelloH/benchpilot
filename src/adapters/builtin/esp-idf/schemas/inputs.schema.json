@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "benchpilot://adapter/esp-idf/inputs",
+  "type": "object",
+  "$defs": {
+    "empty": { "type": "object", "additionalProperties": false },
+    "capture": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "duration_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20,
+          "default": 10
+        },
+        "baud": {
+          "type": "integer",
+          "minimum": 1200,
+          "maximum": 2000000,
+          "default": 115200
+        },
+        "max_lines": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2000,
+          "default": 2000
+        }
+      }
+    }
+  }
+}

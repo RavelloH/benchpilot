@@ -1,0 +1,148 @@
+schema = "benchpilot.adapter.cases"
+schema_version = 1
+
+[[cases]]
+id = "render-build-windows"
+type = "render-action"
+platform = "windows"
+target = "build"
+context = { project = { root = "C:/work/benchpilot smoke" }, config = { build_dir = "build", target = "esp32s3" } }
+expect = { tool = "idf", cwd = "C:/work/benchpilot smoke", args = ["-B", "build", "-DIDF_TARGET=esp32s3", "build"] }
+
+[[cases]]
+id = "render-flash-linux"
+type = "render-action"
+platform = "linux"
+target = "flash"
+context = { project = { root = "/work/benchpilot-smoke" }, config = { build_dir = "build", target = "esp32s3", flash_baud = 460800 }, device = { port = "/dev/ttyACM0" } }
+expect = { tool = "idf", cwd = "/work/benchpilot-smoke", args = ["-B", "build", "-DIDF_TARGET=esp32s3", "-p", "/dev/ttyACM0", "-b", "460800", "flash"] }
+
+[[cases]]
+id = "render-reset-v5"
+type = "render-action"
+platform = "windows"
+target = "reset-v5"
+context = { project = { root = "C:/work/benchpilot-smoke" }, device = { chip = "esp32s3", port = "COM8" } }
+expect = { tool = "esptool", cwd = "C:/work/benchpilot-smoke", args = ["--chip", "esp32s3", "--port", "COM8", "--after", "hard-reset", "chip-id"] }
+
+[[cases]]
+id = "parse-build-output"
+type = "parse-output"
+platform = "windows"
+target = "idf-build"
+context = {}
+stdout_fixture = "fixtures/build.txt"
+exit_code = 0
+expect = { success = true, result = {}, progress = [{ event = "esp-idf.configure", data = { stage = "Configuring" } }, { event = "esp-idf.build.progress", data = { current = 12, total = 20 } }, { event = "esp-idf.build.artifact", data = { artifact = "application bin" } }] }
+
+[[cases]]
+id = "parse-status-output"
+type = "parse-output"
+platform = "linux"
+target = "status-json"
+context = {}
+stdout_fixture = "fixtures/status.json"
+exit_code = 0
+expect = { success = true, result = { project = "/work/benchpilot-smoke", cmake_lists = true, sdkconfig = true, build_dir = "build", target = "esp32s3", project_description = true, flasher_args = true } }
+
+[[cases]]
+id = "parse-flash-port-busy"
+type = "parse-output"
+platform = "linux"
+target = "idf-flash"
+context = {}
+stderr_fixture = "fixtures/flash-port-busy.txt"
+exit_code = 2
+expect = { success = false, error = { kind = "ESP_DEVICE_PORT_BUSY", retryable = true }, result = {} }
+
+[[cases]]
+id = "parse-flash-serial-permission"
+type = "parse-output"
+platform = "windows"
+target = "idf-flash"
+context = {}
+stderr_fixture = "fixtures/flash-serial-permission.txt"
+exit_code = 2
+expect = { success = false, error = { kind = "ESP_DEVICE_PERMISSION_DENIED", retryable = true }, result = {} }
+
+[[cases]]
+id = "parse-size-output"
+type = "parse-output"
+platform = "windows"
+target = "idf-size"
+context = {}
+stdout_fixture = "fixtures/size.txt"
+exit_code = 0
+expect = { success = true, result = { flash_code_bytes = 65470, flash_data_bytes = 37004, ram_bytes = 47581, diram_bytes = 47581, iram_bytes = 16384, image_bytes = 164011 } }
+
+[[cases]]
+id = "parse-capture-output"
+type = "parse-output"
+platform = "windows"
+target = "serial-capture"
+context = {}
+stdout_fixture = "fixtures/capture.txt"
+exit_code = 0
+expect = { success = true, result = { lines = 3, marker = true }, progress = [{ event = "esp-idf.capture.boot-marker", data = { marker = "BENCHPILOT_ESP32S3_OK" } }] }
+
+[[cases]]
+id = "parse-esptool-v5-info"
+type = "parse-output"
+platform = "windows"
+target = "esptool-info"
+context = {}
+stdout_fixture = "fixtures/esptool-v5-info.txt"
+exit_code = 0
+expect = { success = true, result = { chip = "ESP32-S3", revision = "0.2", mac = "ac:a7:04:e2:5c:c8", flash_manufacturer = "68", flash_device = "4018", flash_size = "16MB" } }
+
+[[cases]]
+id = "parse-esptool-port-missing"
+type = "parse-output"
+platform = "windows"
+target = "esptool-info"
+context = {}
+stdout_fixture = "fixtures/esptool-port-missing.txt"
+exit_code = 2
+expect = { success = false, error = { kind = "ESP_DEVICE_NOT_FOUND", retryable = true }, result = {} }
+
+[[cases]]
+id = "parse-esptool-port-busy"
+type = "parse-output"
+platform = "windows"
+target = "esptool-info"
+context = {}
+stderr_fixture = "fixtures/esptool-port-busy.txt"
+exit_code = 2
+expect = { success = false, error = { kind = "ESP_DEVICE_PORT_BUSY", retryable = true }, result = {} }
+
+[[cases]]
+id = "plan-deploy"
+type = "plan-workflow"
+platform = "macos"
+target = "deploy"
+context = {}
+expect = { steps = ["build", "flash"] }
+
+[[cases]]
+id = "plan-status"
+type = "plan-workflow"
+platform = "windows"
+target = "status"
+context = {}
+expect = { steps = ["project", "python", "idf"] }
+
+[[cases]]
+id = "plan-reset-v5"
+type = "plan-workflow"
+platform = "windows"
+target = "reset"
+context = { tool = { esptool = { probe = { major = 5 } } } }
+expect = { steps = ["detect", "reset-v5"] }
+
+[[cases]]
+id = "plan-build-artifacts"
+type = "resolve-artifacts"
+platform = "linux"
+target = "build"
+context = { config = { build_dir = "build" } }
+expect = { entries = [{ id = "project-description", path = "./build/project_description.json", required = true, multiple = false }, { id = "flasher-args", path = "./build/flasher_args.json", required = true, multiple = false }, { id = "application-elf", glob = "./build/*.elf", required = true, multiple = false }, { id = "application-bin", glob = "./build/*.bin", required = true, multiple = false }, { id = "bootloader-bin", path = "./build/bootloader/bootloader.bin", required = true, multiple = false }, { id = "partition-table-bin", path = "./build/partition_table/partition-table.bin", required = true, multiple = false }, { id = "sdkconfig", path = "./sdkconfig", required = true, multiple = false }] }

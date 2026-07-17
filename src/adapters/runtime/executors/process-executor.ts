@@ -236,7 +236,11 @@ export const executeProcess = async (
       Array.isArray(parsed.error?.recovery)
         ? parsed.error.recovery.map((item) => String(item))
         : [],
-      { exitCode: result.code, signal: result.signal },
+      {
+        exitCode: result.code,
+        signal: result.signal,
+        ...(parsed.error ? { parserKind: String(parsed.error.kind) } : {}),
+      },
     );
   return {
     result: parsed.result,

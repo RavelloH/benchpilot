@@ -1,0 +1,12 @@
+schema = "benchpilot.adapter.manifest"
+schema_version = 1
+id = "esp-idf"
+display_name = "Espressif ESP-IDF"
+adapter_version = "1.0.0"
+vendor = "Espressif"
+description = "Declarative ESP-IDF lifecycle support for Espressif targets, initially validated for ESP32-S3."
+capability_catalog_version = 1
+minimum_benchpilot_version = "0.1.0"
+status = "stable"
+deprecated = false
+tags = ["espressif", "esp-idf", "esp32s3", "hardware"]

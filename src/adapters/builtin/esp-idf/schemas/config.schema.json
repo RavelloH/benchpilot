@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "benchpilot://adapter/esp-idf/config",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "idf_path": { "type": "string", "minLength": 1 },
+    "idf_py_path": { "type": "string", "minLength": 1 },
+    "python_path": { "type": "string", "minLength": 1 },
+    "export_script": { "type": "string", "minLength": 1 },
+    "export_bat_script": { "type": "string", "minLength": 1 },
+    "target": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+$",
+      "default": "esp32s3"
+    },
+    "build_dir": {
+      "type": "string",
+      "pattern": "^(?![\\\\/])(?![A-Za-z]:[\\\\/])(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$))[A-Za-z0-9._/-]+$",
+      "default": "build"
+    },
+    "flash_baud": {
+      "type": "integer",
+      "minimum": 1200,
+      "maximum": 2000000,
+      "default": 460800
+    },
+    "monitor_baud": {
+      "type": "integer",
+      "minimum": 1200,
+      "maximum": 2000000,
+      "default": 115200
+    }
+  }
+}

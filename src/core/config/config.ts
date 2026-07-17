@@ -105,7 +105,7 @@ function envConfig(env: NodeJS.ProcessEnv): {
     names = new Map<string, string>();
   for (const [name, raw] of Object.entries(env))
     if (name.startsWith("BENCHPILOT_") && !["BENCHPILOT_HOME"].includes(name)) {
-      const parts = name.slice(12).toLowerCase().split("__");
+      const parts = name.slice("BENCHPILOT_".length).toLowerCase().split("__");
       if (parts.some(unsafeKey))
         fail(
           "INVALID_CONFIG",

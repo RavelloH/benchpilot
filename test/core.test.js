@@ -21,6 +21,7 @@ import {
   RunManager,
   SchemaValidationError,
   lockIdentity,
+  loadConfig,
   isSupportedNodeVersion,
   LockManager,
   objectSchema,
@@ -92,6 +93,28 @@ test("BENCHPILOT_HOME keeps persistent and runtime paths isolated for tests", ()
   assert.equal(
     paths.runsRoot("project"),
     path.join(root, "state", "projects", "project", "runs"),
+  );
+});
+
+test("BENCHPILOT_ environment configuration preserves the first key segment", async () => {
+  const root = path.join(os.tmpdir(), "benchpilot-env-config");
+  const config = await loadConfig(
+    new PathService(
+      {
+        BENCHPILOT_DEVICES__ESP32S3: '{"adapter":"esp-idf","port":"COM8"}',
+      },
+      process.platform,
+      root,
+      root,
+    ),
+    undefined,
+  );
+  assert.deepEqual(config.value.devices, {
+    esp32s3: { adapter: "esp-idf", port: "COM8" },
+  });
+  assert.equal(
+    config.origins.get("devices.esp32s3.port")?.scope,
+    "environment",
   );
 });
 

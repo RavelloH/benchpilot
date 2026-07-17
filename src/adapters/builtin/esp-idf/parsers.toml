@@ -1,0 +1,523 @@
+schema = "benchpilot.adapter.parsers"
+schema_version = 1
+
+[parsers.python-version]
+mode = "line"
+encoding = "utf8"
+strip_ansi = true
+success_exit_codes = [0]
+[[parsers.python-version.extract]]
+id = "version"
+source = "both"
+type = "regex"
+pattern = "Python (?<version>\\d+\\.\\d+\\.\\d+)"
+target = "version"
+group = "version"
+cast = "string"
+required = true
+[[parsers.python-version.extract]]
+id = "major"
+source = "both"
+type = "regex"
+pattern = "Python (?<major>\\d+)\\."
+target = "major"
+group = "major"
+cast = "integer"
+required = true
+[[parsers.python-version.extract]]
+id = "minor"
+source = "both"
+type = "regex"
+pattern = "Python \\d+\\.(?<minor>\\d+)"
+target = "minor"
+group = "minor"
+cast = "integer"
+required = true
+
+[parsers.idf-version]
+mode = "line"
+encoding = "utf8"
+strip_ansi = true
+success_exit_codes = [0]
+[[parsers.idf-version.extract]]
+id = "version"
+source = "both"
+type = "regex"
+pattern = "ESP-IDF v?(?<version>\\d+\\.\\d+(?:\\.\\d+)?)"
+target = "version"
+group = "version"
+cast = "string"
+required = true
+[[parsers.idf-version.extract]]
+id = "major"
+source = "both"
+type = "regex"
+pattern = "ESP-IDF v?(?<major>[56])\\."
+target = "major"
+group = "major"
+cast = "integer"
+required = true
+
+[parsers.esptool-version]
+mode = "line"
+encoding = "utf8"
+strip_ansi = true
+success_exit_codes = [0]
+[[parsers.esptool-version.extract]]
+id = "version"
+source = "both"
+type = "regex"
+pattern = "esptool v?(?<version>\\d+\\.\\d+(?:\\.\\d+)?)"
+target = "version"
+group = "version"
+cast = "string"
+required = true
+[[parsers.esptool-version.extract]]
+id = "major"
+source = "both"
+type = "regex"
+pattern = "esptool v?(?<major>[45])\\."
+target = "major"
+group = "major"
+cast = "integer"
+required = true
+
+[parsers.discovery-json]
+mode = "json"
+encoding = "utf8"
+strip_ansi = true
+success_exit_codes = [0]
+[[parsers.discovery-json.extract]]
+id = "devices"
+source = "stdout"
+type = "json-pointer"
+pointer = "/devices"
+target = "devices"
+cast = "json"
+required = true
+
+[parsers.status-json]
+mode = "json"
+encoding = "utf8"
+strip_ansi = true
+success_exit_codes = [0]
+[[parsers.status-json.extract]]
+id = "project"
+source = "stdout"
+type = "json-pointer"
+pointer = "/project"
+target = "project"
+cast = "string"
+required = true
+[[parsers.status-json.extract]]
+id = "cmake"
+source = "stdout"
+type = "json-pointer"
+pointer = "/cmake_lists"
+target = "cmake_lists"
+cast = "boolean"
+required = true
+[[parsers.status-json.extract]]
+id = "sdkconfig"
+source = "stdout"
+type = "json-pointer"
+pointer = "/sdkconfig"
+target = "sdkconfig"
+cast = "boolean"
+required = true
+[[parsers.status-json.extract]]
+id = "build-dir"
+source = "stdout"
+type = "json-pointer"
+pointer = "/build_dir"
+target = "build_dir"
+cast = "string"
+required = true
+[[parsers.status-json.extract]]
+id = "target"
+source = "stdout"
+type = "json-pointer"
+pointer = "/target"
+target = "target"
+cast = "string"
+required = true
+[[parsers.status-json.extract]]
+id = "project-description"
+source = "stdout"
+type = "json-pointer"
+pointer = "/project_description"
+target = "project_description"
+cast = "boolean"
+required = true
+[[parsers.status-json.extract]]
+id = "flasher-args"
+source = "stdout"
+type = "json-pointer"
+pointer = "/flasher_args"
+target = "flasher_args"
+cast = "boolean"
+required = true
+
+[parsers.metadata-json]
+mode = "json"
+encoding = "utf8"
+strip_ansi = true
+success_exit_codes = [0]
+[[parsers.metadata-json.extract]]
+id = "project-description"
+source = "stdout"
+type = "json-pointer"
+pointer = "/project_description"
+target = "project_description"
+cast = "json"
+required = true
+[[parsers.metadata-json.extract]]
+id = "flasher-args"
+source = "stdout"
+type = "json-pointer"
+pointer = "/flasher_args"
+target = "flasher_args"
+cast = "json"
+required = true
+
+[parsers.idf-build]
+mode = "line"
+encoding = "utf8"
+strip_ansi = true
+success_exit_codes = [0]
+[[parsers.idf-build.progress]]
+id = "configure"
+source = "both"
+pattern = "(?<stage>CMake|Configuring)"
+event = "esp-idf.configure"
+[parsers.idf-build.progress.fields]
+stage = "string"
+[[parsers.idf-build.progress]]
+id = "build-progress"
+source = "both"
+pattern = "\\[(?<current>\\d+)\\/(?<total>\\d+)\\]"
+event = "esp-idf.build.progress"
+[parsers.idf-build.progress.fields]
+current = "integer"
+total = "integer"
+[[parsers.idf-build.progress]]
+id = "artifact"
+source = "both"
+pattern = "(?<artifact>application\\s+bin|bootloader|partition\\s+table)"
+event = "esp-idf.build.artifact"
+[parsers.idf-build.progress.fields]
+artifact = "string"
+[[parsers.idf-build.errors]]
+id = "project-invalid"
+priority = 100
+source = "both"
+pattern = "(not an ESP-IDF project|CMakeLists\\.txt.*not found)"
+kind = "ESP_IDF_PROJECT_INVALID"
+retryable = false
+recovery = ["Run the command from an ESP-IDF project containing CMakeLists.txt."]
+[[parsers.idf-build.errors]]
+id = "target-mismatch"
+priority = 90
+source = "both"
+pattern = "(IDF_TARGET.*does not match|target.*mismatch)"
+kind = "ESP_TARGET_MISMATCH"
+retryable = false
+recovery = ["Confirm the project target is esp32s3 or update the adapter target configuration."]
+[[parsers.idf-build.errors]]
+id = "build-failed"
+priority = 10
+source = "both"
+pattern = "(Build failed|build failed|ninja: build stopped|error:)"
+kind = "ESP_IDF_BUILD_FAILED"
+retryable = false
+recovery = ["Review the build log and correct the project or ESP-IDF environment."]
+
+[parsers.idf-size]
+mode = "line"
+encoding = "utf8"
+strip_ansi = true
+success_exit_codes = [0]
+[[parsers.idf-size.extract]]
+id = "flash-code"
+source = "both"
+type = "regex"
+pattern = "Flash Code\\s*\\|\\s*(?<flash_code_bytes>\\d+)"
+target = "flash_code_bytes"
+group = "flash_code_bytes"
+cast = "integer"
+required = false
+[[parsers.idf-size.extract]]
+id = "flash-data"
+source = "both"
+type = "regex"
+pattern = "Flash Data\\s*\\|\\s*(?<flash_data_bytes>\\d+)"
+target = "flash_data_bytes"
+group = "flash_data_bytes"
+cast = "integer"
+required = false
+[[parsers.idf-size.extract]]
+id = "ram"
+source = "both"
+type = "regex"
+pattern = "(?:DIRAM|DRAM)\\s*\\|\\s*(?<ram_bytes>\\d+)"
+target = "ram_bytes"
+group = "ram_bytes"
+cast = "integer"
+required = false
+[[parsers.idf-size.extract]]
+id = "diram"
+source = "both"
+type = "regex"
+pattern = "DIRAM\\s*\\|\\s*(?<diram_bytes>\\d+)"
+target = "diram_bytes"
+group = "diram_bytes"
+cast = "integer"
+required = false
+[[parsers.idf-size.extract]]
+id = "dram"
+source = "both"
+type = "regex"
+pattern = "\\|\\s*DRAM\\s*\\|\\s*(?<dram_bytes>\\d+)"
+target = "dram_bytes"
+group = "dram_bytes"
+cast = "integer"
+required = false
+[[parsers.idf-size.extract]]
+id = "iram"
+source = "both"
+type = "regex"
+pattern = "\\|\\s*IRAM\\s*\\|\\s*(?<iram_bytes>\\d+)"
+target = "iram_bytes"
+group = "iram_bytes"
+cast = "integer"
+required = false
+[[parsers.idf-size.extract]]
+id = "image-size"
+source = "both"
+type = "regex"
+pattern = "Total image size:\\s*(?<image_bytes>\\d+)\\s+bytes"
+target = "image_bytes"
+group = "image_bytes"
+cast = "integer"
+required = false
+
+[parsers.idf-flash]
+mode = "line"
+encoding = "utf8"
+strip_ansi = true
+success_exit_codes = [0]
+[[parsers.idf-flash.progress]]
+id = "connecting"
+source = "both"
+pattern = "(?<stage>Serial port|Connecting)"
+event = "esp-idf.flash.connecting"
+[parsers.idf-flash.progress.fields]
+stage = "string"
+[[parsers.idf-flash.progress]]
+id = "writing"
+source = "both"
+pattern = "Writing at (?<address>0x[0-9a-fA-F]+)"
+event = "esp-idf.flash.progress"
+[parsers.idf-flash.progress.fields]
+address = "string"
+[[parsers.idf-flash.progress]]
+id = "verifying"
+source = "both"
+pattern = "(?<stage>Hash of data verified)"
+event = "esp-idf.flash.verifying"
+[parsers.idf-flash.progress.fields]
+stage = "string"
+[[parsers.idf-flash.progress]]
+id = "resetting"
+source = "both"
+pattern = "(?<stage>Hard resetting)"
+event = "esp-idf.flash.resetting"
+[parsers.idf-flash.progress.fields]
+stage = "string"
+[[parsers.idf-flash.errors]]
+id = "port-busy"
+priority = 120
+source = "both"
+pattern = "(Access is denied|access is denied|Resource busy|resource busy|port is busy)"
+kind = "ESP_DEVICE_PORT_BUSY"
+retryable = true
+recovery = ["Close serial monitors or other programs using the port, then retry."]
+[[parsers.idf-flash.errors]]
+id = "permission"
+priority = 110
+source = "both"
+pattern = "(?:(?:[Cc]ould not open port|[Ss]erial port).*?(?:[Pp]ermission denied|[Aa]ccess(?: is)? denied)|(?:[Pp]ermission denied|[Aa]ccess(?: is)? denied).*?(?:COM[0-9]+|/dev/tty))"
+kind = "ESP_DEVICE_PERMISSION_DENIED"
+retryable = true
+recovery = ["Check USB/serial permissions and close applications using the port."]
+[[parsers.idf-flash.errors]]
+id = "device-not-found"
+priority = 80
+source = "both"
+pattern = "(Failed to connect|failed to connect|No serial data received|no serial data received|Could not open.*(COM|tty)|could not open.*(COM|tty))"
+kind = "ESP_DEVICE_NOT_FOUND"
+retryable = true
+recovery = ["Check the port, reconnect the board, then hold BOOT/GPIO0 and tap EN if automatic download mode fails."]
+[[parsers.idf-flash.errors]]
+id = "bootloader"
+priority = 70
+source = "both"
+pattern = "(Bootloader.*not found|bootloader.*not found|No bootloader|no bootloader)"
+kind = "ESP_BOOTLOADER_UNAVAILABLE"
+retryable = false
+recovery = ["Build the project successfully before flashing."]
+[[parsers.idf-flash.errors]]
+id = "verification"
+priority = 60
+source = "both"
+pattern = "(Verification failed|verification failed|Hash of data.*failed|hash of data.*failed)"
+kind = "ESP_FLASH_VERIFICATION_FAILED"
+retryable = true
+recovery = ["Reconnect the board and retry at a lower flash baud rate."]
+[[parsers.idf-flash.errors]]
+id = "flash-failed"
+priority = 10
+source = "both"
+pattern = "(Failed to flash|failed to flash|Fatal error|fatal error)"
+kind = "ESP_FLASH_FAILED"
+retryable = true
+recovery = ["Check the ESP-IDF environment, COM port, USB cable, and BOOT/EN sequence."]
+
+[parsers.esptool-info]
+mode = "line"
+encoding = "utf8"
+strip_ansi = true
+success_exit_codes = [0]
+[[parsers.esptool-info.errors]]
+id = "device-not-found"
+priority = 100
+source = "both"
+pattern = "(doesn't exist|does not exist|FileNotFoundError|No serial data received|Failed to connect|failed to connect)"
+kind = "ESP_DEVICE_NOT_FOUND"
+retryable = true
+recovery = ["Check the port, reconnect the board, then hold BOOT/GPIO0 and tap EN if automatic download mode fails."]
+[[parsers.esptool-info.errors]]
+id = "port-busy"
+priority = 120
+source = "both"
+pattern = "(Access is denied|access is denied|Resource busy|resource busy)"
+kind = "ESP_DEVICE_PORT_BUSY"
+retryable = true
+recovery = ["Close serial monitors or other programs using the port, then retry."]
+[[parsers.esptool-info.errors]]
+id = "permission"
+priority = 110
+source = "both"
+pattern = "(?:(?:[Cc]ould not open port|[Ss]erial port).*?(?:[Pp]ermission denied|[Aa]ccess(?: is)? denied)|(?:[Pp]ermission denied|[Aa]ccess(?: is)? denied).*?(?:COM[0-9]+|/dev/tty))"
+kind = "ESP_DEVICE_PERMISSION_DENIED"
+retryable = true
+recovery = ["Check USB/serial permissions and close applications using the port."]
+
+[parsers.serial-capture]
+mode = "line"
+encoding = "utf8"
+strip_ansi = true
+success_exit_codes = [0]
+[[parsers.serial-capture.errors]]
+id = "port-busy"
+priority = 120
+source = "both"
+pattern = "(port is busy|Access is denied|access is denied|Resource busy|resource busy)"
+kind = "ESP_DEVICE_PORT_BUSY"
+retryable = true
+recovery = ["Close serial monitors or other programs using the port, then retry."]
+[[parsers.serial-capture.errors]]
+id = "permission"
+priority = 110
+source = "both"
+pattern = "(?:(?:[Cc]ould not open port|[Ss]erial port).*?(?:[Pp]ermission denied|[Aa]ccess(?: is)? denied)|(?:[Pp]ermission denied|[Aa]ccess(?: is)? denied).*?(?:COM[0-9]+|/dev/tty))"
+kind = "ESP_DEVICE_PERMISSION_DENIED"
+retryable = true
+recovery = ["Check USB/serial permissions and close applications using the port."]
+[[parsers.serial-capture.errors]]
+id = "device-not-found"
+priority = 100
+source = "both"
+pattern = "(doesn't exist|does not exist|FileNotFoundError|No such file|could not open port)"
+kind = "ESP_DEVICE_NOT_FOUND"
+retryable = true
+recovery = ["Check the port and reconnect the board."]
+[[parsers.serial-capture.extract]]
+id = "lines"
+source = "stdout"
+type = "regex"
+pattern = "capture\\.lines=(?<lines>\\d+)"
+target = "lines"
+group = "lines"
+cast = "integer"
+required = true
+[[parsers.serial-capture.extract]]
+id = "marker"
+source = "stdout"
+type = "regex"
+pattern = "capture\\.marker=(?<marker>true|false)"
+target = "marker"
+group = "marker"
+cast = "boolean"
+required = true
+[[parsers.serial-capture.progress]]
+id = "boot-marker"
+source = "stdout"
+pattern = "(?<marker>BENCHPILOT_ESP32S3_OK)"
+event = "esp-idf.capture.boot-marker"
+[parsers.serial-capture.progress.fields]
+marker = "string"
+[[parsers.esptool-info.extract]]
+id = "chip"
+source = "both"
+type = "regex"
+pattern = "(?:[Cc]hip is|[Cc]hip type:)\\s*(?<chip>ESP32[-A-Z0-9]+)"
+target = "chip"
+group = "chip"
+cast = "string"
+required = false
+[[parsers.esptool-info.extract]]
+id = "revision"
+source = "both"
+type = "regex"
+pattern = "[Rr]evision v?(?<revision>[0-9.]+)"
+target = "revision"
+group = "revision"
+cast = "string"
+required = false
+[[parsers.esptool-info.extract]]
+id = "mac"
+source = "both"
+type = "regex"
+pattern = "(?:MAC|Mac|mac|Base MAC|Base mac).*?(?<mac>[0-9a-fA-F]{2}(?::[0-9a-fA-F]{2}){5})"
+target = "mac"
+group = "mac"
+cast = "string"
+required = false
+[[parsers.esptool-info.extract]]
+id = "flash-manufacturer"
+source = "both"
+type = "regex"
+pattern = "Manufacturer:\\s*(?<flash_manufacturer>[0-9a-fA-F]+)"
+target = "flash_manufacturer"
+group = "flash_manufacturer"
+cast = "string"
+required = false
+[[parsers.esptool-info.extract]]
+id = "flash-device"
+source = "both"
+type = "regex"
+pattern = "Device:\\s*(?<flash_device>[0-9a-fA-F]+)"
+target = "flash_device"
+group = "flash_device"
+cast = "string"
+required = false
+[[parsers.esptool-info.extract]]
+id = "flash-size"
+source = "both"
+type = "regex"
+pattern = "[Dd]etected flash size: (?<flash_size>[^\\r\\n]+)"
+target = "flash_size"
+group = "flash_size"
+cast = "string"
+required = false

@@ -1,0 +1,5 @@
+I (25) main: BENCHPILOT_ESP32S3_OK
+chip=ESP32-S3
+loop=1
+capture.lines=3
+capture.marker=true

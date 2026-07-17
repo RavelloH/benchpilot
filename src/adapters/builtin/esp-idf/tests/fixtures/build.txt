@@ -1,0 +1,4 @@
+Configuring ESP-IDF project
+[12/20] Building C object main.c.obj
+Generating application bin
+Project build complete.

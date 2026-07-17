@@ -1226,17 +1226,57 @@ test(
               {
                 id: "script",
                 type: "capture-script",
-                script,
+                script: "${config.root}/environment.sh",
                 shell: "posix",
                 priority: 1,
               },
             ],
           },
         },
-        {},
+        { config: { root } },
         new AbortController().signal,
       );
       assert.equal(environment.BENCHPILOT_CAPTURED, "ok");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+);
+
+test(
+  "capture-script environments compose Windows script paths without a shell string",
+  { skip: process.platform !== "win32" },
+  async () => {
+    const root = await mkdtemp(
+      join(tmpdir(), "benchpilot-runtime-environment-windows-"),
+    );
+    try {
+      await writeFile(
+        join(root, "environment.cmd"),
+        "@echo off\r\nset BENCHPILOT_CAPTURED=windows\r\n",
+      );
+      const environment = await new EnvironmentResolver({
+        PATH: process.env.PATH,
+      }).resolve(
+        "captured",
+        {
+          captured: {
+            strategy: "first-valid",
+            providers: [
+              {
+                id: "script",
+                type: "capture-script",
+                script: "${config.root}/environment.cmd",
+                shell: "cmd",
+                priority: 1,
+              },
+            ],
+          },
+        },
+        { config: { root } },
+        new AbortController().signal,
+      );
+      assert.equal(environment.BENCHPILOT_CAPTURED, "windows");
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -1510,7 +1550,8 @@ test("process parsing retains tail errors while capture stays bounded", async ()
     (error) =>
       error instanceof AdapterRuntimeError &&
       error.code === "ADAPTER_PARSER_FAILED" &&
-      error.message === "Parser matched tail-error.",
+      error.message === "Parser matched tail-error." &&
+      error.details?.parserKind === "tail-error",
   );
 });
 

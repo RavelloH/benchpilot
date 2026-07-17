@@ -1,8 +1,8 @@
 # BenchPilot
 
-BenchPilot currently ships only the simulated Demo adapter; real hardware adapters are deliberately not included. Runtime requires Node.js >= 22.13. Repository development uses pnpm 11, while package users can install and run the tarball with npm alone.
+BenchPilot ships a simulated Demo adapter and a declarative ESP-IDF adapter for real Espressif hardware. Runtime requires Node.js >= 22.13. Repository development uses pnpm 11, while package users can install and run the tarball with npm alone.
 
-BenchPilot is an agent-friendly, local-first device lifecycle CLI. Version `0.0.0` is the first usable framework release and deliberately supports only the **software-simulated Demo Adapter**. It does not communicate with hardware, serial ports, probes, SSH, or vendor tools. Running the installed package requires Node.js 22.13 or newer. The repository uses pnpm 11 for development and CI; npm package users do not need pnpm.
+BenchPilot is an agent-friendly, local-first device lifecycle CLI. Version `0.0.0` ships the **software-simulated Demo Adapter** and an opt-in ESP-IDF hardware Adapter. The ESP-IDF Adapter only performs hardware operations through declared capabilities, the Operation Runner, Device Locks, and human approval where required. Running the installed package requires Node.js 22.13 or newer. The repository uses pnpm 11 for development and CI; npm package users do not need pnpm.
 
 ## Quick start
 
@@ -23,6 +23,12 @@ The bundled Demo Adapter is declarative. It simulates `status`, `info`,
 with `shell: false`; it never contacts hardware or the network. `build` writes
 its simulated firmware only inside the current Run and registers it as an
 Artifact.
+
+The bundled `esp-idf` Adapter provides passive ESP serial discovery, ESP-IDF
+project lifecycle actions, esptool information and reset operations, and
+approval-protected flashing. It does not implement erase/eFuse/JTAG/OTA or an
+interactive serial monitor. See [ESP-IDF](docs/adapters/esp-idf.md) for setup
+and its opt-in hardware test procedure.
 
 See [architecture](docs/architecture.md), [CLI](docs/cli.md), [configuration](docs/config.md), [adapters](docs/adapters.md), [declarative adapter format](docs/adapter-format.md), [runs](docs/logging-and-runs.md), [locks](docs/locks.md), [safety](docs/safety.md), and [process runner](docs/process-runner.md).
 

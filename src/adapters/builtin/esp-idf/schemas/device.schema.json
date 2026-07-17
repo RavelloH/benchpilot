@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "benchpilot://adapter/esp-idf/device",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["port"],
+  "properties": {
+    "port": { "type": "string", "minLength": 1 },
+    "chip": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+$",
+      "default": "esp32s3"
+    },
+    "serial_number": { "type": "string", "minLength": 1 },
+    "usb_vid": { "type": "string", "pattern": "^[0-9A-Fa-f]{4}$" },
+    "usb_pid": { "type": "string", "pattern": "^[0-9A-Fa-f]{4}$" },
+    "location": { "type": "string", "minLength": 1 },
+    "monitor_baud": { "type": "integer", "minimum": 1200, "maximum": 2000000 }
+  }
+}

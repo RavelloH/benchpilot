@@ -1,0 +1,47 @@
+schema = "benchpilot.adapter.artifacts"
+schema_version = 1
+
+[sets.build]
+base = "."
+[[sets.build.entries]]
+id = "project-description"
+kind = "metadata"
+path = "${config.build_dir}/project_description.json"
+required = true
+multiple = false
+[[sets.build.entries]]
+id = "flasher-args"
+kind = "metadata"
+path = "${config.build_dir}/flasher_args.json"
+required = true
+multiple = false
+[[sets.build.entries]]
+id = "application-elf"
+kind = "firmware"
+glob = "${config.build_dir}/*.elf"
+required = true
+multiple = false
+[[sets.build.entries]]
+id = "application-bin"
+kind = "firmware"
+glob = "${config.build_dir}/*.bin"
+required = true
+multiple = false
+[[sets.build.entries]]
+id = "bootloader-bin"
+kind = "firmware"
+path = "${config.build_dir}/bootloader/bootloader.bin"
+required = true
+multiple = false
+[[sets.build.entries]]
+id = "partition-table-bin"
+kind = "firmware"
+path = "${config.build_dir}/partition_table/partition-table.bin"
+required = true
+multiple = false
+[[sets.build.entries]]
+id = "sdkconfig"
+kind = "configuration"
+path = "sdkconfig"
+required = true
+multiple = false

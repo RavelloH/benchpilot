@@ -1,0 +1,1 @@
+Fatal error: Could not open COM8, the port is busy or doesn't exist.

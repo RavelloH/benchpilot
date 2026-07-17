@@ -1,0 +1,221 @@
+schema = "benchpilot.adapter.capabilities"
+schema_version = 1
+catalog_version = 1
+
+[capabilities.status]
+enabled = true
+handler = "workflow:status"
+input_schema = "empty"
+output_schema = "status"
+creates_run = false
+timeout = "30s"
+lock = "none"
+[capabilities.status.safety]
+mode = "normal"
+[capabilities.status.platforms]
+windows = true
+linux = true
+macos = true
+
+[capabilities.info]
+enabled = true
+handler = "workflow:info"
+input_schema = "empty"
+output_schema = "info"
+creates_run = true
+timeout = "2m"
+lock = "device"
+[capabilities.info.safety]
+mode = "danger-flag"
+flag = "dangerously-info"
+description = "Connects to the target and may toggle DTR/RTS while esptool identifies it."
+[capabilities.info.platforms]
+windows = true
+linux = true
+macos = true
+
+[capabilities.build]
+enabled = true
+handler = "workflow:build"
+input_schema = "empty"
+output_schema = "build"
+creates_run = true
+timeout = "30m"
+lock = "none"
+[capabilities.build.safety]
+mode = "normal"
+[capabilities.build.platforms]
+windows = true
+linux = true
+macos = true
+
+[capabilities.clean]
+enabled = true
+handler = "action:clean"
+input_schema = "empty"
+output_schema = "empty"
+creates_run = false
+timeout = "10m"
+lock = "none"
+[capabilities.clean.safety]
+mode = "normal"
+[capabilities.clean.platforms]
+windows = true
+linux = true
+macos = true
+
+[capabilities.fullclean]
+enabled = true
+handler = "action:fullclean"
+input_schema = "empty"
+output_schema = "empty"
+creates_run = false
+timeout = "10m"
+lock = "none"
+[capabilities.fullclean.safety]
+mode = "danger-flag"
+flag = "dangerously-fullclean"
+description = "Deletes the configured project build directory but never sdkconfig or source files."
+[capabilities.fullclean.platforms]
+windows = true
+linux = true
+macos = true
+
+[capabilities.size]
+enabled = true
+handler = "action:size"
+input_schema = "empty"
+output_schema = "size"
+creates_run = true
+timeout = "5m"
+lock = "none"
+[capabilities.size.safety]
+mode = "normal"
+[capabilities.size.platforms]
+windows = true
+linux = true
+macos = true
+
+[capabilities.flash]
+enabled = true
+handler = "action:flash"
+input_schema = "empty"
+output_schema = "empty"
+creates_run = true
+timeout = "15m"
+lock = "device"
+[capabilities.flash.safety]
+mode = "human-approval"
+flag = "approve-flash"
+description = "This will overwrite the current ESP32-S3 application firmware."
+[capabilities.flash.platforms]
+windows = true
+linux = true
+macos = true
+
+[capabilities.reset]
+enabled = true
+handler = "workflow:reset"
+input_schema = "empty"
+output_schema = "reset"
+creates_run = false
+timeout = "2m"
+lock = "device"
+[capabilities.reset.safety]
+mode = "danger-flag"
+flag = "dangerously-reset"
+description = "Connects with esptool and hard-resets the target after the command."
+[capabilities.reset.platforms]
+windows = true
+linux = true
+macos = true
+
+[capabilities.deploy]
+enabled = true
+handler = "workflow:deploy"
+input_schema = "empty"
+output_schema = "deploy"
+creates_run = true
+timeout = "45m"
+lock = "device"
+[capabilities.deploy.safety]
+mode = "human-approval"
+flag = "approve-deploy"
+description = "This will build and overwrite the current ESP32-S3 application firmware."
+[capabilities.deploy.platforms]
+windows = true
+linux = true
+macos = true
+
+[capabilities.capture]
+enabled = true
+handler = "action:capture"
+input_schema = "capture"
+output_schema = "capture"
+creates_run = true
+timeout = "30s"
+lock = "device"
+[capabilities.capture.safety]
+mode = "danger-flag"
+flag = "dangerously-capture"
+description = "Opens the serial port for a bounded capture; USB serial adapters may reset the target when the port opens."
+[capabilities.capture.platforms]
+windows = true
+linux = true
+macos = true
+
+[capabilities.run]
+enabled = false
+reason = "Interactive ESP-IDF monitor sessions are intentionally outside v1."
+[capabilities.run.platforms]
+windows = false
+linux = false
+macos = false
+
+[capabilities.stop]
+enabled = false
+reason = "No persistent ESP-IDF process is started by v1."
+[capabilities.stop.platforms]
+windows = false
+linux = false
+macos = false
+
+[capabilities.logs]
+enabled = false
+reason = "Interactive log streaming is intentionally outside v1."
+[capabilities.logs.platforms]
+windows = false
+linux = false
+macos = false
+
+[capabilities.sync]
+enabled = false
+reason = "ESP-IDF file synchronization is not part of v1."
+[capabilities.sync.platforms]
+windows = false
+linux = false
+macos = false
+
+[capabilities.test]
+enabled = false
+reason = "ESP-IDF test orchestration is not part of v1."
+[capabilities.test.platforms]
+windows = false
+linux = false
+macos = false
+
+[capabilities.selftest]
+enabled = false
+reason = "No generic board self-test is safe to run without board-specific configuration."
+[capabilities.selftest.platforms]
+windows = false
+linux = false
+macos = false
+
+[capabilities.erase]
+enabled = false
+reason = "Flash erase, eFuse, secure-boot, and encryption operations are intentionally unsupported."
+[capabilities.erase.platforms]
+windows = false
+linux = false
+macos = false

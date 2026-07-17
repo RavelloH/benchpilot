@@ -3,3 +3,5 @@ node_modules
 coverage
 *.tgz
 pnpm-lock.yaml
+test/fixtures/esp-idf/**/build
+test/fixtures/esp-idf/**/sdkconfig

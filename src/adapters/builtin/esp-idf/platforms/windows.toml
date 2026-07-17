@@ -1,0 +1,29 @@
+schema = "benchpilot.adapter.platform"
+schema_version = 1
+platform = "windows"
+
+[overrides.discoveries.python]
+candidates = [
+  { id = "config", type = "config", priority = 100, key = "python_path" },
+  { id = "idf-python-env", type = "environment-path", priority = 90, variable = "IDF_PYTHON_ENV_PATH", append = ["Scripts", "python.exe"] },
+  { id = "path", type = "path", priority = 50, names = ["python.exe", "python"] },
+  { id = "windows-idf-python", type = "glob", priority = 10, patterns = ["C:/Espressif/python_env/idf*_py*_env/Scripts/python.exe"], platforms = { windows = true, linux = false, macos = false } }
+]
+
+[overrides.discoveries.esptool]
+candidates = [
+  { id = "python-module", type = "config", priority = 100, key = "python_path" },
+  { id = "idf-python-env", type = "environment-path", priority = 90, variable = "IDF_PYTHON_ENV_PATH", append = ["Scripts", "python.exe"] },
+  { id = "path", type = "path", priority = 50, names = ["python.exe", "python"] }
+]
+
+[overrides.environments.idf]
+providers = [
+  { id = "active", type = "active", priority = 100, required_variables = ["IDF_PATH", "IDF_PYTHON_ENV_PATH"] },
+  { id = "configured-export", type = "capture-script", priority = 90, script = "${config.export_script}", shell = "powershell" },
+  { id = "configured-export-bat", type = "capture-script", priority = 80, script = "${config.export_bat_script}", shell = "cmd" },
+  { id = "idf-export-ps1", type = "capture-script", priority = 70, script = "${config.idf_path}/export.ps1", shell = "powershell" },
+  { id = "idf-export-bat", type = "capture-script", priority = 60, script = "${config.idf_path}/export.bat", shell = "cmd" },
+  { id = "env-idf-export-ps1", type = "capture-script", priority = 50, script = "${env.IDF_PATH}/export.ps1", shell = "powershell" },
+  { id = "env-idf-export-bat", type = "capture-script", priority = 40, script = "${env.IDF_PATH}/export.bat", shell = "cmd" }
+]
