@@ -10,7 +10,7 @@ import {
 } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { BenchPilotError } from "../dist/index.js";
+import { BenchPilotError, loadConfig, PathService } from "../dist/index.js";
 import { initializeProject } from "../dist/application/init/use-case.js";
 import {
   executeSystemCapability,
@@ -33,6 +33,10 @@ test("init creates the minimum project files and preserves them on repeat", asyn
     assert.match(await readFile(config, "utf8"), /id = "demo"/);
     assert.match(await readFile(local, "utf8"), /locale = "zh-CN"/);
     assert.equal(await readFile(gitignore, "utf8"), "*\n!.gitignore\n");
+    const paths = new PathService({ BENCHPILOT_HOME: path.join(cwd, "home") });
+    const resolved = await loadConfig(paths, await paths.project(cwd));
+    assert.equal(resolved.value.cli.locale, "zh-CN");
+    assert.equal(resolved.origins.get("cli.locale")?.scope, "project-local");
     const before = await readFile(config, "utf8");
     await assert.rejects(
       initializeProject({
