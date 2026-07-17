@@ -149,6 +149,26 @@ test("agent approval confirmation is rejected before approval lookup", async () 
   }
 });
 
+test("init switches human error presentation to the selected locale", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "benchpilot-init-locale-"));
+  try {
+    const error = await run(
+      dir,
+      "init",
+      "--project-id",
+      "1invalid",
+      "--project-name",
+      "项目",
+      "--locale",
+      "zh-CN",
+    ).catch((failure) => failure);
+    assert.match(error.stderr, /用法错误/);
+    await assert.rejects(access(path.join(dir, "benchpilot.toml")));
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("unknown administrative subcommands are usage errors", async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "benchpilot-admin-usage-"));
   try {

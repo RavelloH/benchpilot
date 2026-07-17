@@ -167,6 +167,7 @@ export async function main(adapters?: Adapter[]) {
           throw error;
         }
       }
+      presentationLocale = input.locale;
       const app = createApplication([]);
       write(
         await app.initializeProject({ cwd: process.cwd(), ...input }),
