@@ -8,6 +8,10 @@ import {
   type ResolvedConfig,
 } from "../core.js";
 import { createApplication } from "./application.js";
+import {
+  createRuntimeUseCases,
+  type RuntimeUseCases,
+} from "./runtime/use-case.js";
 
 export interface ApplicationRequest {
   cwd: string;
@@ -23,6 +27,7 @@ export interface ApplicationRequestScope {
   project: { root: string; config: string } | undefined;
   config: ResolvedConfig;
   runner: OperationRunner;
+  runtime: RuntimeUseCases;
 }
 
 /** Builds process-independent request services. CLI supplies only explicit input. */
@@ -41,5 +46,6 @@ export async function openApplicationRequest(
     flags: request.flags,
     eventWriter: request.eventWriter,
   });
-  return { application, paths, project, config, runner };
+  const runtime = createRuntimeUseCases({ paths, project, config });
+  return { application, paths, project, config, runner, runtime };
 }

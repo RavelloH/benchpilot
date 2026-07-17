@@ -158,7 +158,7 @@ export async function main(adapters?: Adapter[]) {
       eventWriter: flags.jsonl ? new EventWriter(stdout) : undefined,
     });
     const { registry } = scope.application;
-    const { project, config, runner } = scope;
+    const { project, config, runner, runtime } = scope;
     if (parts[0] === "config") {
       if (parts.length === 1) {
         stdout.write(brief("config"));
@@ -417,9 +417,7 @@ export async function main(adapters?: Adapter[]) {
         parts,
         flags,
         commandFlags,
-        paths,
-        project,
-        config,
+        runtime,
       })
     )
       return;
