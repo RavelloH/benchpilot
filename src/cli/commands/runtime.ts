@@ -16,6 +16,8 @@ import {
 import { brief } from "../help-renderer.js";
 import type { Flags } from "../parser.js";
 import { write } from "../output-renderer.js";
+import { detectAgent } from "../agent/detector.js";
+import { interactionDecision } from "../interaction/policy.js";
 
 interface RuntimeCommandContext {
   parts: string[];
@@ -196,17 +198,23 @@ export async function handleRuntimeCommand({
       await a.change(parts[1], "rejected");
       write({ id: parts[1], status: "rejected" }, flags);
     } else if (parts[2] === "approve") {
-      if (
-        !stdin.isTTY ||
-        !stdout.isTTY ||
-        process.env.CI ||
-        flags.json ||
-        flags.jsonl
-      )
+      const decision = interactionDecision({
+        agent: detectAgent(),
+        json: flags.json,
+        jsonl: flags.jsonl,
+        stdinIsTTY: stdin.isTTY,
+        stdoutIsTTY: stdout.isTTY,
+        ci: Boolean(process.env.CI),
+      });
+      if (!decision.allowed)
         fail(
-          "INTERACTIVE_APPROVAL_REQUIRED",
+          decision.reason === "agent"
+            ? "AGENT_INTERACTION_UNSUPPORTED"
+            : "INTERACTIVE_APPROVAL_REQUIRED",
           7,
-          "Approval requires an interactive TTY and cannot use JSON output.",
+          decision.reason === "agent"
+            ? "Approval requires a human interactive session and cannot be run by an agent."
+            : "Approval requires an interactive TTY and cannot use machine output.",
         );
       const req = await a.get(parts[1]);
       stdout.write(
