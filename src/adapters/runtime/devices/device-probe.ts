@@ -33,6 +33,13 @@ export const executeDeviceProbe = async (
 ): Promise<DeviceProbeOutcome> => {
   const rules = runtime.rules;
   const probe = object(object(rules.devices).probe);
+  if (probe.may_reset_device === true || probe.destructive === true)
+    throw new AdapterRuntimeError(
+      "ADAPTER_DISCOVERY_PROBE_REQUIRED",
+      "Dangerous device probes require the controlled Probe Runtime.",
+      false,
+      ["Use a passive scan or wait for the controlled Probe Runtime."],
+    );
   const actionId = String(probe.action);
   const action = object(object(rules.actions)[actionId]);
   const parserId = String(probe.parser);
@@ -108,6 +115,17 @@ export const executeDeviceProbe = async (
     object(rules.parsers),
     environment.environment,
     runtime.bundle.id,
+    undefined,
+    undefined,
+    async (current) =>
+      (
+        await environments.resolveDetailed(
+          current.environmentId,
+          object(rules.environments),
+          context,
+          new AbortController().signal,
+        )
+      ).environment,
   );
   for (const current of tool.chain) {
     const toolProbe = probes.get(current.toolId) ?? {};

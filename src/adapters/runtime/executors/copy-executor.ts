@@ -26,9 +26,17 @@ const unsafe = (plan: CopyLaunchPlan, reason: string) =>
     { operation: "copy", from: plan.from, to: plan.to, reason },
   );
 
-const nearestExistingParent = async (target: string): Promise<string> => {
+const throwIfAborted = (signal?: AbortSignal) => {
+  if (signal?.aborted) throw signal.reason ?? new Error("Copy aborted.");
+};
+
+const nearestExistingParent = async (
+  target: string,
+  signal?: AbortSignal,
+): Promise<string> => {
   let current = target;
   while (true) {
+    throwIfAborted(signal);
     if (await lstat(current).catch(() => undefined)) return current;
     const parent = path.dirname(current);
     if (parent === current) return current;
@@ -36,19 +44,25 @@ const nearestExistingParent = async (target: string): Promise<string> => {
   }
 };
 
-const assertNoSourceLinks = async (source: string): Promise<void> => {
+const assertNoSourceLinks = async (
+  source: string,
+  signal?: AbortSignal,
+): Promise<void> => {
+  throwIfAborted(signal);
   const metadata = await lstat(source);
   if (metadata.isSymbolicLink()) throw new Error("source symlink");
   if (!metadata.isDirectory()) return;
   for (const entry of await readdir(source))
-    await assertNoSourceLinks(path.join(source, entry));
+    await assertNoSourceLinks(path.join(source, entry), signal);
 };
 
 export const executeCopy = async (
   plan: CopyLaunchPlan,
   allowedRoots: string[],
   onWrite?: () => void,
+  signal?: AbortSignal,
 ): Promise<Record<string, unknown>> => {
+  throwIfAborted(signal);
   const from = path.resolve(plan.from);
   const to = path.resolve(plan.to);
   const source = await realpath(from).catch(() => undefined);
@@ -58,17 +72,18 @@ export const executeCopy = async (
       real: await realpath(root).catch(() => undefined),
     })),
   );
+  throwIfAborted(signal);
   if (!source || !roots.some((root) => root.real && inside(root.real, source)))
     throw unsafe(plan, "source-outside-allowed-roots");
   if (!roots.some((root) => inside(root.resolved, to)))
     throw unsafe(plan, "destination-outside-allowed-roots");
   try {
-    await assertNoSourceLinks(from);
+    await assertNoSourceLinks(from, signal);
   } catch {
     throw unsafe(plan, "source-contains-symlink");
   }
   const parent = path.dirname(to);
-  const existingParent = await nearestExistingParent(parent);
+  const existingParent = await nearestExistingParent(parent, signal);
   const realExistingParent = await realpath(existingParent).catch(
     () => undefined,
   );
@@ -78,6 +93,7 @@ export const executeCopy = async (
   )
     throw unsafe(plan, "destination-parent-escapes-allowed-roots");
   await mkdir(parent, { recursive: true });
+  throwIfAborted(signal);
   const realParent = await realpath(parent).catch(() => undefined);
   if (
     !realParent ||
@@ -99,6 +115,7 @@ export const executeCopy = async (
   );
   let movedTarget = false;
   try {
+    throwIfAborted(signal);
     onWrite?.();
     await cp(source, temporary, {
       recursive: plan.recursive,
@@ -106,6 +123,7 @@ export const executeCopy = async (
       errorOnExist: true,
       verbatimSymlinks: true,
     });
+    throwIfAborted(signal);
     if (targetMeta && plan.overwrite) {
       // Re-check immediately before moving the existing target. A destination
       // replaced with a link after planning must never be followed or removed.
@@ -114,7 +132,9 @@ export const executeCopy = async (
       await rename(to, backup);
       movedTarget = true;
     }
+    throwIfAborted(signal);
     await rename(temporary, to);
+    throwIfAborted(signal);
     if (movedTarget) await rm(backup, { recursive: true, force: true });
   } catch (error) {
     await rm(temporary, { recursive: true, force: true }).catch(

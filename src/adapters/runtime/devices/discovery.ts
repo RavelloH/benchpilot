@@ -111,7 +111,10 @@ const sourceRecords = async (
 const identityFor = (identity: RuleObject, fields: RuleObject) => {
   for (const field of Array.isArray(identity.fields) ? identity.fields : []) {
     const value = lookup({ device: fields }, String(field));
-    if (value !== undefined && value !== "") return String(value);
+    if (value !== undefined && value !== "")
+      return String(field) === "device.port" && typeof value === "string"
+        ? normalizePortIdentity(value)
+        : String(value);
   }
   return identity.allow_port_fallback === true &&
     typeof fields.port === "string"

@@ -68,6 +68,40 @@ export const inspectSchemaProperties = (
       Array.isArray(schema[key]) ? [schema[key] as unknown[]] : [],
     ),
   );
+  for (const branches of branchSets) {
+    const branchProperties = branches.map((branch) => {
+      const properties = new Map<string, Schema[]>();
+      for (const item of expand(root, branch))
+        for (const [name, property] of Object.entries(object(item.properties)))
+          properties.set(name, [
+            ...(properties.get(name) ?? []),
+            ...expand(root, property),
+          ]);
+      return {
+        properties,
+        required: new Set(
+          expand(root, branch).flatMap((item) =>
+            Array.isArray(item.required) ? item.required.map(String) : [],
+          ),
+        ),
+      };
+    });
+    const shared = [
+      ...(branchProperties[0] ? branchProperties[0].properties.keys() : []),
+    ].filter((name) =>
+      branchProperties.every((branch) => branch.properties.has(name)),
+    );
+    for (const name of shared) {
+      const values = branchProperties.map((branch) =>
+        branch.properties.get(name)!,
+      );
+      if (values.map(stable).some((value) => value !== stable(values[0]!)))
+        continue;
+      candidates.set(name, [...(candidates.get(name) ?? []), ...values[0]!]);
+      if (branchProperties.every((branch) => branch.required.has(name)))
+        required.add(name);
+    }
+  }
   return [...candidates.entries()].flatMap(([name, values]) => {
     for (const branches of branchSets) {
       const branchProperties = branches.map((branch) =>

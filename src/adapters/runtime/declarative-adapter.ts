@@ -48,7 +48,10 @@ const physicalId = (rules: RuleObject, instance: string, device: Json) => {
   const identity = object(object(rules.devices).identity);
   for (const field of Array.isArray(identity.fields) ? identity.fields : []) {
     const value = lookup({ device }, String(field));
-    if (value !== undefined && value !== "") return String(value);
+    if (value !== undefined && value !== "")
+      return String(field) === "device.port" && typeof value === "string"
+        ? normalizePortIdentity(value)
+        : String(value);
   }
   if (identity.allow_port_fallback === true && typeof device.port === "string")
     return normalizePortIdentity(device.port);
@@ -309,6 +312,15 @@ export const createDeclarativeAdapter = (runtime: RuntimeAdapter): Adapter => {
             "Repeat with --probe --confirm-device-probe after verifying the device state.",
           ],
         );
+      if (probe.may_reset_device === true || probe.destructive === true)
+        throw new BenchPilotError(
+          "ADAPTER_DISCOVERY_PROBE_REQUIRED",
+          7,
+          "Dangerous device probes are disabled until they can run in the controlled Probe Runtime.",
+          false,
+          undefined,
+          ["Use a passive scan or wait for the controlled Probe Runtime."],
+        );
       // Probes are deliberately serial. It is conservative but guarantees
       // that duplicate candidates for one physical device never race.
       const probed = [];
@@ -333,6 +345,7 @@ export const createDeclarativeAdapter = (runtime: RuntimeAdapter): Adapter => {
             };
             const locks = new LockManager(context.paths);
             let lock;
+            let lease;
             try {
               lock = await locks.acquire(
                 lockIdentity(identity),
@@ -340,6 +353,7 @@ export const createDeclarativeAdapter = (runtime: RuntimeAdapter): Adapter => {
                 undefined,
                 identity,
               );
+              lease = locks.startHeartbeat(lock, 2_000, 10_000);
               return {
                 ...device,
                 probe: await executeDeviceProbe(
@@ -364,6 +378,7 @@ export const createDeclarativeAdapter = (runtime: RuntimeAdapter): Adapter => {
                 },
               };
             } finally {
+              if (lease) await lease.stop().catch(() => {});
               if (lock) await locks.release(lock).catch(() => {});
             }
           })(),

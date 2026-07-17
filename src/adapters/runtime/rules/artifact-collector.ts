@@ -16,11 +16,23 @@ const inside = (root: string, candidate: string) => {
   return !relative.startsWith("..") && !path.isAbsolute(relative);
 };
 
-const sourcesFor = async (plan: ArtifactPlan, baseRoot: string) => {
+const throwIfAborted = (signal?: AbortSignal) => {
+  if (signal?.aborted)
+    throw signal.reason ?? new Error("Artifact collection aborted.");
+};
+
+const sourcesFor = async (
+  plan: ArtifactPlan,
+  baseRoot: string,
+  signal?: AbortSignal,
+) => {
+  throwIfAborted(signal);
   if ("path" in plan) return [path.resolve(baseRoot, plan.path)];
   const matches: string[] = [];
-  for await (const match of glob(path.resolve(baseRoot, plan.glob)))
+  for await (const match of glob(path.resolve(baseRoot, plan.glob))) {
+    throwIfAborted(signal);
     matches.push(path.resolve(match));
+  }
   return matches.sort((left, right) => left.localeCompare(right));
 };
 
@@ -33,7 +45,9 @@ export const collectArtifacts = async (
   },
   allowedRoots: string[],
   baseRoot = process.cwd(),
+  signal?: AbortSignal,
 ) => {
+  throwIfAborted(signal);
   const maxFileBytes = 512 * 1024 * 1024;
   const maxTotalBytes = 1024 * 1024 * 1024;
   const { plans, unsafe } = planArtifacts(set, context);
@@ -44,6 +58,7 @@ export const collectArtifacts = async (
     );
   const targetRoot = path.join(run.dir, "artifacts");
   await mkdir(targetRoot, { recursive: true });
+  throwIfAborted(signal);
   // On macOS /var is commonly a symlink to /private/var. Sources are
   // canonicalized before registration, so canonicalize the base as well to
   // keep sourceRelativePath portable and inside the declared root.
@@ -59,7 +74,8 @@ export const collectArtifacts = async (
   const names = new Set<string>();
   let totalBytes = 0;
   for (const plan of plans) {
-    const matches = await sourcesFor(plan, baseRoot);
+    throwIfAborted(signal);
+    const matches = await sourcesFor(plan, baseRoot, signal);
     if (!matches.length && plan.required)
       throw new AdapterRuntimeError(
         "ADAPTER_ARTIFACT_MISSING",
@@ -68,6 +84,7 @@ export const collectArtifacts = async (
     const safe: Array<{ source: string; size: number }> = [];
     let rejectedUnsafe = false;
     for (const match of matches) {
+      throwIfAborted(signal);
       const sourceMeta = await lstat(match).catch(() => undefined);
       if (sourceMeta?.isSymbolicLink()) {
         rejectedUnsafe = true;
@@ -79,6 +96,7 @@ export const collectArtifacts = async (
         continue;
       }
       const metadata = await stat(source);
+      throwIfAborted(signal);
       if (metadata.isFile()) safe.push({ source, size: Number(metadata.size) });
     }
     if (!safe.length && plan.required) {
@@ -98,6 +116,7 @@ export const collectArtifacts = async (
         `Artifact matched multiple files: ${String(plan.id)}`,
       );
     for (const [index, { source, size }] of safe.entries()) {
+      throwIfAborted(signal);
       if (size > maxFileBytes || totalBytes + size > maxTotalBytes)
         throw new AdapterRuntimeError(
           "ADAPTER_ARTIFACT_TOO_LARGE",
@@ -125,8 +144,10 @@ export const collectArtifacts = async (
           errorOnExist: true,
           verbatimSymlinks: true,
         });
+        throwIfAborted(signal);
         await rename(temporary, destination);
         copied = true;
+        throwIfAborted(signal);
         const record = await registry.register({
           name,
           kind: "adapter-output",
@@ -137,6 +158,7 @@ export const collectArtifacts = async (
             sourceSize: size,
           },
         });
+        throwIfAborted(signal);
         artifacts.push(record);
       } catch (error) {
         await rm(temporary, { force: true }).catch(() => undefined);

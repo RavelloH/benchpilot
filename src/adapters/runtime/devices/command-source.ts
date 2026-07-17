@@ -85,6 +85,17 @@ export const executeDeviceCommandSource = async (
     context,
     new AbortController().signal,
   );
+  (context.environment as Record<string, RuleObject>)[tool.environmentId] = {
+    providerId: environment.providerId,
+    strategy: environment.strategy,
+    source: environment.source,
+    variables: Object.fromEntries(
+      Object.entries(environment.environment).map(([key, value]) => [
+        key,
+        value === undefined ? undefined : "[RESOLVED]",
+      ]),
+    ),
+  };
   const probes = await tools.probeChain(
     tool,
     object(runtime.rules.discoveries),
@@ -92,6 +103,17 @@ export const executeDeviceCommandSource = async (
     object(runtime.rules.parsers),
     environment.environment,
     runtime.bundle.id,
+    undefined,
+    undefined,
+    async (current) =>
+      (
+        await environments.resolveDetailed(
+          current.environmentId,
+          object(runtime.rules.environments),
+          context,
+          new AbortController().signal,
+        )
+      ).environment,
   );
   for (const current of tool.chain) {
     const probe = probes.get(current.toolId) ?? {};

@@ -291,6 +291,7 @@ export class ToolResolver {
     adapterId: string,
     signal?: AbortSignal,
     debugLog?: (message: string) => void,
+    environmentFor?: (tool: ResolvedTool) => Promise<NodeJS.ProcessEnv>,
   ): Promise<Map<string, RuleObject>> {
     const results = new Map<string, RuleObject>();
     for (const current of tool.chain) {
@@ -299,7 +300,9 @@ export class ToolResolver {
         discoveries,
         context,
         parsers,
-        environment,
+        environmentFor
+          ? await environmentFor(current as ResolvedTool)
+          : environment,
         adapterId,
         signal,
         debugLog,

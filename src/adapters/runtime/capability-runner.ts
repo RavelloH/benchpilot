@@ -1,5 +1,7 @@
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { randomUUID } from "node:crypto";
+import { mkdir, rm } from "node:fs/promises";
 import type { OperationContext } from "../../core/operations/types.js";
 import type { Json } from "../../core/config/config.js";
 import { executeCopy } from "./executors/copy-executor.js";
@@ -66,7 +68,15 @@ const abortAfter = async <T>(
         }, timeoutMs)
       : undefined;
   try {
-    return await execute(controller.signal);
+    const result = await execute(controller.signal);
+    if (signal.aborted) throw signal.reason ?? new Error("Action aborted.");
+    if (timedOut)
+      throw new AdapterRuntimeError(
+        "ADAPTER_ACTION_TIMEOUT",
+        "Adapter action timed out.",
+        true,
+      );
+    return result;
   } catch (error) {
     if (signal.aborted) throw signal.reason ?? error;
     if (timedOut)
@@ -97,6 +107,7 @@ export class DeclarativeCapabilityRunner {
   private readonly validator: AdapterDataValidator;
   private readonly environments = new EnvironmentResolver();
   private readonly tools = new ToolResolver(runtimePlatform(), process.env);
+  private operationTemp?: string;
 
   constructor(
     private readonly adapter: RuntimeAdapter,
@@ -112,6 +123,15 @@ export class DeclarativeCapabilityRunner {
     operation: OperationContext,
     input: Json,
   ): Promise<Json> {
+    if (!operation.run) {
+      this.operationTemp = path.join(operation.stateRoot, "tmp", randomUUID());
+      await mkdir(this.operationTemp, { recursive: true });
+      operation.registerCleanup(
+        "adapter-operation-temp",
+        () => rm(this.operationTemp!, { recursive: true, force: true }),
+        { critical: false, holdsPhysicalResource: false },
+      );
+    }
     const inputDefinition = String(capability.input_schema);
     const outputDefinition = String(capability.output_schema);
     const validatedInput = this.validator.validate(
@@ -132,7 +152,7 @@ export class DeclarativeCapabilityRunner {
       input: validatedInput,
       project: { root: operation.project?.root ?? process.cwd() },
       home: process.env.HOME ?? process.env.USERPROFILE ?? "",
-      temp: tmpdir(),
+      temp: this.operationTemp ?? tmpdir(),
       env: process.env,
       run: operation.run
         ? { dir: operation.run.dir, id: operation.run.id }
@@ -273,6 +293,15 @@ export class DeclarativeCapabilityRunner {
             this.adapter.bundle.id,
             actionSignal,
             (message) => operation.logger.debug(redactor.redactText(message)),
+            async (current) =>
+              (
+                await this.environments.resolveDetailed(
+                  current.environmentId,
+                  object(this.adapter.rules.environments),
+                  actionContext,
+                  actionSignal,
+                )
+              ).environment,
           );
           this.writeToolProbes(context, tool, probes);
           const probe = probes.get(tool.toolId) ?? {};
@@ -364,6 +393,7 @@ export class DeclarativeCapabilityRunner {
                   actionType: "copy",
                 })
             : undefined,
+          signal,
         );
       return executeUnsupportedSerial();
     })();
@@ -388,6 +418,7 @@ export class DeclarativeCapabilityRunner {
         { register: (record) => operation.registerArtifact(record) },
         this.allowedRoots(operation),
         plan.kind === "process" ? plan.cwd : operation.run.dir,
+        signal,
       );
     }
     if (!retainActionResult) actionContext.result = previousResult;
@@ -478,7 +509,7 @@ export class DeclarativeCapabilityRunner {
       path.join(operation.stateRoot, "adapters", this.adapter.bundle.id),
       ...(operation.run
         ? [path.join(operation.run.dir, "tmp")]
-        : [path.join(operation.stateRoot, "tmp", "operation")]),
+        : [this.operationTemp ?? path.join(operation.stateRoot, "tmp")]),
       ...(operation.run ? [operation.run.dir] : []),
     ].map((value) => path.resolve(value));
   }

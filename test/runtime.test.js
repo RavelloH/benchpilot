@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   mkdtemp,
+  lstat,
   mkdir,
   readFile,
   readdir,
@@ -509,10 +510,12 @@ test("device probes require explicit confirmation and run without a Core Run", a
       },
     },
   };
-  assert.deepEqual(await executeDeviceProbe(runtime, {}, { port: "COM8" }), {
-    ok: true,
-    result: { port: "COM8" },
-  });
+  await assert.rejects(
+    executeDeviceProbe(runtime, {}, { port: "COM8" }),
+    (error) =>
+      error instanceof AdapterRuntimeError &&
+      error.code === "ADAPTER_DISCOVERY_PROBE_REQUIRED",
+  );
   const adapter = createDeclarativeAdapter(runtime);
   await assert.rejects(
     adapter.discover({
@@ -524,15 +527,16 @@ test("device probes require explicit confirmation and run without a Core Run", a
       error instanceof BenchPilotError &&
       error.kind === "ADAPTER_DISCOVERY_PROBE_REQUIRED",
   );
-  const scanned = await adapter.discover({
-    adapterConfig: {},
-    paths: new PathService(),
-    discovery: { probe: true, confirmDeviceProbe: true },
-  });
-  assert.deepEqual(scanned[0].probe, {
-    ok: true,
-    result: { port: "COM8" },
-  });
+  await assert.rejects(
+    adapter.discover({
+      adapterConfig: {},
+      paths: new PathService(),
+      discovery: { probe: true, confirmDeviceProbe: true },
+    }),
+    (error) =>
+      error instanceof BenchPilotError &&
+      error.kind === "ADAPTER_DISCOVERY_PROBE_REQUIRED",
+  );
 });
 
 test("tool discovery honors priority and rejects an invalid explicit path", async () => {
@@ -687,6 +691,26 @@ test("secret redaction, schema inspection, and capture boundaries are safe", asy
   assert.deepEqual(
     inspectSchemaProperties(root, { allOf: [{ $ref: "#/$defs/common" }] }),
     [{ name: "token", schema: { type: "array" }, required: true }],
+  );
+  assert.deepEqual(
+    inspectSchemaProperties(
+      {},
+      {
+        oneOf: [
+          {
+            type: "object",
+            properties: { port: { type: "string" } },
+            required: ["port"],
+          },
+          {
+            type: "object",
+            properties: { port: { type: "string" } },
+            required: ["port"],
+          },
+        ],
+      },
+    ),
+    [{ name: "port", schema: { type: "string" }, required: true }],
   );
   const controller = new AbortController();
   const capture = await runProcess({
@@ -1308,6 +1332,27 @@ test("copy actions stay inside their allowed roots", async () => {
       { from: await realpath(source), to: target, copied: true },
     );
     assert.equal(await readFile(target, "utf8"), "copy me");
+    const aborted = new AbortController();
+    aborted.abort({ kind: "timeout" });
+    await assert.rejects(
+      executeCopy(
+        {
+          kind: "copy",
+          from: source,
+          to: join(root, "aborted.txt"),
+          recursive: false,
+          overwrite: false,
+          timeoutMs: 1_000,
+        },
+        [root],
+        undefined,
+        aborted.signal,
+      ),
+    );
+    assert.equal(
+      await lstat(join(root, "aborted.txt")).catch(() => undefined),
+      undefined,
+    );
     await assert.rejects(
       executeCopy(
         {
