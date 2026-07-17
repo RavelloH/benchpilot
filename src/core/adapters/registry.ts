@@ -102,29 +102,17 @@ export class AdapterRegistry {
     });
   }
 
-  async discover(
-    adapter: Adapter,
-    config: Json,
-    paths: PathService,
-    discovery?: { probe: boolean; confirmDeviceProbe: boolean },
-  ) {
+  async discover(adapter: Adapter, config: Json, paths: PathService) {
     return adapter.discover({
       adapterConfig: this.configFor(adapter, config),
       paths,
-      discovery,
     });
   }
 
-  async discoverDetailed(
-    adapter: Adapter,
-    config: Json,
-    paths: PathService,
-    discovery?: { probe: boolean; confirmDeviceProbe: boolean },
-  ) {
+  async discoverDetailed(adapter: Adapter, config: Json, paths: PathService) {
     const context = {
       adapterConfig: this.configFor(adapter, config),
       paths,
-      discovery,
     };
     return adapter.discoverDetailed
       ? adapter.discoverDetailed(context)

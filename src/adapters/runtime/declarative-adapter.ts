@@ -290,22 +290,10 @@ export const createDeclarativeAdapter = (runtime: RuntimeAdapter): Adapter => {
             ),
         },
       );
-      let devices = detailed.devices;
-      const request = context.discovery;
-      const probe = object(object(runtime.rules.devices).probe);
-      if (request?.probe !== true || probe.enabled !== true)
-        return {
-          devices: devices as unknown as Json[],
-          diagnostics: detailed.sources as unknown as Json[],
-        };
-      throw new BenchPilotError(
-        "DEVICE_PROBE_CAPABILITY_REQUIRED",
-        7,
-        "Device probes must run as declared capabilities through the Operation Runner.",
-        false,
-        undefined,
-        ["Use passive scan or configure a dedicated probe capability."],
-      );
+      return {
+        devices: detailed.devices as unknown as Json[],
+        diagnostics: detailed.sources as unknown as Json[],
+      };
     },
     async doctor(context: AdapterContext) {
       const checks: Json[] = [

@@ -441,7 +441,7 @@ test("command device discovery uses a Tool Action and parsed records", async () 
   );
 });
 
-test("device probes cannot execute in the Runtime discovery path", async () => {
+test("adapter discovery accepts only passive context", async () => {
   const platform = process.platform === "win32" ? "windows" : "linux";
   const runtime = {
     bundle: {
@@ -525,25 +525,13 @@ test("device probes cannot execute in the Runtime discovery path", async () => {
     },
   };
   const adapter = createDeclarativeAdapter(runtime);
-  await assert.rejects(
-    adapter.discover({
-      adapterConfig: {},
-      paths: new PathService(),
-      discovery: { probe: true, confirmDeviceProbe: false },
-    }),
-    (error) =>
-      error instanceof BenchPilotError &&
-      error.kind === "DEVICE_PROBE_CAPABILITY_REQUIRED",
-  );
-  await assert.rejects(
-    adapter.discover({
-      adapterConfig: {},
-      paths: new PathService(),
-      discovery: { probe: true, confirmDeviceProbe: true },
-    }),
-    (error) =>
-      error instanceof BenchPilotError &&
-      error.kind === "DEVICE_PROBE_CAPABILITY_REQUIRED",
+  const devices = await adapter.discover({
+    adapterConfig: {},
+    paths: new PathService(),
+  });
+  assert.deepEqual(
+    devices.map((device) => device.fields),
+    [{ port: "COM8" }],
   );
 });
 
@@ -1050,7 +1038,7 @@ test("doctor probes every tool with its declared environment", async () => {
   );
 });
 
-test("requested probes are rejected without acquiring a lock or launching a process", async () => {
+test("passive discovery never launches a declared probe action", async () => {
   const root = await mkdtemp(join(tmpdir(), "benchpilot-probe-lease-loss-"));
   const started = join(root, "probe-started");
   try {
@@ -1110,16 +1098,13 @@ test("requested probes are rejected without acquiring a lock or launching a proc
         parsers: { probe: { success_exit_codes: [0] } },
       },
     };
-    await assert.rejects(
-      createDeclarativeAdapter(runtime).discoverDetailed({
+    const discovered = await createDeclarativeAdapter(runtime).discoverDetailed(
+      {
         adapterConfig: {},
         paths: new PathService({ BENCHPILOT_HOME: root }),
-        discovery: { probe: true, confirmDeviceProbe: true },
-      }),
-      (error) =>
-        error instanceof BenchPilotError &&
-        error.kind === "DEVICE_PROBE_CAPABILITY_REQUIRED",
+      },
     );
+    assert.equal(discovered.devices.length, 1);
     assert.equal(existsSync(started), false);
   } finally {
     await rm(root, { recursive: true, force: true });
