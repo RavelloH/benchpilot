@@ -12,13 +12,12 @@ export function interactionDecision(input: {
   jsonl?: boolean;
   stdinIsTTY?: boolean;
   stdoutIsTTY?: boolean;
-  ci?: boolean;
 }): InteractionDecision {
   if (input.agent)
     return { allowed: false, reason: "agent", agent: input.agent };
   if (input.json || input.jsonl)
     return { allowed: false, reason: "machine-output" };
-  if (!input.stdinIsTTY || !input.stdoutIsTTY || input.ci)
+  if (!input.stdinIsTTY || !input.stdoutIsTTY)
     return { allowed: false, reason: "terminal-unavailable" };
   return { allowed: true };
 }

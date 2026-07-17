@@ -48,6 +48,15 @@ test("interaction policy keeps agent identity separate from terminal availabilit
       .reason,
     "machine-output",
   );
+  assert.deepEqual(
+    interactionDecision({
+      stdinIsTTY: true,
+      stdoutIsTTY: true,
+      // CI is not a caller-identity signal.
+      ci: true,
+    }),
+    { allowed: true },
+  );
   assert.equal(
     interactionDecision({
       agent: { kind: "agent", name: "Agent", marker: "AI_AGENT" },

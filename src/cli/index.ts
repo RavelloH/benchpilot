@@ -50,7 +50,6 @@ export async function main(adapters?: Adapter[]) {
         jsonl: flags.jsonl,
         stdinIsTTY: stdin.isTTY,
         stdoutIsTTY: stdout.isTTY,
-        ci: Boolean(process.env.CI),
       });
       if (!decision.allowed) {
         const kind =
@@ -133,7 +132,6 @@ export async function main(adapters?: Adapter[]) {
           jsonl: flags.jsonl,
           stdinIsTTY: stdin.isTTY,
           stdoutIsTTY: stdout.isTTY,
-          ci: Boolean(process.env.CI),
         });
         if (!decision.allowed) {
           const kind =
