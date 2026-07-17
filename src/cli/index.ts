@@ -467,6 +467,7 @@ export async function main(adapters?: Adapter[]) {
         flags,
         rawOptions,
         devices,
+        catalog,
       })
     )
       return;
@@ -484,6 +485,7 @@ export async function main(adapters?: Adapter[]) {
         );
         return;
       }
+      await catalog.executable(["system", parts[1], parts[2]]);
       const result = await systems.execute(parts[1], parts[2]);
       if (!flags.jsonl) write(result, flags);
       return;

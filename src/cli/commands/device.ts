@@ -1,5 +1,6 @@
 import type { Json } from "../../core.js";
 import type { DeviceUseCases } from "../../application/devices/use-case.js";
+import type { CommandCatalog } from "../../application/commands/catalog.js";
 import {
   capabilityInput,
   optionEnabled,
@@ -13,6 +14,7 @@ interface DeviceCommandContext {
   flags: Flags;
   rawOptions: RawOption[];
   devices: DeviceUseCases;
+  catalog: CommandCatalog;
 }
 
 export async function handleDeviceCommand({
@@ -20,6 +22,7 @@ export async function handleDeviceCommand({
   flags,
   rawOptions,
   devices,
+  catalog,
 }: DeviceCommandContext): Promise<boolean> {
   if (parts[0] === "device" && parts[1]) {
     const device = await devices.describe(parts[1]);
@@ -68,6 +71,7 @@ export async function handleDeviceCommand({
       write(help, flags, `${definition.id} — ${definition.summary}\n`);
       return true;
     }
+    await catalog.executable(["device", parts[1], capability]);
     const input = capabilityInput(
       rawOptions,
       definition.options || [],

@@ -1,3 +1,4 @@
+import { fail } from "../../core.js";
 import type { CommandNode } from "./contracts.js";
 
 export interface DynamicCommandCatalogSource {
@@ -82,6 +83,51 @@ export class CommandCatalog {
       );
     }
     return [];
+  }
+
+  /**
+   * Resolves a command immediately before execution. Dynamic nodes are read
+   * again instead of trusting a menu choice or an argv path parsed earlier.
+   */
+  async executable(path: readonly string[]): Promise<CommandNode> {
+    const [group, instance, capability] = path;
+    if (group !== "device" && group !== "system")
+      fail("USAGE_ERROR", 2, `Command is not executable: ${path.join(" ")}.`);
+    if (!instance)
+      fail(
+        "USAGE_ERROR",
+        2,
+        `${group} execution requires a configured ${group} instance.`,
+      );
+    const instances = await this.children([group]);
+    const instanceNode = instances.find((node) => node.path[1] === instance);
+    if (!instanceNode)
+      fail(
+        group === "device" ? "DEVICE_NOT_FOUND" : "SYSTEM_NOT_FOUND",
+        3,
+        `${group === "device" ? "Device" : "System"} not found: ${instance}`,
+      );
+    const configuredInstance = instanceNode as CommandNode;
+    if (configuredInstance.availability === "unavailable")
+      fail(
+        configuredInstance.unavailableReasonCode || "COMMAND_UNAVAILABLE",
+        3,
+        `${group} is unavailable: ${instance}`,
+      );
+    if (!capability)
+      fail("USAGE_ERROR", 2, `${group} execution requires a capability.`);
+    const node = (await this.children([group, instance])).find(
+      (candidate) => candidate.path[2] === capability,
+    );
+    if (!node)
+      fail(
+        group === "device"
+          ? "UNSUPPORTED_CAPABILITY"
+          : "SYSTEM_CAPABILITY_UNAVAILABLE",
+        3,
+        `Capability ${capability} is unavailable for ${group} ${instance}.`,
+      );
+    return node as CommandNode;
   }
 }
 

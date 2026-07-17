@@ -50,6 +50,35 @@ test("command catalog derives device and system choices without executing operat
   assert.equal(capabilityQueries, 1);
 });
 
+test("command catalog reloads dynamic capabilities before execution", async () => {
+  let current = ["status"];
+  const catalog = new CommandCatalog({
+    async configuredDevices() {
+      return [{ id: "device-a" }];
+    },
+    async configuredSystems() {
+      return [];
+    },
+    async deviceCapabilities() {
+      return current.map((id) => ({ id, summary: id }));
+    },
+    async systemCapabilities() {
+      return [];
+    },
+  });
+  assert.equal(
+    (await catalog.executable(["device", "device-a", "status"])).handler,
+    "device.execute",
+  );
+  current = [];
+  await assert.rejects(
+    catalog.executable(["device", "device-a", "status"]),
+    (error) =>
+      error instanceof BenchPilotError &&
+      error.kind === "UNSUPPORTED_CAPABILITY",
+  );
+});
+
 test("init creates the minimum project files and preserves them on repeat", async () => {
   const cwd = await mkdtemp(path.join(os.tmpdir(), "benchpilot-init-"));
   try {
