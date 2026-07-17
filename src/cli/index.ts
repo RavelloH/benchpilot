@@ -14,6 +14,7 @@ import {
 } from "../core.js";
 import { loadBuiltinAdapters } from "../adapters/runtime/builtin-adapters.js";
 import { createApplication } from "../application/application.js";
+import { openApplicationRequest } from "../application/request-scope.js";
 import {
   brief,
   commandGroups,
@@ -148,25 +149,16 @@ export async function main(adapters?: Adapter[]) {
       );
       return;
     }
-    const project = await paths.project(
-      process.cwd(),
-      flags.config as string | undefined,
-    );
-    const config = await loadConfig(
-      paths,
-      project,
-      flags.config as string | undefined,
-    );
     const declared = adapters ?? (await loadBuiltinAdapters());
-    const { registry } = createApplication(declared);
-    const runner = new OperationRunner({
-      paths,
-      registry,
-      config,
-      project,
+    const scope = await openApplicationRequest({
+      cwd: process.cwd(),
+      configPath: flags.config as string | undefined,
       flags,
+      adapters: declared,
       eventWriter: flags.jsonl ? new EventWriter(stdout) : undefined,
     });
+    const { registry } = scope.application;
+    const { project, config, runner } = scope;
     if (parts[0] === "config") {
       if (parts.length === 1) {
         stdout.write(brief("config"));

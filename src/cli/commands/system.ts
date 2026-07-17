@@ -4,8 +4,9 @@ import {
   type Json,
   type OperationRunner,
 } from "../../core.js";
-import { systemCapabilities } from "../help-renderer.js";
+import { executeSystemCapability } from "../../application/systems/use-case.js";
 
+/** @deprecated CLI compatibility bridge; orchestration lives in Application. */
 export async function systemOperation(
   name: string,
   operation: string,
@@ -24,78 +25,46 @@ export async function systemOperation(
     system: name,
     operation,
   });
-  const execute = (device: string, capability: string) =>
-    runner.execute(
-      device,
-      capability,
-      {},
-      {
-        eventScope: "child",
-        eventContext: { system: name, device },
-      },
-    );
+  if (operation === "info") {
+    const result = { system: name, devices };
+    runner.emitSystemEvent("system.operation.completed", { result });
+    return result;
+  }
+  const capability =
+    operation === "smoke"
+      ? "selftest"
+      : operation === "collect"
+        ? "capture"
+        : operation === "emergency-stop"
+          ? "stop"
+          : operation;
   try {
-    let result: Json;
-    if (operation === "info")
-      result = { system: name, devices, operations: systemCapabilities };
-    else if (operation === "status") {
-      const settled = await Promise.allSettled(
-        devices.map((device) => execute(device, "status")),
-      );
-      const results = settled.map((entry, index) =>
-        entry.status === "fulfilled"
-          ? { device: devices[index], result: entry.value }
-          : {
-              device: devices[index],
-              error: {
-                kind:
-                  entry.reason instanceof BenchPilotError
-                    ? entry.reason.kind
-                    : "INTERNAL_ERROR",
-                message: (entry.reason as Error).message,
-              },
-            },
-      );
-      result = { system: name, results };
-      if (settled.some((entry) => entry.status === "rejected"))
-        throw new BenchPilotError(
+    const result = await executeSystemCapability({
+      system: name,
+      capability,
+      devices,
+      runner,
+    });
+    if (result.results.some((item) => !item.ok))
+      throw Object.assign(
+        new BenchPilotError(
           "SYSTEM_OPERATION_FAILED",
           5,
-          `System status failed: ${name}`,
+          `System operation failed: ${name}`,
           false,
           undefined,
           [],
-          { system: name, results },
-        );
-    } else if (operation === "emergency-stop") {
-      const results = [];
-      for (const device of devices)
-        try {
-          results.push({ device, result: await execute(device, "stop") });
-        } catch (error) {
-          results.push({ device, error: (error as Error).message });
-        }
-      result = { system: name, results };
-    } else {
-      const capability =
-        operation === "smoke"
-          ? "selftest"
-          : operation === "collect"
-            ? "capture"
-            : "deploy";
-      const results = [];
-      for (const device of [...devices].sort())
-        results.push({ device, result: await execute(device, capability) });
-      result = { system: name, operation, results };
-    }
+          { result },
+        ),
+        { result },
+      );
     runner.emitSystemEvent("system.operation.completed", { result });
-    return result;
+    return result as unknown as Json;
   } catch (error) {
     runner.emitSystemEvent("system.operation.failed", {
-      error:
-        error instanceof BenchPilotError
-          ? { kind: error.kind, message: error.message, details: error.details }
-          : { message: (error as Error).message },
+      error: (error as { result?: Json }).result ?? {
+        message: (error as Error).message,
+      },
     });
     throw Object.assign(error as Error, { jsonlTerminalEmitted: true });
   }
