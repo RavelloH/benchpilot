@@ -20,6 +20,7 @@ import type {
   OperationServices,
 } from "./types.js";
 import { runCleanupWithGrace } from "./cleanup.js";
+import { OperationSession } from "./operation-session.js";
 import { atomicJson } from "../utilities/atomic-json.js";
 import { sha } from "../utilities/stable-json.js";
 import { RunManager } from "../runs/run-manager.js";
@@ -294,6 +295,8 @@ export class OperationRunner {
       id: String((this.s.config.value.project as Json | undefined)?.id || ""),
       root: this.s.project?.root,
     });
+    const session = new OperationSession(command);
+    session.transition("prepared");
     const runManager = new RunManager(this.s.paths, projectKey);
     const run = capability.createsRun
       ? await new RunManager(this.s.paths, projectKey).create(command, {
@@ -402,6 +405,7 @@ export class OperationRunner {
     let approvalLoss = new Promise<never>(() => {});
     let capabilityStageStarted = false;
     try {
+      session.transition("running");
       emit("operation.started", { command, runId: run?.id });
       if (capability.lockMode === "exclusive") {
         emit("lock.acquiring", { lockId });
@@ -572,6 +576,7 @@ export class OperationRunner {
     clearTimeout(timer);
     process.removeListener("SIGINT", onSigint);
     process.removeListener("SIGTERM", onSigterm);
+    session.transition("cleaning");
     emit("cleanup.started");
     for (const cleanup of cleanups.reverse()) {
       try {
@@ -783,6 +788,7 @@ export class OperationRunner {
       quarantinedLock,
     };
     if (run) await runManager.finalize(run, outcome.status, outcome.result);
+    session.transition("finalized");
     if (outcome.primaryError) {
       if (options.eventScope === "child")
         eventWriter?.emit("device.operation.failed", { error: outcome.result });

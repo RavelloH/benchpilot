@@ -26,6 +26,7 @@ import {
   LockManager,
   objectSchema,
   OperationRunner,
+  OperationSession,
   redactResolvedConfig,
   readJson,
   runProcess,
@@ -33,6 +34,21 @@ import {
   setKey,
   stringSchema,
 } from "../dist/index.js";
+
+test("operation sessions only allow the lifecycle order", () => {
+  const session = new OperationSession("device.fixture");
+  assert.equal(session.state, "created");
+  session.transition("prepared");
+  session.transition("running");
+  session.transition("cleaning");
+  session.transition("finalized");
+  assert.throws(
+    () => session.transition("running"),
+    (error) =>
+      error instanceof BenchPilotError &&
+      error.kind === "OPERATION_SESSION_STATE_INVALID",
+  );
+});
 
 const exec = promisify(execFile);
 

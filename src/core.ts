@@ -61,6 +61,8 @@ export type {
   OperationExecutionOptions,
 } from "./core/operations/types.js";
 export { runCleanupWithGrace } from "./core/operations/cleanup.js";
+export { OperationSession } from "./core/operations/operation-session.js";
+export type { OperationSessionState } from "./core/operations/operation-session.js";
 export {
   abortPromise,
   abortReasonToError,
