@@ -32,6 +32,28 @@ test("agent detection only accepts fixed environment and file markers", () => {
     undefined,
   );
   assert.equal(
+    detectAgent({
+      env: { CLAUDECODE: "1", CODEX_THREAD_ID: "thread" },
+      fileExists: () => false,
+    }).name,
+    "Claude Code",
+  );
+  assert.equal(
+    detectAgent({ env: { CODEX_THREAD_ID: "" }, fileExists: () => false }),
+    undefined,
+  );
+  assert.equal(
+    detectAgent({
+      env: { AI_AGENT: "generic", AGENT: "goose" },
+      fileExists: () => false,
+    }).name,
+    "Goose",
+  );
+  assert.equal(
+    detectAgent({ env: { AGENT: "custom" }, fileExists: () => false }).name,
+    "AI agent",
+  );
+  assert.equal(
     detectAgent({ env: { CODEX_THREAD_ID: "abc" }, fileExists: () => false })
       .kind,
     "agent",
