@@ -10,7 +10,7 @@ import {
 } from "../runtime/planning/action-planner.js";
 import { planWorkflow } from "../runtime/planning/workflow-planner.js";
 import { planArtifacts } from "../runtime/rules/artifacts.js";
-import { parseOutput } from "../runtime/rules/parser.js";
+import { parseOutput } from "../contract/rules.js";
 import { object, renderTemplate } from "../runtime/rules/template.js";
 
 export const runCases = async (
