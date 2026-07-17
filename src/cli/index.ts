@@ -202,6 +202,26 @@ export async function main(adapters?: Adapter[]) {
         value,
         label: t(locale, `menu.action.${value}`),
       }));
+    const chooseExistingConfigurationKey = async (
+      session: InteractionSession,
+    ) => {
+      const keys = queries.configurationKeys().keys;
+      if (!keys.length)
+        fail("CONFIG_KEY_NOT_FOUND", 3, "No configured keys are available.");
+      return session.choose(keys.map((value) => ({ value })));
+    };
+    const completeConfigSet = async (session: InteractionSession) => {
+      const keyMode = await session.choose([
+        { value: "existing", label: t(locale, "menu.config.existing") },
+        { value: "new", label: t(locale, "menu.config.new") },
+      ]);
+      return [
+        keyMode === "existing"
+          ? await chooseExistingConfigurationKey(session)
+          : await session.value(t(locale, "menu.field.key")),
+        await session.value(t(locale, "menu.field.value")),
+      ];
+    };
     if (isCommandGroup(parts[0]) && parts.length === 1) {
       const session = interactive(locale, parts);
       const group = parts[0];
@@ -217,30 +237,9 @@ export async function main(adapters?: Adapter[]) {
           ]),
         );
         parts.push(sub);
-        const existingKey = async () => {
-          const keys = queries.configurationKeys().keys;
-          if (!keys.length)
-            fail(
-              "CONFIG_KEY_NOT_FOUND",
-              3,
-              "No configured keys are available.",
-            );
-          return session.choose(keys.map((value) => ({ value })));
-        };
         if (["get", "unset", "explain"].includes(sub))
-          parts.push(await existingKey());
-        if (sub === "set") {
-          const keyMode = await session.choose([
-            { value: "existing", label: t(locale, "menu.config.existing") },
-            { value: "new", label: t(locale, "menu.config.new") },
-          ]);
-          parts.push(
-            keyMode === "existing"
-              ? await existingKey()
-              : await session.value(t(locale, "menu.field.key")),
-          );
-          parts.push(await session.value(t(locale, "menu.field.value")));
-        }
+          parts.push(await chooseExistingConfigurationKey(session));
+        if (sub === "set") parts.push(...(await completeConfigSet(session)));
       } else if (group === "runs") {
         const sub = await session.choose(menuChoices(["list", "prune"]));
         parts.push(sub);
@@ -360,6 +359,77 @@ export async function main(adapters?: Adapter[]) {
         );
       }
     }
+    // A known parent plus an omitted action is an incomplete command. Continue
+    // the same interactive flow instead of degrading to a static help screen.
+    if (
+      parts[0] === "config" &&
+      parts.length === 2 &&
+      ["get", "unset", "explain", "set"].includes(parts[1]!)
+    ) {
+      const session = interactive(locale, parts);
+      if (["get", "unset", "explain"].includes(parts[1]!))
+        parts.push(await chooseExistingConfigurationKey(session));
+      else if (parts[1] === "set")
+        parts.push(...(await completeConfigSet(session)));
+    }
+    if (parts[0] === "adapter" && parts.length === 2)
+      parts.push(
+        await interactive(locale, parts).choose(
+          menuChoices(["info", "doctor"]),
+        ),
+      );
+    if (parts[0] === "device" && parts.length === 2) {
+      const session = interactive(locale, parts);
+      const capabilities = await catalog.children(["device", parts[1]!]);
+      if (!capabilities.length)
+        fail(
+          "UNSUPPORTED_CAPABILITY",
+          3,
+          "No device capabilities are available.",
+        );
+      parts.push(
+        await session.choose(
+          capabilities.map((capability) => ({
+            value: String(capability.path[2]),
+            label: `${capability.path[2]} — ${capability.summaryKey}`,
+          })),
+        ),
+      );
+    }
+    if (parts[0] === "system" && parts.length === 2) {
+      const session = interactive(locale, parts);
+      const capabilities = await catalog.children(["system", parts[1]!]);
+      if (!capabilities.length)
+        fail(
+          "SYSTEM_CAPABILITY_UNAVAILABLE",
+          3,
+          "No system capabilities are available.",
+        );
+      parts.push(
+        await session.choose(
+          capabilities.map((capability) => ({
+            value: String(capability.path[2]),
+            label: `${capability.path[2]} — ${capability.summaryKey}`,
+          })),
+        ),
+      );
+    }
+    if (parts[0] === "run" && parts.length === 2)
+      parts.push(
+        await interactive(locale, parts).choose(
+          menuChoices(["show", "logs", "artifacts"]),
+        ),
+      );
+    if (parts[0] === "lock" && parts.length === 2)
+      parts.push(
+        await interactive(locale, parts).choose(menuChoices(["show", "clear"])),
+      );
+    if (parts[0] === "approval" && parts.length === 2)
+      parts.push(
+        await interactive(locale, parts).choose(
+          menuChoices(["inspect", "approve", "reject"]),
+        ),
+      );
     if (parts[0] === "config") {
       if (parts.length === 1) {
         write(fullHelp(["config"]), flags, brief("config", locale));

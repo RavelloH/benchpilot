@@ -160,6 +160,21 @@ test("agent approval confirmation is rejected before approval lookup", async () 
   }
 });
 
+test("agent cannot use an incomplete nested command as an interactive probe", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "benchpilot-agent-device-"));
+  try {
+    await initDemo(dir);
+    const error = await runAgent(dir, "device", "demo", "--json").catch(
+      (failure) => failure,
+    );
+    const result = JSON.parse(error.stdout);
+    assert.equal(result.kind, "AGENT_INTERACTION_UNSUPPORTED");
+    assert.equal(error.stderr, "");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("init switches human error presentation to the selected locale", async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "benchpilot-init-locale-"));
   try {
