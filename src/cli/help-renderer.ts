@@ -121,14 +121,6 @@ export function humanFull(parts: string[]) {
   return `NAME\n  benchpilot ${parts.join(" ")} — ${help.summary}\n\nSYNOPSIS\n  benchpilot ${parts.join(" ")} [OPTIONS]\n\nDESCRIPTION\n  ${help.description}\n\nWORKFLOW\n  Configuration → adapter → capability → operation runner → run record.\n\nARGUMENTS\n  See command path.\n\nOPTIONS\n  ${globalOptions.join("\n  ")}\n\nCONFIGURATION\n  global, project, local, explicit file and BENCHPILOT_* variables are merged.\n\nOUTPUT\n  Human summary by default; --json result or --jsonl structured events.\n\nSAFETY\n  ${JSON.stringify(help.safety)}\n\nEXIT CODES\n  0 success; 2 usage; 3 configuration/resource; 4 lock; 5 operation; 6 timeout; 7 safety; 8 internal.\n\nERROR KINDS\n  ${help.errors.join(", ")}\n\nEXAMPLES\n  ${help.examples.join("\n  ")}\n\nSEE ALSO\n  benchpilot help --all\n`;
 }
 
-export const systemCapabilities = [
-  "info",
-  "status",
-  "deploy",
-  "smoke",
-  "collect",
-  "emergency-stop",
-];
 export const commandGroups = Object.keys(groups);
 export const isCommandGroup = (name: string | undefined) =>
   Boolean(name && groups[name]);

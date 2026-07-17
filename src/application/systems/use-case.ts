@@ -20,6 +20,48 @@ export interface SystemOperationResult {
   results: SystemMemberOutcome[];
 }
 
+export interface SystemCapabilityDescriptor {
+  id: string;
+  summary: string;
+  lockMode: string;
+  safety: Json;
+}
+
+/** Returns only capabilities that are declared consistently by every member. */
+export async function systemCapabilityIntersection(input: {
+  devices: string[];
+  runner: OperationRunner;
+}): Promise<SystemCapabilityDescriptor[]> {
+  const members = await Promise.all(
+    [...input.devices].sort().map(async (device) => ({
+      device,
+      capabilities: await input.runner.listCapabilities(device),
+    })),
+  );
+  if (!members.length) return [];
+  const first = members[0]!.capabilities;
+  return first
+    .filter((candidate) =>
+      members.every((member) => {
+        const match = member.capabilities.find(
+          (item) => item.id === candidate.id,
+        );
+        return (
+          match &&
+          match.lockMode === candidate.lockMode &&
+          JSON.stringify(match.safety) === JSON.stringify(candidate.safety)
+        );
+      }),
+    )
+    .map((candidate) => ({
+      id: candidate.id,
+      summary: candidate.summary,
+      lockMode: candidate.lockMode,
+      safety: candidate.safety as unknown as Json,
+    }))
+    .sort((left, right) => left.id.localeCompare(right.id));
+}
+
 /** A system is a capability intersection; every child still enters OperationRunner. */
 export async function executeSystemCapability(input: {
   system: string;
@@ -29,6 +71,22 @@ export async function executeSystemCapability(input: {
   capabilityInput?: Json;
   policy?: SystemExecutionPolicy;
 }): Promise<SystemOperationResult> {
+  const available = await systemCapabilityIntersection(input);
+  if (!available.some((candidate) => candidate.id === input.capability))
+    throw new BenchPilotError(
+      "SYSTEM_CAPABILITY_UNAVAILABLE",
+      3,
+      `Capability ${input.capability} is not safely available on every system member.`,
+      false,
+      undefined,
+      [],
+      {
+        system: input.system,
+        capability: input.capability,
+        devices: [...input.devices].sort(),
+        available: available.map((candidate) => candidate.id),
+      },
+    );
   const policy =
     input.policy ??
     (input.capability === "status" ? "parallel" : "serial-fail-fast");

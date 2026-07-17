@@ -38,6 +38,32 @@ const object = (value: unknown): value is Json =>
 
 export class OperationRunner {
   constructor(private s: OperationServices) {}
+
+  /**
+   * Read-only capability catalog for application planning.  It creates the
+   * adapter runtime but never creates a Run, lock, approval, or device action.
+   */
+  async listCapabilities(instance: string) {
+    const raw = (this.s.config.value.devices as Json | undefined)?.[instance];
+    if (!object(raw))
+      fail("DEVICE_NOT_FOUND", 3, `Device not found: ${instance}`);
+    const device = raw as Json;
+    const adapter = this.s.registry.get(String(device.adapter));
+    const runtime = await this.s.registry.createDevice(
+      adapter,
+      instance,
+      device,
+      this.s.config.value,
+      this.s.paths,
+    );
+    return runtime.capabilities().map((capability) => ({
+      id: capability.id,
+      summary: capability.summary,
+      lockMode: capability.lockMode,
+      safety: capability.safety,
+    }));
+  }
+
   async execute(
     instance: string,
     capabilityId: string,

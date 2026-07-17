@@ -4,7 +4,15 @@ import {
   type Json,
   type OperationRunner,
 } from "../../core.js";
-import { executeSystemCapability } from "../../application/systems/use-case.js";
+import {
+  executeSystemCapability,
+  systemCapabilityIntersection,
+} from "../../application/systems/use-case.js";
+
+export const availableSystemCapabilities = async (
+  devices: string[],
+  runner: OperationRunner,
+) => systemCapabilityIntersection({ devices, runner });
 
 /** @deprecated CLI compatibility bridge; orchestration lives in Application. */
 export async function systemOperation(
@@ -25,23 +33,10 @@ export async function systemOperation(
     system: name,
     operation,
   });
-  if (operation === "info") {
-    const result = { system: name, devices };
-    runner.emitSystemEvent("system.operation.completed", { result });
-    return result;
-  }
-  const capability =
-    operation === "smoke"
-      ? "selftest"
-      : operation === "collect"
-        ? "capture"
-        : operation === "emergency-stop"
-          ? "stop"
-          : operation;
   try {
     const result = await executeSystemCapability({
       system: name,
-      capability,
+      capability: operation,
       devices,
       runner,
     });

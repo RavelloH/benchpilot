@@ -17,13 +17,15 @@ import {
   fullHelp,
   humanFull,
   isCommandGroup,
-  systemCapabilities,
 } from "./help-renderer.js";
 import { parse } from "./parser.js";
 import { editConfig } from "./commands/config-editor.js";
 import { handleDeviceCommand } from "./commands/device.js";
 import { handleRuntimeCommand } from "./commands/runtime.js";
-import { systemOperation } from "./commands/system.js";
+import {
+  availableSystemCapabilities,
+  systemOperation,
+} from "./commands/system.js";
 import { commandOptionFlags } from "./option-parser.js";
 import { write } from "./output-renderer.js";
 import { detectAgent } from "./agent/detector.js";
@@ -277,9 +279,25 @@ export async function main(adapters?: Adapter[]) {
         );
       } else if (group === "system") {
         const id = await session.value("system id");
+        const system = (config.value.systems as Json | undefined)?.[id];
+        if (
+          !system ||
+          typeof system !== "object" ||
+          !Array.isArray((system as Json).devices)
+        )
+          fail("SYSTEM_NOT_FOUND", 3, `System not found: ${id}`);
+        const capabilities = await availableSystemCapabilities(
+          (system as Json).devices as string[],
+          runner,
+        );
         parts.push(
           id,
-          await session.choose(systemCapabilities.map((value) => ({ value }))),
+          await session.choose(
+            capabilities.map((capability) => ({
+              value: capability.id,
+              label: `${capability.id} — ${capability.summary}`,
+            })),
+          ),
         );
       } else if (group === "run") {
         parts.push(
@@ -439,8 +457,12 @@ export async function main(adapters?: Adapter[]) {
       if (!system || typeof system !== "object")
         fail("SYSTEM_NOT_FOUND", 3, `System not found: ${parts[1]}`);
       if (parts.length === 2) {
+        const capabilities = await availableSystemCapabilities(
+          (system as Json).devices as string[],
+          runner,
+        );
         stdout.write(
-          `benchpilot system ${parts[1]} — Configured system\n\nCommands:\n${systemCapabilities.map((x) => `  ${x}`).join("\n")}\n`,
+          `benchpilot system ${parts[1]} — Configured system\n\nCommands:\n${capabilities.map((capability) => `  ${capability.id}`).join("\n")}\n`,
         );
         return;
       }
