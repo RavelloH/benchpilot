@@ -21,7 +21,10 @@ import {
 import { executeDeviceCommandSource } from "./devices/command-source.js";
 import { executeDeviceProbe } from "./devices/device-probe.js";
 import { normalizePortIdentity } from "./devices/identity.js";
-import { EnvironmentResolver } from "./environments/resolver.js";
+import {
+  EnvironmentResolver,
+  environmentFor,
+} from "./environments/resolver.js";
 import { AdapterRuntimeError } from "./errors.js";
 import { lookup, object, type RuleObject } from "./rules/template.js";
 import type { RuntimeAdapter } from "./types.js";
@@ -346,6 +349,7 @@ export const createDeclarativeAdapter = (runtime: RuntimeAdapter): Adapter => {
             const locks = new LockManager(context.paths);
             let lock;
             let lease;
+            const controller = new AbortController();
             try {
               lock = await locks.acquire(
                 lockIdentity(identity),
@@ -354,12 +358,16 @@ export const createDeclarativeAdapter = (runtime: RuntimeAdapter): Adapter => {
                 identity,
               );
               lease = locks.startHeartbeat(lock, 2_000, 10_000);
+              void lease.lost.catch((error) => {
+                if (!controller.signal.aborted) controller.abort(error);
+              });
               return {
                 ...device,
                 probe: await executeDeviceProbe(
                   runtime,
                   context.adapterConfig as RuleObject,
                   device.fields,
+                  controller.signal,
                 ),
               };
             } catch (error) {
@@ -448,6 +456,14 @@ export const createDeclarativeAdapter = (runtime: RuntimeAdapter): Adapter => {
             object(rules.parsers),
             environment.environment,
             runtime.bundle.id,
+            undefined,
+            undefined,
+            environmentFor(
+              environments,
+              object(rules.environments),
+              runtimeContext,
+              new AbortController().signal,
+            ),
           );
           checks.push({
             id: `${runtime.bundle.id}-tool-${id}`,

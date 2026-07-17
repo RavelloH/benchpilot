@@ -114,6 +114,7 @@ export const executeCopy = async (
     `.${path.basename(to)}.benchpilot-${randomBytes(8).toString("hex")}.bak`,
   );
   let movedTarget = false;
+  let committedTarget = false;
   try {
     throwIfAborted(signal);
     onWrite?.();
@@ -134,12 +135,15 @@ export const executeCopy = async (
     }
     throwIfAborted(signal);
     await rename(temporary, to);
+    committedTarget = true;
     throwIfAborted(signal);
     if (movedTarget) await rm(backup, { recursive: true, force: true });
   } catch (error) {
     await rm(temporary, { recursive: true, force: true }).catch(
       () => undefined,
     );
+    if (committedTarget)
+      await rm(to, { recursive: true, force: true }).catch(() => undefined);
     if (movedTarget) await rename(backup, to).catch(() => undefined);
     if (error instanceof AdapterRuntimeError) throw error;
     throw unsafe(plan, "copy-failed");

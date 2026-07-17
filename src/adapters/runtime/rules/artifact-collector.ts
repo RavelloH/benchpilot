@@ -158,7 +158,6 @@ export const collectArtifacts = async (
             sourceSize: size,
           },
         });
-        throwIfAborted(signal);
         artifacts.push(record);
       } catch (error) {
         await rm(temporary, { force: true }).catch(() => undefined);

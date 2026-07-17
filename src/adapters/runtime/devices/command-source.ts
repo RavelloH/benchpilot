@@ -1,6 +1,9 @@
 import { tmpdir } from "node:os";
 import { AdapterRuntimeError } from "../errors.js";
-import { EnvironmentResolver } from "../environments/resolver.js";
+import {
+  EnvironmentResolver,
+  environmentFor,
+} from "../environments/resolver.js";
 import { executeProcess } from "../executors/process-executor.js";
 import { durationMs, planLaunch } from "../planning/launch-plan.js";
 import { object, type RuleObject } from "../rules/template.js";
@@ -105,15 +108,12 @@ export const executeDeviceCommandSource = async (
     runtime.bundle.id,
     undefined,
     undefined,
-    async (current) =>
-      (
-        await environments.resolveDetailed(
-          current.environmentId,
-          object(runtime.rules.environments),
-          context,
-          new AbortController().signal,
-        )
-      ).environment,
+    environmentFor(
+      environments,
+      object(runtime.rules.environments),
+      context,
+      new AbortController().signal,
+    ),
   );
   for (const current of tool.chain) {
     const probe = probes.get(current.toolId) ?? {};

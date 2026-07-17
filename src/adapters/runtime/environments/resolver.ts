@@ -10,6 +10,24 @@ import {
   type RuleObject,
 } from "../rules/template.js";
 
+/** Resolves the Environment declared by one member of a Tool launch chain. */
+export const environmentFor =
+  (
+    resolver: EnvironmentResolver,
+    environments: RuleObject,
+    context: RuleObject,
+    signal: AbortSignal,
+  ) =>
+  async (tool: { environmentId: string }): Promise<NodeJS.ProcessEnv> =>
+    (
+      await resolver.resolveDetailed(
+        tool.environmentId,
+        environments,
+        context,
+        signal,
+      )
+    ).environment;
+
 const duration = (value: unknown, fallback = 10_000) => {
   const match = /^([1-9]\d*)(ms|s|m|h)$/.exec(String(value ?? ""));
   if (!match) return fallback;

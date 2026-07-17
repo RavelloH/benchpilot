@@ -3,6 +3,29 @@ import { durationMs } from "../planning/launch-plan.js";
 import { planWorkflowStep } from "../planning/workflow-planner.js";
 import { object, type RuleObject } from "../rules/template.js";
 
+const throwIfControlled = (
+  signal: AbortSignal,
+  controller: AbortController,
+) => {
+  if (signal.aborted) throw signal.reason ?? new Error("Workflow aborted.");
+  if (controller.signal.aborted)
+    throw controller.signal.reason ?? new Error("Workflow aborted.");
+};
+
+const isControlFlowError = (error: unknown) => {
+  const code =
+    error instanceof AdapterRuntimeError
+      ? error.code
+      : error && typeof error === "object"
+        ? String(
+            (error as { code?: unknown; kind?: unknown }).code ??
+              (error as { kind?: unknown }).kind ??
+              "",
+          )
+        : "";
+  return code.endsWith("_TIMEOUT") || code === "LOCK_OWNERSHIP_LOST";
+};
+
 export const executeWorkflow = async (
   workflow: RuleObject,
   context: RuleObject,
@@ -51,6 +74,7 @@ export const executeWorkflow = async (
     const workflowId = String(workflow.id ?? "workflow");
     emit?.("adapter.workflow.started", { workflowId });
     for (const rawStep of Array.isArray(workflow.steps) ? workflow.steps : []) {
+      throwIfControlled(signal, controller);
       const raw = object(rawStep);
       const actionId = String(raw.uses).replace(/^action:/, "");
       const stepId = String(raw.id);
@@ -65,16 +89,6 @@ export const executeWorkflow = async (
         });
         continue;
       }
-      if (controller.signal.aborted)
-        throw new AdapterRuntimeError(
-          "ADAPTER_WORKFLOW_TIMEOUT",
-          "Workflow timed out or was aborted.",
-          true,
-          [
-            "Retry the operation.",
-            "Increase the operation timeout if the device or tool is slow.",
-          ],
-        );
       emit?.("adapter.workflow.step.started", { workflowId, stepId, actionId });
       context.step = { id: step.id, action: actionId, input: step.with };
       try {
@@ -83,6 +97,7 @@ export const executeWorkflow = async (
           object(step.with),
           controller.signal,
         );
+        throwIfControlled(signal, controller);
         results.push({ id: step.id, ok: true, result });
         context.step = {
           id: step.id,
@@ -101,6 +116,8 @@ export const executeWorkflow = async (
           actionId,
         });
       } catch (error) {
+        throwIfControlled(signal, controller);
+        if (isControlFlowError(error)) throw error;
         results.push({ id: step.id, ok: false });
         const runtime =
           error instanceof AdapterRuntimeError ? error : undefined;
@@ -131,6 +148,7 @@ export const executeWorkflow = async (
         throw error;
       }
     }
+    throwIfControlled(signal, controller);
     emit?.("adapter.workflow.completed", { workflowId });
     return { steps: results };
   } finally {

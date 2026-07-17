@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { existsSync, readFileSync } from "node:fs";
 import {
   mkdtemp,
   lstat,
@@ -42,6 +43,7 @@ import { runProcess } from "../dist/core/process/process-runner.js";
 import {
   AdapterRegistry,
   BenchPilotError,
+  LockManager,
   OperationRunner,
   PathService,
 } from "../dist/index.js";
@@ -926,6 +928,227 @@ test("via-tool probes use the complete launch chain and isolate cache entries", 
   }
 });
 
+test("doctor probes every tool with its declared environment", async () => {
+  const platform = process.platform === "win32" ? "windows" : "linux";
+  const parser = (pattern) => ({
+    success_exit_codes: [0],
+    extract: [
+      {
+        id: "value",
+        source: "stdout",
+        type: "regex",
+        pattern,
+        target: "value",
+        group: "value",
+        cast: "string",
+        required: true,
+      },
+    ],
+  });
+  const adapter = createDeclarativeAdapter({
+    bundle: {
+      ...bundle,
+      manifest: {
+        adapter_version: "1.0.0",
+        display_name: "Environment Doctor",
+        description: "test",
+      },
+    },
+    platform,
+    rules: {
+      tools: {
+        parent: {
+          required: true,
+          discovery: "parent",
+          launch: { mode: "direct", prefix_args: [], environment: "parent" },
+        },
+        child: {
+          required: true,
+          discovery: "child",
+          launch: {
+            mode: "via-tool",
+            tool: "parent",
+            prefix_args: [],
+            environment: "child",
+          },
+        },
+      },
+      discoveries: {
+        parent: {
+          validation: { path_type: "file", executable: true },
+          candidates: [
+            { id: "node", type: "fixed", paths: [process.execPath] },
+          ],
+          probe: {
+            args: [
+              "-e",
+              "process.stdout.write(process.env.PARENT_VALUE ?? 'missing')",
+            ],
+            parser: "parent",
+          },
+        },
+        child: {
+          validation: { path_type: "file", executable: true },
+          candidates: [
+            { id: "node", type: "fixed", paths: [process.execPath] },
+          ],
+          probe: {
+            args: [
+              "-e",
+              "process.stdout.write(process.env.CHILD_VALUE ?? 'missing')",
+            ],
+            parser: "child",
+          },
+        },
+      },
+      environments: {
+        parent: {
+          strategy: "first-valid",
+          providers: [
+            {
+              id: "parent",
+              type: "static",
+              variables: { PARENT_VALUE: "parent" },
+            },
+          ],
+        },
+        child: {
+          strategy: "first-valid",
+          providers: [
+            {
+              id: "child",
+              type: "static",
+              variables: { CHILD_VALUE: "child" },
+            },
+          ],
+        },
+      },
+      parsers: {
+        parent: parser("(?<value>parent)"),
+        child: parser("(?<value>child)"),
+      },
+      devices: { discovery: { enabled: false } },
+    },
+  });
+  const checks = await adapter.doctor({
+    adapterConfig: {},
+    paths: new PathService(),
+  });
+  assert.equal(
+    checks.find((check) => check.id === "demo-tool-parent").status,
+    "pass",
+  );
+  assert.equal(
+    checks.find((check) => check.id === "demo-tool-child").status,
+    "pass",
+  );
+});
+
+test("probe lease loss aborts the process and releases the lock", async () => {
+  const root = await mkdtemp(join(tmpdir(), "benchpilot-probe-lease-loss-"));
+  const started = join(root, "probe-started");
+  const originalStartHeartbeat = LockManager.prototype.startHeartbeat;
+  const originalRelease = LockManager.prototype.release;
+  let stopped = false;
+  let released = false;
+  try {
+    LockManager.prototype.startHeartbeat = function (lock) {
+      const lost = new Promise((_, reject) => {
+        const loseWhenStarted = () => {
+          if (existsSync(started))
+            reject(
+              new BenchPilotError(
+                "LOCK_OWNERSHIP_LOST",
+                4,
+                "Lock ownership lost during probe.",
+              ),
+            );
+          else setTimeout(loseWhenStarted, 5);
+        };
+        loseWhenStarted();
+      });
+      void lost.catch(() => {});
+      return { lock, lost, stop: async () => void (stopped = true) };
+    };
+    LockManager.prototype.release = async function (lock) {
+      released = true;
+      return originalRelease.call(this, lock);
+    };
+    const runtime = {
+      bundle: {
+        ...bundle,
+        manifest: {
+          adapter_version: "1.0.0",
+          display_name: "Probe Lease",
+          description: "test",
+        },
+      },
+      platform: process.platform === "win32" ? "windows" : "linux",
+      rules: {
+        devices: {
+          identity: { fields: ["device.serial"] },
+          discovery: {
+            enabled: true,
+            sources: [
+              { id: "fixture", type: "usb", records: [{ serial: "device-1" }] },
+            ],
+            result: { minimum_score: 0 },
+          },
+          probe: { enabled: true, action: "probe", parser: "probe" },
+        },
+        tools: {
+          node: {
+            discovery: "node",
+            launch: { mode: "direct", prefix_args: [], environment: "inherit" },
+          },
+        },
+        discoveries: {
+          node: {
+            validation: { path_type: "file", executable: true },
+            candidates: [
+              { id: "node", type: "fixed", paths: [process.execPath] },
+            ],
+          },
+        },
+        environments: {},
+        actions: {
+          probe: {
+            type: "process",
+            tool: "node",
+            cwd: "${project.root}",
+            timeout: "5s",
+            arguments: [
+              { kind: "literal", value: "-e" },
+              {
+                kind: "literal",
+                value: `require('node:fs').writeFileSync(${JSON.stringify(started)}, 'started'); setTimeout(() => {}, 5_000)`,
+              },
+            ],
+            parser: "probe",
+          },
+        },
+        parsers: { probe: { success_exit_codes: [0] } },
+      },
+    };
+    const result = await createDeclarativeAdapter(runtime).discoverDetailed({
+      adapterConfig: {},
+      paths: new PathService({ BENCHPILOT_HOME: root }),
+      discovery: { probe: true, confirmDeviceProbe: true },
+    });
+    assert.deepEqual(result.devices[0].probe, {
+      ok: false,
+      error: { kind: "LOCK_OWNERSHIP_LOST", retryable: false },
+    });
+    assert.equal(await readFile(started, "utf8"), "started");
+    assert.equal(stopped, true);
+    assert.equal(released, true);
+  } finally {
+    LockManager.prototype.startHeartbeat = originalStartHeartbeat;
+    LockManager.prototype.release = originalRelease;
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("environment resolution supports active, static, and provider fallback", async () => {
   const resolver = new EnvironmentResolver({ PATH: "base", FALLBACK: "yes" });
   const definitions = {
@@ -1093,6 +1316,40 @@ test(
     }
   },
 );
+
+test("artifact registration is the cancellation commit point", async () => {
+  const root = await mkdtemp(join(tmpdir(), "benchpilot-artifact-commit-"));
+  try {
+    const runDir = join(root, "run");
+    const controller = new AbortController();
+    await mkdir(runDir);
+    await writeFile(join(root, "firmware.bin"), "firmware");
+    const artifacts = await collectArtifacts(
+      {
+        base: ".",
+        entries: [{ id: "firmware", path: "firmware.bin", required: true }],
+      },
+      {},
+      { dir: runDir },
+      {
+        register: async (record) => {
+          controller.abort(new Error("late abort"));
+          return { id: "artifact", ...record };
+        },
+      },
+      [root],
+      root,
+      controller.signal,
+    );
+    assert.equal(artifacts.length, 1);
+    assert.equal(
+      await readFile(join(runDir, "artifacts", "firmware.bin"), "utf8"),
+      "firmware",
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
 
 test("process launch plans use argv and parse structured output", async () => {
   assert.throws(
@@ -1311,6 +1568,63 @@ test("workflow execution is ordered and honors continue_on_error", async () => {
   );
 });
 
+test("workflow control flow cannot be continued and never emits completed", async () => {
+  const external = new AbortController();
+  const externalEvents = [];
+  const externalReason = new Error("external abort");
+  await assert.rejects(
+    executeWorkflow(
+      {
+        timeout: "1s",
+        stop_on_failure: false,
+        steps: [
+          {
+            id: "first",
+            uses: "action:first",
+            with: {},
+            continue_on_error: true,
+          },
+          { id: "second", uses: "action:second", with: {} },
+        ],
+      },
+      { result: {} },
+      external.signal,
+      async (id) => {
+        if (id === "first") external.abort(externalReason);
+        throw new Error("action failed");
+      },
+      (event) => externalEvents.push(event),
+    ),
+    (error) => error === externalReason,
+  );
+  assert.deepEqual(externalEvents, [
+    "adapter.workflow.started",
+    "adapter.workflow.step.started",
+  ]);
+
+  const timeoutEvents = [];
+  await assert.rejects(
+    executeWorkflow(
+      {
+        timeout: "1ms",
+        stop_on_failure: false,
+        steps: [{ id: "slow", uses: "action:slow", with: {} }],
+      },
+      { result: {} },
+      new AbortController().signal,
+      async () => {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        return {};
+      },
+      (event) => timeoutEvents.push(event),
+    ),
+    (error) =>
+      error instanceof AdapterRuntimeError &&
+      error.code === "ADAPTER_WORKFLOW_TIMEOUT",
+  );
+  assert.equal(timeoutEvents.includes("adapter.workflow.completed"), false);
+});
+
 test("copy actions stay inside their allowed roots", async () => {
   const root = await mkdtemp(join(tmpdir(), "benchpilot-runtime-copy-"));
   try {
@@ -1369,6 +1683,164 @@ test("copy actions stay inside their allowed roots", async () => {
         error instanceof AdapterRuntimeError &&
         error.code === "ADAPTER_ARTIFACT_UNSAFE",
     );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("copy abort after commit restores the previous target", async () => {
+  const root = await mkdtemp(join(tmpdir(), "benchpilot-copy-rollback-"));
+  try {
+    const source = join(root, "source.txt");
+    const target = join(root, "target.txt");
+    await writeFile(source, "new");
+    await writeFile(target, "old");
+    const afterCommitAbort = {
+      reason: new Error("abort after rename"),
+      get aborted() {
+        return existsSync(target) && readFileSync(target, "utf8") === "new";
+      },
+    };
+    await assert.rejects(
+      executeCopy(
+        {
+          kind: "copy",
+          from: source,
+          to: target,
+          recursive: false,
+          overwrite: true,
+          timeoutMs: 1_000,
+        },
+        [root],
+        undefined,
+        afterCommitAbort,
+      ),
+      (error) =>
+        error instanceof AdapterRuntimeError &&
+        error.code === "ADAPTER_ARTIFACT_UNSAFE",
+    );
+    assert.equal(await readFile(target, "utf8"), "old");
+    assert.deepEqual(
+      (await readdir(root)).filter((entry) => entry.includes(".benchpilot-")),
+      [],
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("run temp is available to copy actions and artifact collection", async () => {
+  const root = await mkdtemp(join(tmpdir(), "benchpilot-run-temp-"));
+  try {
+    const runDir = join(root, "run");
+    const temp = join(runDir, "tmp");
+    const source = join(temp, "source.bin");
+    const destination = join(runDir, "output.bin");
+    await mkdir(temp, { recursive: true });
+    await writeFile(source, "firmware");
+    const runtime = {
+      bundle: {
+        ...bundle,
+        manifest: {
+          adapter_version: "1.0.0",
+          display_name: "Run Temp",
+          description: "test",
+        },
+        capabilityCatalog: { capabilities: { copy: { description: "copy" } } },
+        schemas: {
+          ...bundle.schemas,
+          outputs: {
+            ...bundle.schemas.outputs,
+            $defs: {
+              copy: {
+                type: "object",
+                properties: {
+                  from: { type: "string" },
+                  to: { type: "string" },
+                  copied: { type: "boolean" },
+                },
+                required: ["from", "to", "copied"],
+                additionalProperties: false,
+              },
+            },
+          },
+        },
+      },
+      platform: process.platform === "win32" ? "windows" : "linux",
+      rules: {
+        capabilities: {
+          copy: {
+            enabled: true,
+            handler: "action:copy",
+            input_schema: "build",
+            output_schema: "copy",
+            creates_run: true,
+            timeout: "5s",
+            lock: "none",
+            safety: { mode: "normal" },
+            platforms: { windows: true, linux: true, macos: true },
+          },
+        },
+        devices: { identity: { allow_instance_fallback: true } },
+        actions: {
+          copy: {
+            type: "copy",
+            from: "${temp}/source.bin",
+            to: "${run.dir}/output.bin",
+            recursive: false,
+            overwrite: false,
+            timeout: "5s",
+            artifact_set: "output",
+          },
+        },
+        artifacts: {
+          output: {
+            base: ".",
+            entries: [{ id: "output", path: "output.bin", required: true }],
+          },
+        },
+        tools: {},
+        discoveries: {},
+        environments: {},
+        workflows: {},
+        parsers: {},
+      },
+    };
+    const device = await createDeclarativeAdapter(runtime).createDevice(
+      "fixture",
+      {},
+      { adapterConfig: {} },
+    );
+    const registered = [];
+    const result = await device.capabilities()[0].execute(
+      {
+        signal: new AbortController().signal,
+        logger: { debug() {} },
+        run: { id: "run", dir: runDir },
+        stateRoot: root,
+        project: { root },
+        config: {},
+        device,
+        registerCleanup() {},
+        dangerousEffect: { started: false },
+        markDangerousEffectStarted() {},
+        emitEvent() {},
+        async registerArtifact(record) {
+          const artifact = { id: "artifact", ...record };
+          registered.push(artifact);
+          return artifact;
+        },
+      },
+      {},
+    );
+    assert.deepEqual(result, {
+      from: await realpath(source),
+      to: destination,
+      copied: true,
+    });
+    assert.equal(await readFile(destination, "utf8"), "firmware");
+    assert.equal(registered[0].path, join(runDir, "artifacts", "output.bin"));
+    assert.equal(await readFile(registered[0].path, "utf8"), "firmware");
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -1516,7 +1988,12 @@ test("declarative adapters execute through the Core operation lifecycle", async 
             cwd: "${project.root}",
             arguments: [
               { kind: "literal", value: "-e" },
-              { kind: "literal", value: "console.log('value=3')" },
+              {
+                kind: "literal",
+                value:
+                  "console.log('value=3'); console.log('temp=' + process.argv[1])",
+              },
+              { kind: "value", value: "${temp}" },
             ],
             parser: "build",
           },
@@ -1534,6 +2011,16 @@ test("declarative adapters execute through the Core operation lifecycle", async 
                 group: "value",
                 target: "value",
                 cast: "integer",
+                required: true,
+              },
+              {
+                id: "temp",
+                source: "stdout",
+                type: "regex",
+                pattern: "temp=(?<temp>.+)",
+                group: "temp",
+                target: "temp",
+                cast: "string",
                 required: true,
               },
             ],
@@ -1568,8 +2055,11 @@ test("declarative adapters execute through the Core operation lifecycle", async 
         $defs: {
           build: {
             type: "object",
-            properties: { value: { type: "integer" } },
-            required: ["value"],
+            properties: {
+              value: { type: "integer" },
+              temp: { type: "string" },
+            },
+            required: ["value", "temp"],
             additionalProperties: false,
           },
         },
@@ -1592,7 +2082,9 @@ test("declarative adapters execute through the Core operation lifecycle", async 
         layers: [],
       },
     }).execute("target", "build", {});
-    assert.deepEqual(result.data, { value: 3 });
+    assert.equal(result.data.value, 3);
+    assert.equal(result.data.temp.endsWith(join(result.runId, "tmp")), true);
+    assert.equal((await lstat(result.data.temp)).isDirectory(), true);
     const snapshots = (
       await readdir(paths.stateRoot(), { recursive: true })
     ).filter((entry) => entry.endsWith("resolved-config.json"));

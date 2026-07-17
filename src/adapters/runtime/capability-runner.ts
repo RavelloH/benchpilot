@@ -1,4 +1,3 @@
-import { tmpdir } from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { mkdir, rm } from "node:fs/promises";
@@ -9,7 +8,10 @@ import { executeProcess } from "./executors/process-executor.js";
 import { executeUnsupportedSerial } from "./executors/unsupported-executor.js";
 import { executeWorkflow } from "./executors/workflow-executor.js";
 import { AdapterRuntimeError } from "./errors.js";
-import { EnvironmentResolver } from "./environments/resolver.js";
+import {
+  EnvironmentResolver,
+  environmentFor,
+} from "./environments/resolver.js";
 import { durationMs, planLaunch } from "./planning/launch-plan.js";
 import { collectArtifacts } from "./rules/artifact-collector.js";
 import { lookup, object, type RuleObject } from "./rules/template.js";
@@ -123,7 +125,10 @@ export class DeclarativeCapabilityRunner {
     operation: OperationContext,
     input: Json,
   ): Promise<Json> {
-    if (!operation.run) {
+    if (operation.run) {
+      this.operationTemp = path.join(operation.run.dir, "tmp");
+      await mkdir(this.operationTemp, { recursive: true });
+    } else {
       this.operationTemp = path.join(operation.stateRoot, "tmp", randomUUID());
       await mkdir(this.operationTemp, { recursive: true });
       operation.registerCleanup(
@@ -152,7 +157,7 @@ export class DeclarativeCapabilityRunner {
       input: validatedInput,
       project: { root: operation.project?.root ?? process.cwd() },
       home: process.env.HOME ?? process.env.USERPROFILE ?? "",
-      temp: this.operationTemp ?? tmpdir(),
+      temp: this.operationTemp,
       env: process.env,
       run: operation.run
         ? { dir: operation.run.dir, id: operation.run.id }
@@ -293,15 +298,12 @@ export class DeclarativeCapabilityRunner {
             this.adapter.bundle.id,
             actionSignal,
             (message) => operation.logger.debug(redactor.redactText(message)),
-            async (current) =>
-              (
-                await this.environments.resolveDetailed(
-                  current.environmentId,
-                  object(this.adapter.rules.environments),
-                  actionContext,
-                  actionSignal,
-                )
-              ).environment,
+            environmentFor(
+              this.environments,
+              object(this.adapter.rules.environments),
+              actionContext,
+              actionSignal,
+            ),
           );
           this.writeToolProbes(context, tool, probes);
           const probe = probes.get(tool.toolId) ?? {};
