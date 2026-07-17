@@ -3,13 +3,15 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import TOML from "@iarna/toml";
 import { fail, type Json } from "../../core.js";
-import type { Locale } from "../../i18n/index.js";
+
+/** Persisted locale values; presentation owns their translated catalogs. */
+export type ProjectLocale = "en" | "zh-CN";
 
 export interface InitializeProjectInput {
   cwd: string;
   projectId: string;
   projectName: string;
-  locale: Locale;
+  locale: ProjectLocale;
 }
 
 async function exists(file: string) {
