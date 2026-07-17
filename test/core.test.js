@@ -50,6 +50,27 @@ test("operation sessions only allow the lifecycle order", () => {
   );
 });
 
+test("core errors have stable diagnostic ids and JSON-safe details", () => {
+  const details = { bigint: 42n, nested: { error: new Error("fixture") } };
+  details.circular = details;
+  const error = new BenchPilotError(
+    "DEVICE_BUSY",
+    4,
+    "Device is busy.",
+    false,
+    undefined,
+    [],
+    details,
+  );
+  assert.equal(error.diagnosticId, "core.device-busy");
+  assert.deepEqual(error.details, {
+    bigint: "42",
+    nested: { error: { name: "Error", message: "fixture" } },
+    circular: "[Circular]",
+  });
+  assert.doesNotThrow(() => JSON.stringify(error.details));
+});
+
 const exec = promisify(execFile);
 
 test("core hardening uses safe lock names and redacts config", () => {

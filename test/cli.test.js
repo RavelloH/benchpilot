@@ -134,6 +134,7 @@ test("agent init without parameters is rejected without writing project files", 
     );
     const result = JSON.parse(machine.stdout);
     assert.equal(result.kind, "AGENT_INTERACTION_UNSUPPORTED");
+    assert.equal(result.diagnosticId, "core.agent-interaction-unsupported");
     assert.equal(machine.stderr, "");
     const stream = await runAgent(dir, "init", "--jsonl").catch(
       (error) => error,

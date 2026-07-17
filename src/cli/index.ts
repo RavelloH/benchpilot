@@ -597,6 +597,7 @@ export async function main(adapters?: Adapter[]) {
       version: 2,
       ok: false,
       kind: err.kind,
+      diagnosticId: err.diagnosticId,
       message: err.message,
       retryable: err.retryable,
       stage: err.stage,

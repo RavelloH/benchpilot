@@ -771,6 +771,7 @@ export class OperationRunner {
           runId: run?.id,
           durationMs: Date.now() - started,
           kind: primaryError!.kind,
+          diagnosticId: primaryError!.diagnosticId,
           message: primaryError!.message,
           retryable: primaryError!.retryable,
           stage: primaryError!.stage,
