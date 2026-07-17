@@ -157,6 +157,20 @@ export class ApprovalManager {
     );
   }
 
+  async findPendingApproval(
+    binding: Json,
+  ): Promise<ApprovalRecord | undefined> {
+    const digest = sha(binding);
+    return (await this.list())
+      .filter(
+        (record) =>
+          record.digest === digest &&
+          record.status === "pending" &&
+          Date.parse(record.expiresAt) > Date.now(),
+      )
+      .sort((left, right) => left.createdAt.localeCompare(right.createdAt))[0];
+  }
+
   async recoverMatchingStaleClaim(
     binding: Json,
   ): Promise<ApprovalRecord | undefined> {

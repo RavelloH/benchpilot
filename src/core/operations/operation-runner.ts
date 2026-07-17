@@ -64,6 +64,96 @@ export class OperationRunner {
     }));
   }
 
+  /**
+   * Creates or finds a required approval without creating a Run, Lock, or
+   * executing a capability.  Application uses this for all-member system
+   * preflight so a system never partially executes while approvals are being
+   * requested.
+   */
+  async preflightApproval(instance: string, capabilityId: string, input: Json) {
+    const raw = (this.s.config.value.devices as Json | undefined)?.[instance];
+    if (!object(raw))
+      fail("DEVICE_NOT_FOUND", 3, `Device not found: ${instance}`);
+    const deviceConfig = raw as Json;
+    const adapter = this.s.registry.get(String(deviceConfig.adapter));
+    const runtime = await this.s.registry.createDevice(
+      adapter,
+      instance,
+      deviceConfig,
+      this.s.config.value,
+      this.s.paths,
+    );
+    const capability = runtime
+      .capabilities()
+      .find((candidate) => candidate.id === capabilityId);
+    if (!capability)
+      fail(
+        "UNSUPPORTED_CAPABILITY",
+        3,
+        `Device ${instance} does not support ${capabilityId}.`,
+      );
+    const definition = capability!;
+    const safety = definition.safety;
+    if (safety.mode !== "normal" && !this.s.flags[safety.flag!])
+      fail(
+        "DANGEROUS_CONFIRMATION_REQUIRED",
+        7,
+        `This operation requires --${safety.flag}.`,
+      );
+    if (safety.mode !== "human-approval") return { required: false };
+    let validated = structuredClone(input);
+    const options = definition.options || [];
+    const allowed = new Set(options.map((option) => option.name));
+    for (const name of Object.keys(validated))
+      if (!allowed.has(name))
+        fail(
+          "INVALID_CAPABILITY_INPUT",
+          2,
+          `Unknown option for ${definition.id}: ${name}`,
+        );
+    for (const option of options) {
+      if (option.required && validated[option.name] === undefined)
+        fail(
+          "INVALID_CAPABILITY_INPUT",
+          2,
+          `Missing required option: ${option.name}.`,
+        );
+      if (validated[option.name] !== undefined && option.schema)
+        validated[option.name] = option.schema.parse(validated[option.name]);
+    }
+    validated = definition.inputSchema?.parse(validated) ?? validated;
+    const binding = {
+      command: `device.${capabilityId}`,
+      device: runtime.identity,
+      input: validated,
+      project:
+        (this.s.config.value.project as Json | undefined)?.id ||
+        "outside-project",
+      configDigest: sha(this.s.config.value),
+    };
+    const storedBinding: Json = {
+      ...binding,
+      input: definition.redactInput
+        ? definition.redactInput(validated)
+        : validated,
+    };
+    const approvals = new ApprovalManager(this.s.paths);
+    const approved =
+      (await approvals.findMatchingApproval(binding)) ||
+      (await approvals.recoverMatchingStaleClaim(binding));
+    if (approved)
+      return { required: true, ready: true, approvalId: approved.id };
+    const pending = await approvals.findPendingApproval(binding);
+    if (pending)
+      return { required: true, ready: false, approvalId: pending.id };
+    const request = await approvals.request(
+      binding,
+      safety.approvalTtlMs,
+      storedBinding,
+    );
+    return { required: true, ready: false, approvalId: request.id };
+  }
+
   async execute(
     instance: string,
     capabilityId: string,

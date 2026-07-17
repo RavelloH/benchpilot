@@ -32,6 +32,9 @@ test("system capability preflight rejects before any member executes", async () 
       executed.push(device);
       return { ok: true };
     },
+    async preflightApproval() {
+      return { required: false };
+    },
   };
   assert.deepEqual(
     await systemCapabilityIntersection({
@@ -71,6 +74,9 @@ test("system status executes its safe intersection in parallel", async () => {
       assert.notEqual(input, undefined);
       return { device };
     },
+    async preflightApproval() {
+      return { required: false };
+    },
   };
   const result = await executeSystemCapability({
     system: "fixture",
@@ -83,4 +89,47 @@ test("system status executes its safe intersection in parallel", async () => {
     "first",
     "second",
   ]);
+});
+
+test("system approval preflight requests every member before execution", async () => {
+  const executed = [];
+  const approvals = [];
+  const runner = {
+    async listCapabilities() {
+      return [
+        {
+          id: "erase",
+          summary: "erase",
+          lockMode: "exclusive",
+          safety: { mode: "human-approval", flag: "approve-erase" },
+        },
+      ];
+    },
+    async preflightApproval(device) {
+      approvals.push(device);
+      return {
+        required: true,
+        ready: false,
+        approvalId: `approval-${device}`,
+      };
+    },
+    async execute(device) {
+      executed.push(device);
+      return { device };
+    },
+  };
+  await assert.rejects(
+    executeSystemCapability({
+      system: "fixture",
+      capability: "erase",
+      devices: ["second", "first"],
+      runner,
+    }),
+    (error) =>
+      error instanceof BenchPilotError &&
+      error.kind === "HUMAN_APPROVAL_REQUIRED" &&
+      error.details.approvalIds.join(",") === "approval-first,approval-second",
+  );
+  assert.deepEqual(approvals, ["first", "second"]);
+  assert.deepEqual(executed, []);
 });

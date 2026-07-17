@@ -87,6 +87,31 @@ export async function executeSystemCapability(input: {
         available: available.map((candidate) => candidate.id),
       },
     );
+  const approvals = await Promise.all(
+    [...input.devices]
+      .sort()
+      .map((device) =>
+        input.runner.preflightApproval(
+          device,
+          input.capability,
+          structuredClone(input.capabilityInput ?? {}),
+        ),
+      ),
+  );
+  const pendingApprovalIds = approvals
+    .filter((approval) => approval.required && !approval.ready)
+    .map((approval) => approval.approvalId)
+    .filter((id): id is string => Boolean(id));
+  if (pendingApprovalIds.length)
+    throw new BenchPilotError(
+      "HUMAN_APPROVAL_REQUIRED",
+      7,
+      "Human approval is required before this system operation can run.",
+      false,
+      undefined,
+      [],
+      { approvalIds: pendingApprovalIds },
+    );
   const policy =
     input.policy ??
     (input.capability === "status" ? "parallel" : "serial-fail-fast");
