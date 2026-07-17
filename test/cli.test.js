@@ -110,6 +110,18 @@ test("root command prints help without starting an interactive session", async (
   }
 });
 
+test("nested device help never starts an interactive session", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "benchpilot-device-help-"));
+  try {
+    await initDemo(dir);
+    const result = await run(dir, "device", "demo", "--help");
+    assert.match(result.stdout, /benchpilot device demo/);
+    assert.equal(result.stderr, "");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("agent init without parameters is rejected without writing project files", async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "benchpilot-agent-init-"));
   try {

@@ -362,6 +362,7 @@ export async function main(adapters?: Adapter[]) {
     // A known parent plus an omitted action is an incomplete command. Continue
     // the same interactive flow instead of degrading to a static help screen.
     if (
+      !flags.help &&
       parts[0] === "config" &&
       parts.length === 2 &&
       ["get", "unset", "explain", "set"].includes(parts[1]!)
@@ -372,13 +373,13 @@ export async function main(adapters?: Adapter[]) {
       else if (parts[1] === "set")
         parts.push(...(await completeConfigSet(session)));
     }
-    if (parts[0] === "adapter" && parts.length === 2)
+    if (!flags.help && parts[0] === "adapter" && parts.length === 2)
       parts.push(
         await interactive(locale, parts).choose(
           menuChoices(["info", "doctor"]),
         ),
       );
-    if (parts[0] === "device" && parts.length === 2) {
+    if (!flags.help && parts[0] === "device" && parts.length === 2) {
       const session = interactive(locale, parts);
       const capabilities = await catalog.children(["device", parts[1]!]);
       if (!capabilities.length)
@@ -396,7 +397,7 @@ export async function main(adapters?: Adapter[]) {
         ),
       );
     }
-    if (parts[0] === "system" && parts.length === 2) {
+    if (!flags.help && parts[0] === "system" && parts.length === 2) {
       const session = interactive(locale, parts);
       const capabilities = await catalog.children(["system", parts[1]!]);
       if (!capabilities.length)
@@ -414,17 +415,17 @@ export async function main(adapters?: Adapter[]) {
         ),
       );
     }
-    if (parts[0] === "run" && parts.length === 2)
+    if (!flags.help && parts[0] === "run" && parts.length === 2)
       parts.push(
         await interactive(locale, parts).choose(
           menuChoices(["show", "logs", "artifacts"]),
         ),
       );
-    if (parts[0] === "lock" && parts.length === 2)
+    if (!flags.help && parts[0] === "lock" && parts.length === 2)
       parts.push(
         await interactive(locale, parts).choose(menuChoices(["show", "clear"])),
       );
-    if (parts[0] === "approval" && parts.length === 2)
+    if (!flags.help && parts[0] === "approval" && parts.length === 2)
       parts.push(
         await interactive(locale, parts).choose(
           menuChoices(["inspect", "approve", "reject"]),
