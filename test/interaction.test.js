@@ -1,7 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import prompts from "prompts";
-import { detectAgent } from "../dist/cli/agent/detector.js";
+import {
+  AGENT_MARKER_CONTRACT_VERSION,
+  detectAgent,
+} from "../dist/cli/agent/detector.js";
 import { interactionDecision } from "../dist/cli/interaction/policy.js";
 import {
   InteractionCancelledError,
@@ -13,6 +16,7 @@ import { writeFailure } from "../dist/cli/output-renderer.js";
 import { assertCatalogCompleteness, t } from "../dist/i18n/index.js";
 
 test("agent detection only accepts fixed environment and file markers", () => {
+  assert.equal(AGENT_MARKER_CONTRACT_VERSION, 1);
   assert.equal(
     detectAgent({ env: { SSH_CONNECTION: "host" }, fileExists: () => false }),
     undefined,

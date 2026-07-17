@@ -11,6 +11,9 @@ export interface AgentDetection {
   readonly marker: string;
 }
 
+/** Version of the fixed environment/file agent-marker contract. */
+export const AGENT_MARKER_CONTRACT_VERSION = 1;
+
 const marker =
   (name: string, ...variables: string[]) =>
   ({ env, fileExists: _fileExists }: AgentDetectionContext) =>
