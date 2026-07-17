@@ -1196,6 +1196,42 @@ test("clear rechecks ownership after a guarded asynchronous step", async () => {
   }
 });
 
+test("stale cleanup cannot remove a manual quarantine recovery record", async () => {
+  const root = await mkdtemp(
+    path.join(os.tmpdir(), "benchpilot-lock-recovery-"),
+  );
+  try {
+    const paths = new PathService({ BENCHPILOT_HOME: root });
+    const locks = new LockManager(paths);
+    const lock = await locks.acquire("recovery-device", "test");
+    await locks.recordQuarantineFailure(lock, {
+      kind: "QUARANTINE_FAILED",
+      message: "manual recovery required",
+      cleanupErrors: [],
+      runId: "run-test",
+    });
+    await atomicJson(locks.file(lock.lockId), {
+      ...lock,
+      pid: 99999999,
+      heartbeatAt: new Date(0).toISOString(),
+      expiresAt: new Date(0).toISOString(),
+    });
+
+    assert.deepEqual(await locks.clearStale(), [lock.lockId]);
+    assert.equal((await locks.listManualRecovery()).length, 1);
+    await assert.rejects(
+      locks.clearManualRecovery(lock.lockId),
+      (error) =>
+        error instanceof BenchPilotError &&
+        error.kind === "DANGEROUS_CONFIRMATION_REQUIRED",
+    );
+    await locks.clearManualRecovery(lock.lockId, true);
+    assert.deepEqual(await locks.listManualRecovery(), []);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("separate processes cannot acquire the same physical lock", async () => {
   const root = await mkdtemp(
     path.join(os.tmpdir(), "benchpilot-lock-process-"),

@@ -558,10 +558,9 @@ export class OperationRunner {
             runId: run?.id,
           };
           try {
-            await new LockManager(this.s.paths).markQuarantineFailed(
-              lock,
-              reason,
-            );
+            const locks = new LockManager(this.s.paths);
+            await locks.recordQuarantineFailure(lock, reason);
+            await locks.markQuarantineFailed(lock, reason);
             lockFinalStatus = "quarantine-failed";
             quarantinedLock = { lockId: lock.lockId, reason };
             emit("lock.quarantine-failed", { lockId: lock.lockId, reason });

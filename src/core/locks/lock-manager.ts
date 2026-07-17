@@ -37,6 +37,16 @@ export class LockManager {
     return resolveInside(this.directory(id), "owner.json");
   }
 
+  private recoveryDirectory() {
+    return path.join(this.paths.stateRoot(), "lock-recovery");
+  }
+
+  private recoveryFile(id: string) {
+    if (!LOCK_ID_PATTERN.test(id))
+      fail("INVALID_LOCK_ID", 2, `Invalid lock ID: ${id}`);
+    return resolveInside(this.recoveryDirectory(), `${id}.json`);
+  }
+
   private guard(id: string) {
     return resolveInside(this.paths.lockGuardsRoot(), `${id}.lock`);
   }
@@ -331,6 +341,68 @@ export class LockManager {
     });
   }
 
+  /**
+   * Records a quarantine failure outside the runtime lock directory.  Runtime
+   * stale-lock cleanup never consults or removes these records: an operator
+   * must perform an explicit dangerous recovery action after verifying the
+   * device is no longer accessible.
+   */
+  async recordQuarantineFailure(
+    lock: LockRecord,
+    reason: Omit<LockQuarantineReason, "quarantinedAt">,
+  ) {
+    await fs.mkdir(this.recoveryDirectory(), { recursive: true });
+    const record = {
+      schema: "benchpilot.lock-manual-recovery" as const,
+      version: 1 as const,
+      lockId: lock.lockId,
+      identity: lock.identity,
+      ownerToken: lock.ownerToken,
+      runId: lock.runId,
+      reason: { ...reason, quarantinedAt: new Date().toISOString() },
+    };
+    await atomicJson(this.recoveryFile(lock.lockId), record);
+    return record;
+  }
+
+  async listManualRecovery() {
+    try {
+      const files = (await fs.readdir(this.recoveryDirectory()))
+        .filter((file) => file.endsWith(".json"))
+        .sort();
+      const records = await Promise.all(
+        files.map((file) =>
+          readJson(path.join(this.recoveryDirectory(), file)),
+        ),
+      );
+      return records.filter((record): record is NonNullable<typeof record> =>
+        Boolean(record),
+      );
+    } catch (error: unknown) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+      throw error;
+    }
+  }
+
+  async clearManualRecovery(id: string, dangerous = false) {
+    if (!dangerous)
+      fail(
+        "DANGEROUS_CONFIRMATION_REQUIRED",
+        7,
+        "Manual recovery records require --dangerously-clear-quarantined-lock.",
+      );
+    const file = this.recoveryFile(id);
+    const record = await readJson(file);
+    if (!record)
+      throw new BenchPilotError(
+        "LOCK_RECOVERY_NOT_FOUND",
+        3,
+        `Manual recovery record not found: ${id}`,
+      );
+    await fs.unlink(file);
+    return record;
+  }
+
   async release(lock: LockRecord) {
     let tombstone: string | undefined;
     await this.withGuard(lock.lockId, async () => {
@@ -373,6 +445,19 @@ export class LockManager {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
       throw error;
     }
+  }
+
+  async clearStale() {
+    const cleared: string[] = [];
+    for (const record of await this.list())
+      if (
+        record.state === "active" &&
+        (await this.liveness(record)) === "stale"
+      ) {
+        await this.clear(record.lockId, false);
+        cleared.push(record.lockId);
+      }
+    return cleared;
   }
 
   async clear(

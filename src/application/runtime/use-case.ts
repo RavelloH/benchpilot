@@ -142,14 +142,7 @@ export class RuntimeUseCases {
   }
 
   async clearStaleLocks() {
-    const locks = this.locks();
-    const cleared: string[] = [];
-    for (const lock of await locks.list())
-      if (lock.state === "active" && (await locks.liveness(lock)) === "stale") {
-        await locks.clear(lock.lockId, false);
-        cleared.push(lock.lockId);
-      }
-    return { cleared };
+    return { cleared: await this.locks().clearStale() };
   }
 
   async inspectLock(id: string) {
