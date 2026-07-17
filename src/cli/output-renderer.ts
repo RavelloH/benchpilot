@@ -13,23 +13,44 @@ export const processOutputSink: OutputSink = {
   stderr: process.stderr,
 };
 
+const machineResult = (value: unknown): Json => {
+  if (
+    value &&
+    typeof value === "object" &&
+    ((value as Json).schema === "benchpilot.result" ||
+      (value as Json).schema === "benchpilot.help" ||
+      (value as Json).schema === "benchpilot.help-index")
+  )
+    return value as Json;
+  return {
+    schema: "benchpilot.result",
+    version: 2,
+    ok: true,
+    kind: "COMMAND_COMPLETED",
+    data: value as Json,
+  };
+};
+
 export function write(
   value: unknown,
   flags: Flags,
   plain?: string,
   sink: OutputSink = processOutputSink,
 ) {
+  const machine = machineResult(value);
   const operation =
-    value &&
-    typeof value === "object" &&
-    (value as Json).schema === "benchpilot.result";
+    machine &&
+    typeof machine === "object" &&
+    machine.schema === "benchpilot.result" &&
+    machine.kind !== "COMMAND_COMPLETED" &&
+    machine.dryRun !== true;
   sink.stdout.write(
     flags.json
-      ? `${JSON.stringify(value)}\n`
+      ? `${JSON.stringify(machine)}\n`
       : flags.jsonl
         ? operation
           ? ""
-          : `${JSON.stringify({ schema: "benchpilot.event", version: 2, event: { type: "command.result", timestamp: new Date().toISOString() }, context: {}, data: { result: value } })}\n`
+          : `${JSON.stringify({ schema: "benchpilot.event", version: 2, event: { type: "command.result", timestamp: new Date().toISOString() }, context: {}, data: { result: machine } })}\n`
         : (plain ?? `${JSON.stringify(value, null, 2)}\n`),
   );
 }

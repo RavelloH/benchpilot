@@ -272,6 +272,10 @@ export class OperationRunner {
     const timeout = duration(this.s.flags.timeout, capability.defaultTimeoutMs);
     if (this.s.flags["dry-run"])
       return {
+        schema: "benchpilot.result" as const,
+        version: 2 as const,
+        ok: true,
+        command,
         dryRun: true,
         device: runtime.identity,
         capability: capability.id,

@@ -106,6 +106,7 @@ operation_delay_ms = 1
 `,
   );
   const commands = [
+    ["help", "--json"],
     ["doctor", "--json"],
     ["adapters", "list", "--json"],
     ["devices", "scan", "--json"],
@@ -114,12 +115,21 @@ operation_delay_ms = 1
     ["device", "demo", "capture", "--json"],
     ["runs", "list", "--json"],
   ];
-  for (const args of commands)
-    assert.doesNotThrow(() => JSON.parse(run(...args)));
+  for (const args of commands) {
+    const result = JSON.parse(run(...args));
+    assert.equal(result.version, 2, `${args.join(" ")} uses protocol v2`);
+    assert.match(result.schema, /^benchpilot\.(?:help|result)$/);
+  }
   const events = run("device", "demo", "deploy", "--jsonl")
     .trim()
     .split("\n")
     .map((line) => JSON.parse(line));
+  assert.ok(
+    events.every(
+      (event) => event.schema === "benchpilot.event" && event.version === 2,
+    ),
+    "every stream record uses the v2 event protocol",
+  );
   assert.equal(events.at(-1).event.type, "operation.completed");
   assert.equal(
     events.filter((event) =>

@@ -280,7 +280,7 @@ test("declarative demo executes build, deploy, and capture", async () => {
       (await run(dir, "adapters", "list", "--json")).stdout,
     );
     assert.deepEqual(
-      adapters.adapters.map((adapter) => adapter.id),
+      adapters.data.adapters.map((adapter) => adapter.id),
       ["demo", "esp-idf"],
     );
     const built = JSON.parse(
@@ -347,7 +347,7 @@ test("declarative demo executes build, deploy, and capture", async () => {
       (await run(dir, "adapter", "demo", "doctor", "--json")).stdout,
     );
     assert.ok(
-      doctor.checks.some(
+      doctor.data.checks.some(
         (check) => check.id === "demo-tool-node" && check.status === "pass",
       ),
     );
@@ -523,7 +523,7 @@ test("declarative demo aborts an action when the operation times out", async () 
     ).catch((error) => error);
     assert.equal(JSON.parse(failed.stdout).kind, "OPERATION_TIMEOUT");
     assert.deepEqual(
-      JSON.parse((await run(dir, "locks", "list", "--json")).stdout).locks,
+      JSON.parse((await run(dir, "locks", "list", "--json")).stdout).data.locks,
       [],
     );
   } finally {
@@ -669,15 +669,15 @@ test("dry-run creates no run, lock, approval, or artifact state", async () => {
     );
     assert.equal(plan.dryRun, true);
     assert.deepEqual(
-      JSON.parse((await run(dir, "runs", "list", "--json")).stdout).runs,
+      JSON.parse((await run(dir, "runs", "list", "--json")).stdout).data.runs,
       [],
     );
     assert.deepEqual(
-      JSON.parse((await run(dir, "locks", "list", "--json")).stdout).locks,
+      JSON.parse((await run(dir, "locks", "list", "--json")).stdout).data.locks,
       [],
     );
     assert.deepEqual(
-      JSON.parse((await run(dir, "approvals", "list", "--json")).stdout)
+      JSON.parse((await run(dir, "approvals", "list", "--json")).stdout).data
         .approvals,
       [],
     );
