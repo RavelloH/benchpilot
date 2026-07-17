@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import prompts from "prompts";
+import { readdir, readFile } from "node:fs/promises";
+import { join } from "node:path";
 import {
   AGENT_MARKER_CONTRACT_VERSION,
   detectAgent,
@@ -192,4 +194,17 @@ test("command catalog is the CLI root-menu source", () => {
       "help",
     ],
   );
+});
+
+test("only the presenter owns CLI terminal writes", async () => {
+  const root = join(process.cwd(), "src", "cli");
+  const files = (await readdir(root, { recursive: true })).filter((file) =>
+    file.endsWith(".ts"),
+  );
+  for (const file of files) {
+    if (file === "output-renderer.ts") continue;
+    const source = await readFile(join(root, file), "utf8");
+    assert.doesNotMatch(source, /(?:process\.)?(?:stdout|stderr)\.write/);
+    assert.doesNotMatch(source, /createInterface|node:readline/);
+  }
 });
