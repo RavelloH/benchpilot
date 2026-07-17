@@ -49,7 +49,7 @@
   ],
   "scripts": {
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
-    "build": "pnpm run adapter:validate && pnpm run clean && tsc -p tsconfig.json && pnpm run adapter:compile",
+    "build": "pnpm run adapter:validate && pnpm run clean && tsc -p tsconfig.json && pnpm run adapter:compile && pnpm run adapter:test",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "pnpm run build && node --test test/*.test.js",
     "test:coverage": "pnpm run build && node --test --experimental-test-coverage test/*.test.js",

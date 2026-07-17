@@ -24,7 +24,9 @@ export class AdapterBundleLoader {
   private index?: Readonly<CompiledAdapterIndex>;
   private bundles = new Map<string, Readonly<CompiledAdapterBundleV2>>();
 
-  constructor(private readonly root = new URL("../", import.meta.url)) {}
+  constructor(
+    private readonly root = new URL("../bundles/", import.meta.url),
+  ) {}
 
   async loadIndex(): Promise<Readonly<CompiledAdapterIndex>> {
     if (this.index) return this.index;

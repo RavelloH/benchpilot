@@ -1,5 +1,12 @@
-import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
-import { basename, resolve } from "node:path";
+import {
+  mkdir,
+  readFile,
+  readdir,
+  rename,
+  rm,
+  writeFile,
+} from "node:fs/promises";
+import { basename, dirname, resolve } from "node:path";
 import { sha, stable } from "../../core/utilities/stable-json.js";
 import { bundleSha256 } from "../contract/bundle.js";
 import { diagnostic, hasErrors } from "./diagnostics.js";
@@ -136,16 +143,17 @@ export const validateAdapter = async (
   return { adapter, diagnostics };
 };
 
-export const adapterRoots = async () => [
-  resolve(adaptersRoot, "_template"),
-  ...(await readdir(resolve(adaptersRoot, "builtin"), { withFileTypes: true })
-    .then((items) =>
-      items
-        .filter((item) => item.isDirectory())
-        .map((item) => resolve(adaptersRoot, "builtin", item.name)),
-    )
-    .catch(() => [])),
-];
+export const adapterRoots = async () =>
+  [
+    resolve(adaptersRoot, "_template"),
+    ...(await readdir(resolve(adaptersRoot, "builtin"), { withFileTypes: true })
+      .then((items) =>
+        items
+          .filter((item) => item.isDirectory())
+          .map((item) => resolve(adaptersRoot, "builtin", item.name)),
+      )
+      .catch(() => [])),
+  ].sort();
 
 export const compileRoots = async () =>
   (await adapterRoots()).filter((root) => basename(root) !== "_template");
@@ -228,23 +236,16 @@ export const compileAdapter = async (
   return hasErrors(diagnostics) ? { diagnostics } : { diagnostics, bundle };
 };
 
-export const compileAll = async (output = resolve("dist", "adapters")) => {
+export const compileAll = async (
+  output = resolve("dist", "adapters", "bundles"),
+) => {
   const roots = await compileRoots();
   const results = await Promise.all(roots.map((root) => compileAdapter(root)));
   const diagnostics = results.flatMap((item) => item.diagnostics);
   if (hasErrors(diagnostics)) return { diagnostics };
-  await mkdir(output, { recursive: true });
-  await Promise.all(
-    (await readdir(output, { withFileTypes: true }))
-      .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
-      .map((entry) => rm(resolve(output, entry.name))),
-  );
-  const bundles = results.flatMap((item) => (item.bundle ? [item.bundle] : []));
-  await Promise.all(
-    bundles.map((bundle) =>
-      writeFile(resolve(output, `${bundle.id}.json`), `${stable(bundle)}\n`),
-    ),
-  );
+  const bundles = results
+    .flatMap((item) => (item.bundle ? [item.bundle] : []))
+    .sort((left, right) => left.id.localeCompare(right.id));
   const index = bundles.map((bundle) => ({
     id: bundle.id,
     displayName: bundle.manifest.display_name,
@@ -271,6 +272,41 @@ export const compileAll = async (output = resolve("dist", "adapters")) => {
       ]),
     ),
   }));
-  await writeFile(resolve(output, "index.json"), `${stable(index)}\n`);
+  const outputRoot = resolve(output);
+  const staging = `${outputRoot}.staging-${process.pid}-${Date.now()}`;
+  const backup = `${outputRoot}.previous-${process.pid}-${Date.now()}`;
+  await mkdir(dirname(outputRoot), { recursive: true });
+  try {
+    await mkdir(staging, { recursive: false });
+    for (const bundle of bundles)
+      await writeFile(
+        resolve(staging, `${bundle.id}.json`),
+        `${stable(bundle)}\n`,
+      );
+    await writeFile(resolve(staging, "index.json"), `${stable(index)}\n`);
+
+    // Re-read what will be published: serialization and content hashes are a
+    // release boundary, not merely an in-memory compiler invariant.
+    for (const bundle of bundles) {
+      const published = JSON.parse(
+        await readFile(resolve(staging, `${bundle.id}.json`), "utf8"),
+      ) as CompiledAdapterBundleV1;
+      if (published.bundleSha256 !== bundleSha256(published))
+        throw new Error(`Bundle hash validation failed for ${bundle.id}.`);
+    }
+    await rename(outputRoot, backup).catch((error: NodeJS.ErrnoException) => {
+      if (error.code !== "ENOENT") throw error;
+    });
+    try {
+      await rename(staging, outputRoot);
+    } catch (error) {
+      await rename(backup, outputRoot).catch(() => {});
+      throw error;
+    }
+    await rm(backup, { recursive: true, force: true });
+  } catch (error) {
+    await rm(staging, { recursive: true, force: true }).catch(() => {});
+    throw error;
+  }
   return { diagnostics };
 };

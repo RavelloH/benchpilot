@@ -120,7 +120,7 @@ test("bulk compilation excludes the template and writes the builtin index", asyn
     );
     await assert.rejects(readFile(join(output, "template.json"), "utf8"));
     await assert.rejects(readFile(join(output, "stale.json"), "utf8"));
-    assert.equal(await readFile(join(output, "keep.txt"), "utf8"), "keep\n");
+    await assert.rejects(readFile(join(output, "keep.txt"), "utf8"));
   } finally {
     await rm(output, { recursive: true, force: true });
   }
