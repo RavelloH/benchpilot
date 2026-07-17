@@ -7,8 +7,8 @@ import { mergePlatform } from "./platform-merger.js";
 import {
   planActionArguments,
   planActionEnvironment,
-} from "../runtime/planning/action-planner.js";
-import { planWorkflow } from "../runtime/planning/workflow-planner.js";
+  planWorkflow,
+} from "../contract/planning.js";
 import { planArtifacts } from "../contract/artifacts.js";
 import { parseOutput } from "../contract/rules.js";
 import { object, renderTemplate } from "../contract/template.js";
