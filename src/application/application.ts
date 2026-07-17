@@ -5,6 +5,7 @@ import {
   type InitializeProjectInput,
 } from "./init/use-case.js";
 import { commandRoots } from "./commands/catalog.js";
+import { editConfiguration } from "./config/use-case.js";
 
 /** Application composition root. CLI only invokes these use cases. */
 export function createApplication(adapters: Adapter[]) {
@@ -13,6 +14,7 @@ export function createApplication(adapters: Adapter[]) {
   return {
     registry,
     commandRoots: () => commandRoots,
+    editConfiguration,
     initializeProject: (input: InitializeProjectInput) =>
       initializeProject(input),
   };
