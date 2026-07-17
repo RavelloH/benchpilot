@@ -80,10 +80,7 @@ export async function main(adapters?: Adapter[]) {
           { help: fullHelp(helpPath) },
         );
       }
-      interaction ??= new InteractionSession(
-        { input: stdin, output: stdout },
-        locale,
-      );
+      interaction ??= new InteractionSession(locale);
       return interaction;
     };
     if (flags.version) {
@@ -111,20 +108,12 @@ export async function main(adapters?: Adapter[]) {
       write(h, flags, humanFull(target));
       return;
     }
-    if (!parts.length)
-      parts = [
-        await interactive("en", []).choose(
-          commandGroups
-            .filter((command) => command !== "help")
-            .map((command) => ({ value: command })),
-        ),
-      ];
+    if (!parts.length) {
+      stdout.write(brief("root"));
+      return;
+    }
     const paths = new PathService();
     if (parts[0] === "init") {
-      // A root-menu selection may have opened a session; init owns its
-      // language-first conversation and must not share stdin listeners.
-      interaction?.close();
-      interaction = undefined;
       const suppliedLocale = commandFlags.locale;
       const initLocale: Locale = isLocale(suppliedLocale)
         ? suppliedLocale
@@ -171,7 +160,6 @@ export async function main(adapters?: Adapter[]) {
         }
         try {
           input = await promptInit({
-            io: { input: stdin, output: stdout },
             locale: initLocale,
             projectId,
             projectName,

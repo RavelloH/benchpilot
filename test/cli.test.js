@@ -83,6 +83,17 @@ test("global color options use a positive internal flag", () => {
   ]);
 });
 
+test("root command prints help without starting an interactive session", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "benchpilot-root-help-"));
+  try {
+    const result = await run(dir);
+    assert.match(result.stdout, /Agent-first device lifecycle CLI/);
+    assert.equal(result.stderr, "");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("capability metadata maps long and short aliases back to schema fields", () => {
   const parsed = parse([
     "device",

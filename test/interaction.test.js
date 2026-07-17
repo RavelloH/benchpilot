@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { PassThrough } from "node:stream";
+import prompts from "prompts";
 import { detectAgent } from "../dist/cli/agent/detector.js";
 import { interactionDecision } from "../dist/cli/interaction/policy.js";
 import {
@@ -69,31 +69,24 @@ test("screen catalogs are complete and leave machine protocol out of translation
 });
 
 test("interactive sessions keep one conversation alive for sequential choices", async () => {
-  const input = new PassThrough();
-  const output = new PassThrough();
-  const session = new InteractionSession({ input, output }, "en");
+  prompts.inject(["set", "project.name"]);
+  const session = new InteractionSession("en");
   try {
-    const next = session.choose([{ value: "get" }, { value: "set" }]);
-    input.write("2\n");
-    assert.equal(await next, "set");
-    const key = session.value("key");
-    input.write("project.name\n");
-    assert.equal(await key, "project.name");
-    assert.match(output.read().toString(), /Choose the next action/);
+    assert.equal(
+      await session.choose([{ value: "get" }, { value: "set" }]),
+      "set",
+    );
+    assert.equal(await session.value("key"), "project.name");
   } finally {
     session.close();
   }
 });
 
 test("interactive session treats EOF as cancellation", async () => {
-  const input = new PassThrough();
-  const session = new InteractionSession(
-    { input, output: new PassThrough() },
-    "en",
-  );
+  prompts.inject([undefined]);
+  const session = new InteractionSession("en");
   try {
     const selection = session.choose([{ value: "list" }]);
-    input.end();
     await assert.rejects(
       selection,
       (error) => error instanceof InteractionCancelledError,
