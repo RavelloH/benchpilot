@@ -22,7 +22,6 @@ import {
   discoverDevices,
   discoverDevicesDetailed,
 } from "../dist/adapters/runtime/devices/discovery.js";
-import { executeDeviceProbe } from "../dist/adapters/runtime/devices/device-probe.js";
 import { AdapterRuntimeError } from "../dist/adapters/runtime/errors.js";
 import { EnvironmentResolver } from "../dist/adapters/runtime/environments/resolver.js";
 import { executeProcess } from "../dist/adapters/runtime/executors/process-executor.js";
@@ -44,7 +43,6 @@ import { runProcess } from "../dist/core/process/process-runner.js";
 import {
   AdapterRegistry,
   BenchPilotError,
-  LockManager,
   OperationRunner,
   PathService,
 } from "../dist/index.js";
@@ -443,7 +441,7 @@ test("command device discovery uses a Tool Action and parsed records", async () 
   );
 });
 
-test("device probes require explicit confirmation and run without a Core Run", async () => {
+test("device probes cannot execute in the Runtime discovery path", async () => {
   const platform = process.platform === "win32" ? "windows" : "linux";
   const runtime = {
     bundle: {
@@ -526,12 +524,6 @@ test("device probes require explicit confirmation and run without a Core Run", a
       },
     },
   };
-  await assert.rejects(
-    executeDeviceProbe(runtime, {}, { port: "COM8" }),
-    (error) =>
-      error instanceof AdapterRuntimeError &&
-      error.code === "ADAPTER_DISCOVERY_PROBE_REQUIRED",
-  );
   const adapter = createDeclarativeAdapter(runtime);
   await assert.rejects(
     adapter.discover({
@@ -1058,36 +1050,10 @@ test("doctor probes every tool with its declared environment", async () => {
   );
 });
 
-test("probe lease loss aborts the process and releases the lock", async () => {
+test("requested probes are rejected without acquiring a lock or launching a process", async () => {
   const root = await mkdtemp(join(tmpdir(), "benchpilot-probe-lease-loss-"));
   const started = join(root, "probe-started");
-  const originalStartHeartbeat = LockManager.prototype.startHeartbeat;
-  const originalRelease = LockManager.prototype.release;
-  let stopped = false;
-  let released = false;
   try {
-    LockManager.prototype.startHeartbeat = function (lock) {
-      const lost = new Promise((_, reject) => {
-        const loseWhenStarted = () => {
-          if (existsSync(started))
-            reject(
-              new BenchPilotError(
-                "LOCK_OWNERSHIP_LOST",
-                4,
-                "Lock ownership lost during probe.",
-              ),
-            );
-          else setTimeout(loseWhenStarted, 5);
-        };
-        loseWhenStarted();
-      });
-      void lost.catch(() => {});
-      return { lock, lost, stop: async () => void (stopped = true) };
-    };
-    LockManager.prototype.release = async function (lock) {
-      released = true;
-      return originalRelease.call(this, lock);
-    };
     const runtime = {
       bundle: {
         ...bundle,
@@ -1144,21 +1110,18 @@ test("probe lease loss aborts the process and releases the lock", async () => {
         parsers: { probe: { success_exit_codes: [0] } },
       },
     };
-    const result = await createDeclarativeAdapter(runtime).discoverDetailed({
-      adapterConfig: {},
-      paths: new PathService({ BENCHPILOT_HOME: root }),
-      discovery: { probe: true, confirmDeviceProbe: true },
-    });
-    assert.deepEqual(result.devices[0].probe, {
-      ok: false,
-      error: { kind: "LOCK_OWNERSHIP_LOST", retryable: false },
-    });
-    assert.equal(await readFile(started, "utf8"), "started");
-    assert.equal(stopped, true);
-    assert.equal(released, true);
+    await assert.rejects(
+      createDeclarativeAdapter(runtime).discoverDetailed({
+        adapterConfig: {},
+        paths: new PathService({ BENCHPILOT_HOME: root }),
+        discovery: { probe: true, confirmDeviceProbe: true },
+      }),
+      (error) =>
+        error instanceof BenchPilotError &&
+        error.kind === "DEVICE_PROBE_CAPABILITY_REQUIRED",
+    );
+    assert.equal(existsSync(started), false);
   } finally {
-    LockManager.prototype.startHeartbeat = originalStartHeartbeat;
-    LockManager.prototype.release = originalRelease;
     await rm(root, { recursive: true, force: true });
   }
 });

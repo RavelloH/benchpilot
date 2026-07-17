@@ -321,6 +321,15 @@ export async function main(adapters?: Adapter[]) {
         return;
       }
       if (parts[1] === "scan") {
+        if (
+          commandFlags.probe === true ||
+          commandFlags["confirm-device-probe"] === true
+        )
+          fail(
+            "DEVICE_PROBE_CAPABILITY_REQUIRED",
+            2,
+            "Device probes must run as declared capabilities through the Operation Runner.",
+          );
         const adapters = commandFlags.adapter
           ? [registry.get(String(commandFlags.adapter))]
           : registry.list();
@@ -331,11 +340,7 @@ export async function main(adapters?: Adapter[]) {
                 adapter,
                 config.value,
                 paths,
-                {
-                  probe: commandFlags.probe === true,
-                  confirmDeviceProbe:
-                    commandFlags["confirm-device-probe"] === true,
-                },
+                undefined,
               );
               return {
                 adapter: adapter.id,
