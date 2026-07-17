@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { stdout } from "node:process";
+import { stdin, stdout } from "node:process";
 import {
   Adapter,
   BenchPilotError,
@@ -13,7 +13,7 @@ import {
   PathService,
 } from "../core.js";
 import { loadBuiltinAdapters } from "../adapters/runtime/builtin-adapters.js";
-import { createBenchPilotApplication } from "./application.js";
+import { createApplication } from "../application/application.js";
 import {
   brief,
   commandGroups,
@@ -25,11 +25,14 @@ import {
 import { parse } from "./parser.js";
 import { editConfig } from "./commands/config-editor.js";
 import { handleDeviceCommand } from "./commands/device.js";
-import { initProject } from "./commands/init.js";
 import { handleRuntimeCommand } from "./commands/runtime.js";
 import { systemOperation } from "./commands/system.js";
 import { commandOptionFlags } from "./option-parser.js";
 import { write } from "./output-renderer.js";
+import { detectAgent } from "./agent/detector.js";
+import { interactionDecision } from "./interaction/policy.js";
+import { promptInit } from "./interaction/prompter.js";
+import { isLocale, t, type Locale } from "../i18n/index.js";
 
 const version = "0.0.0";
 export async function main(adapters?: Adapter[]) {
@@ -47,7 +50,7 @@ export async function main(adapters?: Adapter[]) {
       if (commandFlags.all) {
         const value = {
           schema: "benchpilot.help-index",
-          version: 1,
+          version: 2,
           commands: commandGroups,
         };
         write(value, flags, JSON.stringify(value, null, 2));
@@ -73,7 +76,76 @@ export async function main(adapters?: Adapter[]) {
     }
     const paths = new PathService();
     if (parts[0] === "init") {
-      write(await initProject(), flags, "Initialized BenchPilot demo project.");
+      const suppliedLocale = commandFlags.locale;
+      const initLocale: Locale = isLocale(suppliedLocale)
+        ? suppliedLocale
+        : "en";
+      const projectId =
+        typeof commandFlags["project-id"] === "string"
+          ? String(commandFlags["project-id"])
+          : undefined;
+      const projectName =
+        typeof commandFlags["project-name"] === "string"
+          ? String(commandFlags["project-name"])
+          : undefined;
+      let input =
+        projectId && projectName && isLocale(suppliedLocale)
+          ? { projectId, projectName, locale: suppliedLocale }
+          : undefined;
+      if (!input) {
+        const decision = interactionDecision({
+          agent: detectAgent(),
+          json: flags.json,
+          jsonl: flags.jsonl,
+          stdinIsTTY: stdin.isTTY,
+          stdoutIsTTY: stdout.isTTY,
+          ci: Boolean(process.env.CI),
+        });
+        if (!decision.allowed) {
+          const kind =
+            decision.reason === "agent"
+              ? "AGENT_INTERACTION_UNSUPPORTED"
+              : decision.reason === "machine-output"
+                ? "INTERACTIVE_MACHINE_OUTPUT_UNSUPPORTED"
+                : "INTERACTIVE_TERMINAL_REQUIRED";
+          const message = t(
+            initLocale,
+            decision.reason === "agent"
+              ? "cli.interaction.agent"
+              : decision.reason === "machine-output"
+                ? "cli.interaction.machine"
+                : "cli.interaction.terminal",
+          );
+          throw new BenchPilotError(kind, 2, message, false, undefined, [], {
+            help: fullHelp(["init"]),
+          });
+        }
+        try {
+          input = await promptInit({
+            io: { input: stdin, output: stdout },
+            locale: initLocale,
+            projectId,
+            projectName,
+            selectedLocale: isLocale(suppliedLocale)
+              ? suppliedLocale
+              : undefined,
+          });
+        } catch (error) {
+          if ((error as Error).name === "INTERACTION_CANCELLED")
+            throw new BenchPilotError(
+              "INTERACTION_CANCELLED",
+              130,
+              t(initLocale, "cli.interaction.cancelled"),
+            );
+          throw error;
+        }
+      }
+      const app = createApplication([]);
+      write(
+        await app.initializeProject({ cwd: process.cwd(), ...input }),
+        flags,
+        t(input.locale, "init.done"),
+      );
       return;
     }
     const project = await paths.project(
@@ -86,7 +158,7 @@ export async function main(adapters?: Adapter[]) {
       flags.config as string | undefined,
     );
     const declared = adapters ?? (await loadBuiltinAdapters());
-    const { registry } = createBenchPilotApplication(declared);
+    const { registry } = createApplication(declared);
     const runner = new OperationRunner({
       paths,
       registry,
@@ -363,7 +435,7 @@ export async function main(adapters?: Adapter[]) {
     const flags = parsed?.flags || {};
     const result = (err as BenchPilotError & { result?: Json }).result || {
       schema: "benchpilot.result",
-      version: 1,
+      version: 2,
       ok: false,
       kind: err.kind,
       message: err.message,
@@ -380,9 +452,19 @@ export async function main(adapters?: Adapter[]) {
     ) {
       const isOperation = ["device", "system"].includes(parsed?.path[0] || "");
       stdout.write(
-        `${JSON.stringify({ schema: "benchpilot.event", version: 1, event: { type: isOperation ? "operation.failed" : "command.failed", timestamp: new Date().toISOString() }, context: {}, data: { error: result } })}\n`,
+        `${JSON.stringify({ schema: "benchpilot.event", version: 2, event: { type: isOperation ? "operation.failed" : "command.failed", timestamp: new Date().toISOString() }, context: {}, data: { error: result } })}\n`,
       );
-    } else process.stderr.write(`${err.kind}: ${err.message}\n`);
+    } else {
+      process.stderr.write(`${err.kind}: ${err.message}\n`);
+      if (
+        [
+          "AGENT_INTERACTION_UNSUPPORTED",
+          "INTERACTIVE_MACHINE_OUTPUT_UNSUPPORTED",
+          "INTERACTIVE_TERMINAL_REQUIRED",
+        ].includes(err.kind)
+      )
+        process.stderr.write(`\n${humanFull(["init"])}\n`);
+    }
     process.exitCode = err.exitCode;
   }
 }

@@ -1,6 +1,9 @@
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import type { CompiledAdapterBundleV1 } from "../compiler/types.js";
+import {
+  bundleSha256,
+  type CompiledAdapterBundleV2,
+} from "../contract/bundle.js";
 import { AdapterRuntimeError } from "./errors.js";
 import type { CompiledAdapterIndex, RuntimePlatform } from "./types.js";
 
@@ -19,7 +22,7 @@ const deepFreeze = <T>(value: T): T => {
 
 export class AdapterBundleLoader {
   private index?: Readonly<CompiledAdapterIndex>;
-  private bundles = new Map<string, Readonly<CompiledAdapterBundleV1>>();
+  private bundles = new Map<string, Readonly<CompiledAdapterBundleV2>>();
 
   constructor(private readonly root = new URL("../", import.meta.url)) {}
 
@@ -43,7 +46,8 @@ export class AdapterBundleLoader {
         return (
           !adapterId.test(String(value.id)) ||
           typeof value.path !== "string" ||
-          typeof value.sourceHash !== "string"
+          typeof value.sourceHash !== "string" ||
+          typeof value.bundleSha256 !== "string"
         );
       })
     )
@@ -55,7 +59,7 @@ export class AdapterBundleLoader {
     return this.index;
   }
 
-  async load(id: string): Promise<Readonly<CompiledAdapterBundleV1>> {
+  async load(id: string): Promise<Readonly<CompiledAdapterBundleV2>> {
     if (!adapterId.test(id))
       throw new AdapterRuntimeError(
         "ADAPTER_NOT_FOUND",
@@ -74,11 +78,11 @@ export class AdapterBundleLoader {
         "ADAPTER_INDEX_INVALID",
         `Adapter index path is invalid for ${id}.`,
       );
-    let bundle: CompiledAdapterBundleV1;
+    let bundle: CompiledAdapterBundleV2;
     try {
       bundle = JSON.parse(
         await readFile(fileURLToPath(new URL(entry.path, this.root)), "utf8"),
-      ) as CompiledAdapterBundleV1;
+      ) as CompiledAdapterBundleV2;
     } catch (error) {
       throw new AdapterRuntimeError(
         "ADAPTER_BUNDLE_INVALID",
@@ -87,7 +91,7 @@ export class AdapterBundleLoader {
     }
     if (
       bundle.schema !== "benchpilot.adapter-bundle" ||
-      bundle.schemaVersion !== 1 ||
+      bundle.schemaVersion !== 2 ||
       bundle.id !== id
     )
       throw new AdapterRuntimeError(
@@ -98,6 +102,14 @@ export class AdapterBundleLoader {
       throw new AdapterRuntimeError(
         "ADAPTER_BUNDLE_HASH_MISMATCH",
         `Adapter bundle hash does not match its index: ${id}`,
+      );
+    if (
+      bundle.bundleSha256 !== entry.bundleSha256 ||
+      bundle.bundleSha256 !== bundleSha256(bundle)
+    )
+      throw new AdapterRuntimeError(
+        "ADAPTER_BUNDLE_HASH_MISMATCH",
+        `Adapter bundle content hash does not match its index: ${id}`,
       );
     const frozen = deepFreeze(bundle);
     this.bundles.set(id, frozen);

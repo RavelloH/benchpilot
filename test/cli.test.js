@@ -17,6 +17,38 @@ async function run(dir, ...args) {
     encoding: "utf8",
   });
 }
+async function initDemo(dir) {
+  await run(
+    dir,
+    "init",
+    "--project-id",
+    "demo",
+    "--project-name",
+    "Demo",
+    "--locale",
+    "en",
+  );
+  await writeFile(
+    path.join(dir, "benchpilot.toml"),
+    `version = 1
+
+[project]
+id = "demo"
+name = "Demo"
+
+[devices.demo]
+adapter = "demo"
+
+[systems.demo]
+devices = ["demo"]
+
+[adapters.demo]
+connected = true
+device_id = "demo-device-01"
+operation_delay_ms = 1
+`,
+  );
+}
 test("capability boolean options are parsed without a hard-coded option list", () => {
   const parsed = parse([
     "device",
@@ -84,7 +116,7 @@ test("installed CLI surface initializes and runs the demo", async () => {
   try {
     const help = await run(dir);
     assert.match(help.stdout, /Agent-first device lifecycle CLI/);
-    await run(dir, "init");
+    await initDemo(dir);
     const deployed = await run(dir, "device", "demo", "deploy", "--json");
     const result = JSON.parse(deployed.stdout);
     assert.equal(result.ok, true);
@@ -101,7 +133,7 @@ test("installed CLI surface initializes and runs the demo", async () => {
       .map((line) => JSON.parse(line));
     assert.ok(
       events.every(
-        (event) => event.schema === "benchpilot.event" && event.version === 1,
+        (event) => event.schema === "benchpilot.event" && event.version === 2,
       ),
     );
     assert.equal(events.at(-1).event.type, "operation.completed");
@@ -128,7 +160,7 @@ test("installed CLI surface initializes and runs the demo", async () => {
 test("declarative demo executes build, deploy, and capture", async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "benchpilot-declarative-"));
   try {
-    await run(dir, "init");
+    await initDemo(dir);
     const adapters = JSON.parse(
       (await run(dir, "adapters", "list", "--json")).stdout,
     );
@@ -215,7 +247,7 @@ test("secret approval bindings are redacted but matched by their real digest", a
   );
   const token = "approval-secret-value";
   try {
-    await run(dir, "init");
+    await initDemo(dir);
     const pending = await run(
       dir,
       "device",
@@ -516,7 +548,7 @@ test("injected adapter executes through the dynamic CLI route", async () => {
 test("dry-run creates no run, lock, approval, or artifact state", async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "benchpilot-dry-run-"));
   try {
-    await run(dir, "init");
+    await initDemo(dir);
     const plan = JSON.parse(
       (await run(dir, "device", "demo", "build", "--dry-run", "--json")).stdout,
     );

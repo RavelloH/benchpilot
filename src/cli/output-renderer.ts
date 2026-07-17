@@ -13,7 +13,7 @@ export function write(value: unknown, flags: Flags, plain?: string) {
       : flags.jsonl
         ? operation
           ? ""
-          : `${JSON.stringify({ schema: "benchpilot.event", version: 1, event: { type: "command.result", timestamp: new Date().toISOString() }, context: {}, data: { result: value } })}\n`
+          : `${JSON.stringify({ schema: "benchpilot.event", version: 2, event: { type: "command.result", timestamp: new Date().toISOString() }, context: {}, data: { result: value } })}\n`
         : (plain ?? `${JSON.stringify(value, null, 2)}\n`),
   );
 }

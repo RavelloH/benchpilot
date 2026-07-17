@@ -103,7 +103,7 @@ export function fullHelp(parts: string[]) {
   const pathName = parts.join(" ") || "benchpilot";
   return {
     schema: "benchpilot.help",
-    version: 1,
+    version: 2,
     path: parts,
     summary: groups[parts.at(-1) || "root"]?.summary || "BenchPilot command",
     description:

@@ -1,4 +1,7 @@
-import type { CompiledAdapterBundleV1, JsonObject } from "../compiler/types.js";
+import type {
+  CompiledAdapterBundleV2,
+  JsonObject,
+} from "../contract/bundle.js";
 
 export type RuntimePlatform = "windows" | "linux" | "macos";
 
@@ -8,6 +11,7 @@ export interface CompiledAdapterIndexEntry {
   adapterVersion: string;
   status: string;
   sourceHash: string;
+  bundleSha256: string;
   path: string;
   platforms: Record<string, Record<string, boolean>>;
 }
@@ -15,7 +19,7 @@ export interface CompiledAdapterIndexEntry {
 export type CompiledAdapterIndex = CompiledAdapterIndexEntry[];
 
 export interface RuntimeAdapter {
-  readonly bundle: Readonly<CompiledAdapterBundleV1>;
+  readonly bundle: Readonly<CompiledAdapterBundleV2>;
   readonly platform: RuntimePlatform;
   readonly rules: Readonly<JsonObject>;
 }

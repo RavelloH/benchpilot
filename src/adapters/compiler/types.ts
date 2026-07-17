@@ -1,4 +1,8 @@
-export type JsonObject = { [key: string]: unknown };
+export type {
+  JsonObject,
+  CompiledAdapterBundleV2,
+} from "../contract/bundle.js";
+import type { JsonObject } from "../contract/bundle.js";
 
 export interface AdapterDiagnostic {
   severity: "error" | "warning";
@@ -17,15 +21,4 @@ export interface LoadedAdapter {
   schemas: Record<string, JsonObject>;
 }
 
-export interface CompiledAdapterBundleV1 {
-  schema: "benchpilot.adapter-bundle";
-  schemaVersion: 1;
-  id: string;
-  sourceHash: string;
-  capabilityCatalogVersion: 1;
-  capabilityCatalogHash: string;
-  manifest: JsonObject;
-  capabilityCatalog: JsonObject;
-  schemas: Record<string, JsonObject>;
-  platforms: Record<string, JsonObject>;
-}
+export type { CompiledAdapterBundleV2 as CompiledAdapterBundleV1 } from "../contract/bundle.js";

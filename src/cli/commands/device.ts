@@ -68,7 +68,7 @@ export async function handleDeviceCommand({
     if (flags.help) {
       const help = {
         schema: "benchpilot.help",
-        version: 1,
+        version: 2,
         path: parts,
         summary: definition.summary,
         description: definition.description || definition.summary,

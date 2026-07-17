@@ -606,7 +606,7 @@ export class OperationRunner {
     const result: Json = ok
       ? {
           schema: "benchpilot.result",
-          version: 1,
+          version: 2,
           ok: true,
           command,
           runId: run?.id,
@@ -617,7 +617,7 @@ export class OperationRunner {
         }
       : {
           schema: "benchpilot.result",
-          version: 1,
+          version: 2,
           ok: false,
           command,
           runId: run?.id,

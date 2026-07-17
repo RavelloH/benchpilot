@@ -13,7 +13,7 @@ export class EventWriter implements BenchPilotEventWriter {
     this.output.write(
       `${JSON.stringify({
         schema: "benchpilot.event",
-        version: 1,
+        version: 2,
         event: { type, timestamp: new Date().toISOString() },
         context: this.context,
         data: payload,

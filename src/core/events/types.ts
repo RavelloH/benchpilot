@@ -2,7 +2,7 @@ import type { Json } from "../../core.js";
 
 export interface BenchPilotEvent {
   schema: "benchpilot.event";
-  version: 1;
+  version: 2;
   event: { type: string; timestamp: string };
   context: Json;
   data: Json;

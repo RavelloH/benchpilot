@@ -51,7 +51,32 @@ try {
     });
   assert.match(run("--version"), /0\.0\.0/);
   assert.match(run(), /Agent-first device lifecycle CLI/);
-  run("init");
+  run(
+    "init",
+    "--project-id",
+    "demo",
+    "--project-name",
+    "Demo",
+    "--locale",
+    "en",
+  );
+  await writeFile(
+    path.join(project, "benchpilot.toml"),
+    `version = 1
+
+[project]
+id = "demo"
+name = "Demo"
+
+[devices.demo]
+adapter = "demo"
+
+[adapters.demo]
+connected = true
+device_id = "demo-device-01"
+operation_delay_ms = 1
+`,
+  );
   const commands = [
     ["doctor", "--json"],
     ["adapters", "list", "--json"],

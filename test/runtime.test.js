@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import {
   mkdtemp,
   lstat,
@@ -50,7 +51,7 @@ import {
 
 const bundle = {
   schema: "benchpilot.adapter-bundle",
-  schemaVersion: 1,
+  schemaVersion: 2,
   id: "demo",
   sourceHash: "source-hash",
   capabilityCatalogVersion: 1,
@@ -84,6 +85,17 @@ const bundle = {
     },
   },
 };
+const stable = (value) =>
+  JSON.stringify(value, (_key, child) =>
+    child && typeof child === "object" && !Array.isArray(child)
+      ? Object.fromEntries(
+          Object.keys(child)
+            .sort()
+            .map((key) => [key, child[key]]),
+        )
+      : child,
+  );
+bundle.bundleSha256 = createHash("sha256").update(stable(bundle)).digest("hex");
 
 test("bundle loader uses its module-relative root and validates bundle hashes", async () => {
   const root = await mkdtemp(join(tmpdir(), "benchpilot-runtime-bundle-"));
@@ -97,6 +109,7 @@ test("bundle loader uses its module-relative root and validates bundle hashes", 
           adapterVersion: "1.0.0",
           status: "active",
           sourceHash: "source-hash",
+          bundleSha256: bundle.bundleSha256,
           path: "demo.json",
           platforms: {},
         },
@@ -121,6 +134,7 @@ test("bundle loader uses its module-relative root and validates bundle hashes", 
           adapterVersion: "1.0.0",
           status: "active",
           sourceHash: "wrong",
+          bundleSha256: bundle.bundleSha256,
           path: "demo.json",
           platforms: {},
         },
@@ -246,10 +260,10 @@ test("workflow without a local timeout retains the capability deadline and event
 });
 
 test("execution deadlines reduce the timeout available to later actions", async () => {
-  const deadline = new ExecutionDeadline(30);
-  await new Promise((resolve) => setTimeout(resolve, 15));
+  const deadline = new ExecutionDeadline(200);
+  await new Promise((resolve) => setTimeout(resolve, 10));
   assert.ok(deadline.remainingMs() > 0);
-  assert.ok(deadline.limit(60) < 30);
+  assert.ok(deadline.limit(600) < 200);
 });
 
 test("passive device discovery scores, deduplicates, and orders stable identities", async () => {

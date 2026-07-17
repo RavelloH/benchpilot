@@ -1,6 +1,7 @@
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { basename, resolve } from "node:path";
 import { sha, stable } from "../../core/utilities/stable-json.js";
+import { bundleSha256 } from "../contract/bundle.js";
 import { diagnostic, hasErrors } from "./diagnostics.js";
 import { validateAdapterLayout } from "./layout.js";
 import { fixedFiles } from "./layout.js";
@@ -201,9 +202,9 @@ export const compileAdapter = async (
       .sort()
       .map(async (file) => [file, await readFile(resolve(root, file), "utf8")]),
   );
-  const bundle: CompiledAdapterBundleV1 = {
+  const unsigned: Omit<CompiledAdapterBundleV1, "bundleSha256"> = {
     schema: "benchpilot.adapter-bundle",
-    schemaVersion: 1,
+    schemaVersion: 2,
     id: adapter.id,
     sourceHash: sha([source, catalogContent, 1]),
     manifest: adapter.files["manifest.toml"],
@@ -212,6 +213,10 @@ export const compileAdapter = async (
     capabilityCatalogHash: sha(catalogContent),
     schemas: adapter.schemas,
     platforms,
+  };
+  const bundle: CompiledAdapterBundleV1 = {
+    ...unsigned,
+    bundleSha256: bundleSha256(unsigned),
   };
   diagnostics.push(
     ...(await validateBundle(
@@ -246,6 +251,7 @@ export const compileAll = async (output = resolve("dist", "adapters")) => {
     adapterVersion: bundle.manifest.adapter_version,
     status: bundle.manifest.status,
     sourceHash: bundle.sourceHash,
+    bundleSha256: bundle.bundleSha256,
     path: `${bundle.id}.json`,
     platforms: Object.fromEntries(
       Object.entries(bundle.platforms).map(([name, item]) => [
