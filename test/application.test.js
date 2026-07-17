@@ -16,6 +16,7 @@ import { initializeProject } from "../dist/application/init/use-case.js";
 import { CommandCatalog } from "../dist/application/commands/catalog.js";
 import { configurationKeyPaths } from "../dist/application/queries/use-case.js";
 import { ConfigurationCommandUseCases } from "../dist/application/config/command-use-case.js";
+import { RuntimeCommandUseCases } from "../dist/application/runtime/command-use-case.js";
 import {
   executeSystemCapability,
   SystemUseCases,
@@ -213,6 +214,79 @@ test("configuration command use case owns action validation and mutation input",
       value: "Demo",
     },
   ]);
+});
+
+test("runtime command use case owns administrative action dispatch", async () => {
+  const calls = [];
+  const commands = new RuntimeCommandUseCases({
+    async listRuns(input) {
+      calls.push(["listRuns", input]);
+      return { runs: [] };
+    },
+    async pruneRuns(input) {
+      calls.push(["pruneRuns", input]);
+      return { removed: [] };
+    },
+    async showRun(id) {
+      return { id };
+    },
+    async runLog(id) {
+      return { log: id };
+    },
+    async runArtifacts(id) {
+      return { artifacts: [id] };
+    },
+    async listLocks() {
+      return { locks: [] };
+    },
+    async clearStaleLocks() {
+      return { cleared: [] };
+    },
+    async inspectLock(id) {
+      return { id };
+    },
+    async clearLock(id, input) {
+      calls.push(["clearLock", id, input]);
+      return { cleared: id };
+    },
+    async listApprovals() {
+      return { approvals: [] };
+    },
+    async inspectApproval(id) {
+      return { id };
+    },
+    async rejectApproval(id) {
+      return { id, status: "rejected" };
+    },
+    async approvalChallenge(id) {
+      return { id, physicalId: "serial-1" };
+    },
+    async approveApproval(id, challenge) {
+      calls.push(["approve", id, challenge]);
+      return { id, status: "approved" };
+    },
+  });
+  assert.deepEqual(
+    await commands.execute({
+      action: "runs.list",
+      limit: "2",
+    }),
+    { kind: "runtime.runs.list", data: { runs: [] } },
+  );
+  assert.deepEqual(calls[0], ["listRuns", { status: undefined, limit: 2 }]);
+  await assert.rejects(
+    commands.execute({ action: "approval.approve", id: "a" }),
+    (error) => error instanceof BenchPilotError && error.kind === "USAGE_ERROR",
+  );
+  assert.deepEqual(
+    await commands.execute({
+      action: "approval.approve",
+      id: "a",
+      challenge: "serial-1",
+    }),
+    { kind: "runtime.approval.approve", data: { id: "a", status: "approved" } },
+  );
+  assert.deepEqual(calls.at(-1), ["approve", "a", "serial-1"]);
 });
 
 test("init creates the minimum project files and preserves them on repeat", async () => {

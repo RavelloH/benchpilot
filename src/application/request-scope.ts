@@ -15,6 +15,10 @@ import {
   createRuntimeUseCases,
   type RuntimeUseCases,
 } from "./runtime/use-case.js";
+import {
+  createRuntimeCommandUseCases,
+  type RuntimeCommandUseCases,
+} from "./runtime/command-use-case.js";
 import { createQueryUseCases, type QueryUseCases } from "./queries/use-case.js";
 import {
   createDeviceUseCases,
@@ -50,6 +54,7 @@ export interface ApplicationRequestScope {
   config: ResolvedConfig;
   runner: OperationRunner;
   runtime: RuntimeUseCases;
+  runtimeCommands: RuntimeCommandUseCases;
   queries: QueryUseCases;
   devices: DeviceUseCases;
   systems: SystemUseCases;
@@ -84,6 +89,7 @@ export async function openApplicationRequest(
     },
   });
   const runtime = createRuntimeUseCases({ paths, project, config });
+  const runtimeCommands = createRuntimeCommandUseCases(runtime);
   const queries = createQueryUseCases({
     registry: application.registry,
     paths,
@@ -128,6 +134,7 @@ export async function openApplicationRequest(
     config,
     runner,
     runtime,
+    runtimeCommands,
     queries,
     devices,
     systems,

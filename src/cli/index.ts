@@ -192,6 +192,7 @@ export async function main(adapters?: Adapter[]) {
     const {
       config,
       runtime,
+      runtimeCommands,
       queries,
       devices,
       systems,
@@ -571,7 +572,7 @@ export async function main(adapters?: Adapter[]) {
         parts,
         flags,
         commandFlags,
-        runtime,
+        runtimeCommands,
         readApprovalChallenge: async ({ approvalId, physicalId }) =>
           interactive(locale, ["approval", approvalId, "approve"]).value(
             `physical device ID (${physicalId})`,

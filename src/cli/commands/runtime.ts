@@ -1,5 +1,5 @@
 import { fail, type Json } from "../../core.js";
-import type { RuntimeUseCases } from "../../application/runtime/use-case.js";
+import type { RuntimeCommandUseCases } from "../../application/runtime/command-use-case.js";
 import { brief, fullHelp } from "../help-renderer.js";
 import type { Flags } from "../parser.js";
 import { write } from "../output-renderer.js";
@@ -8,7 +8,7 @@ interface RuntimeCommandContext {
   parts: string[];
   flags: Flags;
   commandFlags: Json;
-  runtime: RuntimeUseCases;
+  runtimeCommands: RuntimeCommandUseCases;
   readApprovalChallenge: (input: {
     approvalId: string;
     physicalId: string;
@@ -19,7 +19,7 @@ export async function handleRuntimeCommand({
   parts,
   flags,
   commandFlags,
-  runtime,
+  runtimeCommands,
   readApprovalChallenge,
 }: RuntimeCommandContext): Promise<boolean> {
   if (parts[0] === "runs") {
@@ -29,31 +29,28 @@ export async function handleRuntimeCommand({
     }
     if (parts[1] === "list") {
       write(
-        await runtime.listRuns({
-          status: commandFlags.status as Json | undefined,
-          limit:
-            commandFlags.limit === undefined
-              ? undefined
-              : Number(commandFlags.limit),
-        }),
+        (
+          await runtimeCommands.execute({
+            action: "runs.list",
+            status: commandFlags.status as Json | undefined,
+            limit: commandFlags.limit as Json | undefined,
+          })
+        ).data,
         flags,
       );
       return true;
     }
     if (parts[1] === "prune") {
       write(
-        await runtime.pruneRuns({
-          olderThan:
-            commandFlags["older-than"] === undefined
-              ? undefined
-              : String(commandFlags["older-than"]),
-          keep:
-            commandFlags.keep === undefined
-              ? undefined
-              : Number(commandFlags.keep),
-          dangerouslyRemoveAllRuns:
-            commandFlags["dangerously-remove-all-runs"] === true,
-        }),
+        (
+          await runtimeCommands.execute({
+            action: "runs.prune",
+            olderThan: commandFlags["older-than"] as Json | undefined,
+            keep: commandFlags.keep as Json | undefined,
+            dangerouslyRemoveAllRuns:
+              commandFlags["dangerously-remove-all-runs"] === true,
+          })
+        ).data,
         flags,
       );
       return true;
@@ -69,12 +66,27 @@ export async function handleRuntimeCommand({
       );
       return true;
     }
-    if (parts[2] === "show") write(await runtime.showRun(parts[1]), flags);
+    if (parts[2] === "show")
+      write(
+        (await runtimeCommands.execute({ action: "run.show", id: parts[1] }))
+          .data,
+        flags,
+      );
     else if (parts[2] === "logs") {
-      const result = await runtime.runLog(parts[1]);
+      const result = (
+        await runtimeCommands.execute({ action: "run.logs", id: parts[1] })
+      ).data as { log: string };
       write(result, flags, result.log);
     } else if (parts[2] === "artifacts")
-      write(await runtime.runArtifacts(parts[1]), flags);
+      write(
+        (
+          await runtimeCommands.execute({
+            action: "run.artifacts",
+            id: parts[1],
+          })
+        ).data,
+        flags,
+      );
     else fail("USAGE_ERROR", 2, "Unknown run command.");
     return true;
   }
@@ -84,11 +96,17 @@ export async function handleRuntimeCommand({
       return true;
     }
     if (parts[1] === "list") {
-      write(await runtime.listLocks(), flags);
+      write(
+        (await runtimeCommands.execute({ action: "locks.list" })).data,
+        flags,
+      );
       return true;
     }
     if (parts[1] === "clear-stale") {
-      write(await runtime.clearStaleLocks(), flags);
+      write(
+        (await runtimeCommands.execute({ action: "locks.clear-stale" })).data,
+        flags,
+      );
       return true;
     }
     fail("USAGE_ERROR", 2, "Unknown locks command.");
@@ -103,17 +121,25 @@ export async function handleRuntimeCommand({
       return true;
     }
     if (parts[2] === "show" || parts[2] === "inspect")
-      write(await runtime.inspectLock(parts[1]), flags);
+      write(
+        (await runtimeCommands.execute({ action: "lock.show", id: parts[1] }))
+          .data,
+        flags,
+      );
     else if (parts[2] === "clear")
       write(
-        await runtime.clearLock(parts[1], {
-          dangerouslyClearActiveLock: Boolean(
-            commandFlags["dangerously-clear-active-lock"],
-          ),
-          dangerouslyClearQuarantinedLock: Boolean(
-            commandFlags["dangerously-clear-quarantined-lock"],
-          ),
-        }),
+        (
+          await runtimeCommands.execute({
+            action: "lock.clear",
+            id: parts[1],
+            dangerouslyClearActiveLock: Boolean(
+              commandFlags["dangerously-clear-active-lock"],
+            ),
+            dangerouslyClearQuarantinedLock: Boolean(
+              commandFlags["dangerously-clear-quarantined-lock"],
+            ),
+          })
+        ).data,
         flags,
       );
     else fail("USAGE_ERROR", 2, "Unknown lock command.");
@@ -124,7 +150,10 @@ export async function handleRuntimeCommand({
     return true;
   }
   if (parts[0] === "approvals" && parts[1] === "list") {
-    write(await runtime.listApprovals(), flags);
+    write(
+      (await runtimeCommands.execute({ action: "approvals.list" })).data,
+      flags,
+    );
     return true;
   }
   if (parts[0] === "approvals")
@@ -139,16 +168,46 @@ export async function handleRuntimeCommand({
       return true;
     }
     if (parts[2] === "inspect")
-      write(await runtime.inspectApproval(parts[1]), flags);
+      write(
+        (
+          await runtimeCommands.execute({
+            action: "approval.inspect",
+            id: parts[1],
+          })
+        ).data,
+        flags,
+      );
     else if (parts[2] === "reject") {
-      write(await runtime.rejectApproval(parts[1]), flags);
+      write(
+        (
+          await runtimeCommands.execute({
+            action: "approval.reject",
+            id: parts[1],
+          })
+        ).data,
+        flags,
+      );
     } else if (parts[2] === "approve") {
-      const challenge = await runtime.approvalChallenge(parts[1]);
+      const challenge = (
+        await runtimeCommands.execute({
+          action: "approval.challenge",
+          id: parts[1],
+        })
+      ).data as { id: string; physicalId: string };
       const answer = await readApprovalChallenge({
         approvalId: challenge.id,
         physicalId: challenge.physicalId,
       });
-      write(await runtime.approveApproval(parts[1], answer), flags);
+      write(
+        (
+          await runtimeCommands.execute({
+            action: "approval.approve",
+            id: parts[1],
+            challenge: answer,
+          })
+        ).data,
+        flags,
+      );
     } else fail("USAGE_ERROR", 2, "Unknown approval command.");
     return true;
   }
