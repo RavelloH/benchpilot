@@ -1,9 +1,9 @@
 import Ajv2020Import from "ajv/dist/2020.js";
 import addFormatsImport from "ajv-formats";
 import type {
-  CompiledAdapterBundleV1,
+  CompiledAdapterBundleV2,
   JsonObject,
-} from "../../compiler/types.js";
+} from "../../contract/bundle.js";
 import {
   AdapterRuntimeError,
   type AdapterRuntimeErrorCode,
@@ -36,7 +36,7 @@ export class AdapterDataValidator {
   private readonly validators = new Map<string, Validator>();
   private readonly definitionRoots = new Set<string>();
 
-  constructor(private readonly bundle: Readonly<CompiledAdapterBundleV1>) {
+  constructor(private readonly bundle: Readonly<CompiledAdapterBundleV2>) {
     this.ajv = new Ajv2020({
       allErrors: true,
       strict: false,
