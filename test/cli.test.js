@@ -114,7 +114,7 @@ test("capability metadata maps long and short aliases back to schema fields", ()
 test("installed CLI surface initializes and runs the demo", async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "benchpilot-test-"));
   try {
-    const help = await run(dir);
+    const help = await run(dir, "help");
     assert.match(help.stdout, /Agent-first device lifecycle CLI/);
     await initDemo(dir);
     const deployed = await run(dir, "device", "demo", "deploy", "--json");

@@ -12,5 +12,8 @@ export const en: MessageCatalog = {
   "init.projectName": "Project name",
   "init.locale": "Display language",
   "init.done": "Initialized BenchPilot project.",
+  "menu.choose": "Choose the next action",
+  "menu.value": "Enter {name}",
+  "menu.invalid": "Choose one of the listed options.",
   "error.unknown": "Command failed: {message}",
 };

@@ -7,9 +7,7 @@ import {
   fail,
   getKey,
   Json,
-  loadConfig,
   isSupportedNodeVersion,
-  OperationRunner,
   PathService,
 } from "../core.js";
 import { loadBuiltinAdapters } from "../adapters/runtime/builtin-adapters.js";
@@ -32,16 +30,61 @@ import { commandOptionFlags } from "./option-parser.js";
 import { write } from "./output-renderer.js";
 import { detectAgent } from "./agent/detector.js";
 import { interactionDecision } from "./interaction/policy.js";
-import { promptInit } from "./interaction/prompter.js";
+import {
+  InteractionCancelledError,
+  InteractionSession,
+  promptInit,
+} from "./interaction/prompter.js";
 import { isLocale, t, type Locale } from "../i18n/index.js";
 
 const version = "0.0.0";
 export async function main(adapters?: Adapter[]) {
   let parsed;
+  let interaction: InteractionSession | undefined;
   try {
     parsed = parse(process.argv.slice(2));
-    const { path: parts, flags, rawOptions } = parsed;
-    const commandFlags = { ...flags, ...commandOptionFlags(rawOptions) };
+    let parts = [...parsed.path];
+    const { flags, rawOptions } = parsed;
+    let commandFlags = { ...flags, ...commandOptionFlags(rawOptions) };
+    const interactive = (locale: Locale, helpPath: string[]) => {
+      const decision = interactionDecision({
+        agent: detectAgent(),
+        json: flags.json,
+        jsonl: flags.jsonl,
+        stdinIsTTY: stdin.isTTY,
+        stdoutIsTTY: stdout.isTTY,
+        ci: Boolean(process.env.CI),
+      });
+      if (!decision.allowed) {
+        const kind =
+          decision.reason === "agent"
+            ? "AGENT_INTERACTION_UNSUPPORTED"
+            : decision.reason === "machine-output"
+              ? "INTERACTIVE_MACHINE_OUTPUT_UNSUPPORTED"
+              : "INTERACTIVE_TERMINAL_REQUIRED";
+        throw new BenchPilotError(
+          kind,
+          2,
+          t(
+            locale,
+            decision.reason === "agent"
+              ? "cli.interaction.agent"
+              : decision.reason === "machine-output"
+                ? "cli.interaction.machine"
+                : "cli.interaction.terminal",
+          ),
+          false,
+          undefined,
+          [],
+          { help: fullHelp(helpPath) },
+        );
+      }
+      interaction ??= new InteractionSession(
+        { input: stdin, output: stdout },
+        locale,
+      );
+      return interaction;
+    };
     if (flags.version) {
       stdout.write(`${version}\n`);
       return;
@@ -67,16 +110,20 @@ export async function main(adapters?: Adapter[]) {
       write(h, flags, humanFull(target));
       return;
     }
-    if (!parts.length) {
-      stdout.write(brief("root"));
-      return;
-    }
-    if (isCommandGroup(parts[0]) && parts.length === 1) {
-      stdout.write(brief(parts[0]));
-      return;
-    }
+    if (!parts.length)
+      parts = [
+        await interactive("en", []).choose(
+          commandGroups
+            .filter((command) => command !== "help")
+            .map((command) => ({ value: command })),
+        ),
+      ];
     const paths = new PathService();
     if (parts[0] === "init") {
+      // A root-menu selection may have opened a session; init owns its
+      // language-first conversation and must not share stdin listeners.
+      interaction?.close();
+      interaction = undefined;
       const suppliedLocale = commandFlags.locale;
       const initLocale: Locale = isLocale(suppliedLocale)
         ? suppliedLocale
@@ -159,6 +206,117 @@ export async function main(adapters?: Adapter[]) {
     });
     const { registry } = scope.application;
     const { project, config, runner, runtime } = scope;
+    const configuredLocale = (config.value.cli as Json | undefined)?.locale;
+    const locale = isLocale(configuredLocale) ? configuredLocale : "en";
+    if (isCommandGroup(parts[0]) && parts.length === 1) {
+      const session = interactive(locale, parts);
+      const group = parts[0];
+      if (group === "config") {
+        const sub = await session.choose(
+          ["get", "set", "unset", "resolved", "explain", "validate"].map(
+            (value) => ({ value }),
+          ),
+        );
+        parts.push(sub);
+        if (["get", "unset", "explain"].includes(sub))
+          parts.push(await session.value("key"));
+        if (sub === "set") {
+          parts.push(await session.value("key"));
+          parts.push(await session.value("value"));
+        }
+      } else if (group === "runs") {
+        const sub = await session.choose([
+          { value: "list" },
+          { value: "prune" },
+        ]);
+        parts.push(sub);
+        if (sub === "prune") {
+          const mode = await session.choose([
+            { value: "keep", label: "keep newest runs" },
+            { value: "older-than", label: "remove runs older than a duration" },
+            { value: "all", label: "remove all run records" },
+          ]);
+          if (mode === "all")
+            commandFlags = {
+              ...commandFlags,
+              "dangerously-remove-all-runs": true,
+            };
+          else
+            commandFlags = {
+              ...commandFlags,
+              [mode]: await session.value(mode),
+            };
+        }
+      } else if (group === "adapters") parts.push("list");
+      else if (group === "devices")
+        parts.push(
+          await session.choose([{ value: "list" }, { value: "scan" }]),
+        );
+      else if (group === "systems") parts.push("list");
+      else if (group === "locks")
+        parts.push(
+          await session.choose([{ value: "list" }, { value: "clear-stale" }]),
+        );
+      else if (group === "approvals") parts.push("list");
+      else if (group === "adapter") {
+        const id = await session.value("adapter id");
+        parts.push(
+          id,
+          await session.choose([{ value: "info" }, { value: "doctor" }]),
+        );
+      } else if (group === "device") {
+        const id = await session.value("device id");
+        const rawDevice = (config.value.devices as Json | undefined)?.[id];
+        if (!rawDevice || typeof rawDevice !== "object")
+          fail("DEVICE_NOT_FOUND", 3, `Device not found: ${id}`);
+        const adapter = registry.get(String((rawDevice as Json).adapter));
+        const device = await registry.createDevice(
+          adapter,
+          id,
+          rawDevice as Json,
+          config.value,
+          paths,
+        );
+        parts.push(
+          id,
+          await session.choose(
+            device.capabilities().map((capability) => ({
+              value: capability.id,
+              label: `${capability.id} — ${capability.summary}`,
+            })),
+          ),
+        );
+      } else if (group === "system") {
+        const id = await session.value("system id");
+        parts.push(
+          id,
+          await session.choose(systemCapabilities.map((value) => ({ value }))),
+        );
+      } else if (group === "run") {
+        parts.push(
+          await session.value("run id"),
+          await session.choose([
+            { value: "show" },
+            { value: "logs" },
+            { value: "artifacts" },
+          ]),
+        );
+      } else if (group === "lock") {
+        parts.push(
+          await session.value("lock id"),
+          await session.choose([{ value: "show" }, { value: "clear" }]),
+        );
+      } else if (group === "approval") {
+        parts.push(
+          await session.value("approval id"),
+          await session.choose([
+            { value: "inspect" },
+            { value: "approve" },
+            { value: "reject" },
+          ]),
+        );
+      }
+    }
     if (parts[0] === "config") {
       if (parts.length === 1) {
         stdout.write(brief("config"));
@@ -424,9 +582,15 @@ export async function main(adapters?: Adapter[]) {
     fail("UNKNOWN_COMMAND", 2, `Unknown command: ${parts.join(" ")}`);
   } catch (e: unknown) {
     const err =
-      e instanceof BenchPilotError
-        ? e
-        : new BenchPilotError("INTERNAL_ERROR", 8, (e as Error).message);
+      e instanceof InteractionCancelledError
+        ? new BenchPilotError(
+            "INTERACTION_CANCELLED",
+            130,
+            t("en", "cli.interaction.cancelled"),
+          )
+        : e instanceof BenchPilotError
+          ? e
+          : new BenchPilotError("INTERNAL_ERROR", 8, (e as Error).message);
     const flags = parsed?.flags || {};
     const result = (err as BenchPilotError & { result?: Json }).result || {
       schema: "benchpilot.result",
@@ -458,9 +622,16 @@ export async function main(adapters?: Adapter[]) {
           "INTERACTIVE_TERMINAL_REQUIRED",
         ].includes(err.kind)
       )
-        process.stderr.write(`\n${humanFull(["init"])}\n`);
+        process.stderr.write(
+          `\n${humanFull(
+            ((err.details as { help?: { path?: string[] } } | undefined)?.help
+              ?.path || []) as string[],
+          )}\n`,
+        );
     }
     process.exitCode = err.exitCode;
+  } finally {
+    interaction?.close();
   }
 }
 if (process.env.BENCHPILOT_NO_AUTORUN !== "1") void main();

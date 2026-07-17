@@ -1,7 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { PassThrough } from "node:stream";
 import { detectAgent } from "../dist/cli/agent/detector.js";
 import { interactionDecision } from "../dist/cli/interaction/policy.js";
+import {
+  InteractionCancelledError,
+  InteractionSession,
+} from "../dist/cli/interaction/prompter.js";
 import { assertCatalogCompleteness, t } from "../dist/i18n/index.js";
 
 test("agent detection only accepts fixed environment and file markers", () => {
@@ -54,4 +59,39 @@ test("interaction policy keeps agent identity separate from terminal availabilit
 test("screen catalogs are complete and leave machine protocol out of translation", () => {
   assert.doesNotThrow(assertCatalogCompleteness);
   assert.equal(t("zh-CN", "init.done"), "BenchPilot 项目已初始化。");
+});
+
+test("interactive sessions keep one conversation alive for sequential choices", async () => {
+  const input = new PassThrough();
+  const output = new PassThrough();
+  const session = new InteractionSession({ input, output }, "en");
+  try {
+    const next = session.choose([{ value: "get" }, { value: "set" }]);
+    input.write("2\n");
+    assert.equal(await next, "set");
+    const key = session.value("key");
+    input.write("project.name\n");
+    assert.equal(await key, "project.name");
+    assert.match(output.read().toString(), /Choose the next action/);
+  } finally {
+    session.close();
+  }
+});
+
+test("interactive session treats EOF as cancellation", async () => {
+  const input = new PassThrough();
+  const session = new InteractionSession(
+    { input, output: new PassThrough() },
+    "en",
+  );
+  try {
+    const selection = session.choose([{ value: "list" }]);
+    input.end();
+    await assert.rejects(
+      selection,
+      (error) => error instanceof InteractionCancelledError,
+    );
+  } finally {
+    session.close();
+  }
 });

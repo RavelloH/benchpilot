@@ -11,5 +11,8 @@ export const zhCN: MessageCatalog = {
   "init.projectName": "项目名称",
   "init.locale": "显示语言",
   "init.done": "BenchPilot 项目已初始化。",
+  "menu.choose": "选择下一步操作",
+  "menu.value": "请输入{name}",
+  "menu.invalid": "请选择列出的选项之一。",
   "error.unknown": "命令失败：{message}",
 };
