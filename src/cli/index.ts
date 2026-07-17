@@ -250,13 +250,29 @@ export async function main(adapters?: Adapter[]) {
         );
       else if (group === "approvals") parts.push("list");
       else if (group === "adapter") {
-        const id = await session.value("adapter id");
+        const adapters = queries.listAdapters().adapters;
+        if (!adapters.length)
+          fail("ADAPTER_NOT_FOUND", 3, "No adapters are available.");
+        const id = await session.choose(
+          adapters.map((adapter) => ({
+            value: adapter.id,
+            label: `${adapter.id} — ${adapter.summary}`,
+          })),
+        );
         parts.push(
           id,
           await session.choose([{ value: "info" }, { value: "doctor" }]),
         );
       } else if (group === "device") {
-        const id = await session.value("device id");
+        const devices = queries.listConfiguredDevices().devices;
+        if (!devices.length)
+          fail("DEVICE_NOT_FOUND", 3, "No configured devices are available.");
+        const id = await session.choose(
+          devices.map((device) => ({
+            value: String(device.id),
+            label: String(device.id),
+          })),
+        );
         const catalog = await queries.deviceCapabilities(id);
         parts.push(
           id,
@@ -268,7 +284,15 @@ export async function main(adapters?: Adapter[]) {
           ),
         );
       } else if (group === "system") {
-        const id = await session.value("system id");
+        const systems = queries.listSystems().systems;
+        if (!systems.length)
+          fail("SYSTEM_NOT_FOUND", 3, "No configured systems are available.");
+        const id = await session.choose(
+          systems.map((system) => ({
+            value: String(system.id),
+            label: String(system.id),
+          })),
+        );
         const system = (config.value.systems as Json | undefined)?.[id];
         if (
           !system ||
@@ -290,8 +314,13 @@ export async function main(adapters?: Adapter[]) {
           ),
         );
       } else if (group === "run") {
+        const runs = await runtime.listRuns();
+        if (!runs.runs.length)
+          fail("RUN_NOT_FOUND", 3, "No runs are available.");
         parts.push(
-          await session.value("run id"),
+          await session.choose(
+            runs.runs.map((run) => ({ value: run.id, label: run.id })),
+          ),
           await session.choose([
             { value: "show" },
             { value: "logs" },
@@ -299,13 +328,29 @@ export async function main(adapters?: Adapter[]) {
           ]),
         );
       } else if (group === "lock") {
+        const locks = await runtime.listLocks();
+        if (!locks.locks.length)
+          fail("LOCK_NOT_FOUND", 3, "No locks are available.");
         parts.push(
-          await session.value("lock id"),
+          await session.choose(
+            locks.locks.map((lock) => ({
+              value: lock.lockId,
+              label: lock.lockId,
+            })),
+          ),
           await session.choose([{ value: "show" }, { value: "clear" }]),
         );
       } else if (group === "approval") {
+        const approvals = await runtime.listApprovals();
+        if (!approvals.approvals.length)
+          fail("APPROVAL_NOT_FOUND", 3, "No approvals are available.");
         parts.push(
-          await session.value("approval id"),
+          await session.choose(
+            approvals.approvals.map((approval) => ({
+              value: approval.id,
+              label: `${approval.id} — ${approval.status}`,
+            })),
+          ),
           await session.choose([
             { value: "inspect" },
             { value: "approve" },
