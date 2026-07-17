@@ -668,6 +668,17 @@ test("dry-run creates no run, lock, approval, or artifact state", async () => {
       (await run(dir, "device", "demo", "build", "--dry-run", "--json")).stdout,
     );
     assert.equal(plan.dryRun, true);
+    const dryRunEvents = (
+      await run(dir, "device", "demo", "build", "--dry-run", "--jsonl")
+    ).stdout
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    assert.deepEqual(
+      dryRunEvents.map((event) => event.event.type),
+      ["command.result"],
+    );
+    assert.deepEqual(dryRunEvents[0].data.result, plan);
     assert.deepEqual(
       JSON.parse((await run(dir, "runs", "list", "--json")).stdout).data.runs,
       [],
