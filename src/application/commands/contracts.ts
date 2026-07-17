@@ -19,6 +19,9 @@ export interface CommandNode {
   safety?: Safety;
   availability?: "available" | "unavailable";
   unavailableReason?: string;
+  unavailableReasonCode?: string;
+  options?: readonly CommandField[];
+  handler?: string;
 }
 
 export interface CommandIntent {

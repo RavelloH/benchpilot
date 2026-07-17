@@ -12,10 +12,43 @@ import os from "node:os";
 import path from "node:path";
 import { BenchPilotError, loadConfig, PathService } from "../dist/index.js";
 import { initializeProject } from "../dist/application/init/use-case.js";
+import { CommandCatalog } from "../dist/application/commands/catalog.js";
 import {
   executeSystemCapability,
   systemCapabilityIntersection,
 } from "../dist/application/systems/use-case.js";
+
+test("command catalog derives device and system choices without executing operations", async () => {
+  let capabilityQueries = 0;
+  const catalog = new CommandCatalog({
+    async configuredDevices() {
+      return [{ id: "device-a" }];
+    },
+    async configuredSystems() {
+      return [{ id: "system-a" }];
+    },
+    async deviceCapabilities() {
+      capabilityQueries += 1;
+      return [{ id: "status", summary: "read status" }];
+    },
+    async systemCapabilities() {
+      capabilityQueries += 1;
+      return [{ id: "status", summary: "read status" }];
+    },
+  });
+  assert.deepEqual(
+    (await catalog.children(["device"])).map((node) => node.path),
+    [["device", "device-a"]],
+  );
+  assert.deepEqual(
+    (await catalog.children(["system", "system-a"])).map((node) => ({
+      id: node.id,
+      handler: node.handler,
+    })),
+    [{ id: "system.system-a.status", handler: "system.execute" }],
+  );
+  assert.equal(capabilityQueries, 1);
+});
 
 test("init creates the minimum project files and preserves them on repeat", async () => {
   const cwd = await mkdtemp(path.join(os.tmpdir(), "benchpilot-init-"));

@@ -25,6 +25,7 @@ import {
   createConfigurationUseCases,
   type ConfigurationUseCases,
 } from "./config/use-case.js";
+import { CommandCatalog } from "./commands/catalog.js";
 
 export interface ApplicationRequest {
   cwd: string;
@@ -46,6 +47,7 @@ export interface ApplicationRequestScope {
   devices: DeviceUseCases;
   systems: SystemUseCases;
   configuration: ConfigurationUseCases;
+  catalog: CommandCatalog;
 }
 
 /** Builds process-independent request services. CLI supplies only explicit input. */
@@ -80,6 +82,24 @@ export async function openApplicationRequest(
   });
   const systems = createSystemUseCases({ runner, config });
   const configuration = createConfigurationUseCases({ paths, project });
+  const catalog = new CommandCatalog({
+    async configuredDevices() {
+      return queries.listConfiguredDevices().devices.map((device) => ({
+        id: String(device.id),
+      }));
+    },
+    async configuredSystems() {
+      return queries.listSystems().systems.map((system) => ({
+        id: String(system.id),
+      }));
+    },
+    async deviceCapabilities(id) {
+      return (await queries.deviceCapabilities(id)).capabilities;
+    },
+    async systemCapabilities(id) {
+      return (await systems.describe(id)).capabilities;
+    },
+  });
   return {
     application,
     paths,
@@ -91,5 +111,6 @@ export async function openApplicationRequest(
     devices,
     systems,
     configuration,
+    catalog,
   };
 }

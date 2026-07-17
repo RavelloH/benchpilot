@@ -1,5 +1,90 @@
 import type { CommandNode } from "./contracts.js";
 
+export interface DynamicCommandCatalogSource {
+  configuredDevices(): Promise<
+    Array<{ id: string; summary?: string; available?: boolean }>
+  >;
+  configuredSystems(): Promise<
+    Array<{ id: string; summary?: string; available?: boolean }>
+  >;
+  deviceCapabilities(
+    id: string,
+  ): Promise<Array<{ id: string; summary: string }>>;
+  systemCapabilities(
+    id: string,
+  ): Promise<Array<{ id: string; summary: string }>>;
+}
+
+/** Authoritative, read-only command tree for help and interactive selection. */
+export class CommandCatalog {
+  constructor(private readonly source: DynamicCommandCatalogSource) {}
+
+  roots() {
+    return commandRoots;
+  }
+
+  root(name: string) {
+    return commandRoots.find((node) => node.path[0] === name);
+  }
+
+  async children(path: readonly string[]): Promise<CommandNode[]> {
+    if (path.length !== 1 && path.length !== 2) return [];
+    if (path[0] === "device") {
+      if (path.length === 1)
+        return (await this.source.configuredDevices()).map((device) => ({
+          id: `device.${device.id}`,
+          path: ["device", device.id],
+          summaryKey: device.summary || device.id,
+          fields: [],
+          interaction: "when-incomplete",
+          availability:
+            device.available === false ? "unavailable" : "available",
+          ...(device.available === false
+            ? { unavailableReasonCode: "DEVICE_UNAVAILABLE" }
+            : {}),
+        }));
+      return (await this.source.deviceCapabilities(path[1]!)).map(
+        (capability) => ({
+          id: `device.${path[1]}.${capability.id}`,
+          path: ["device", path[1]!, capability.id],
+          summaryKey: capability.summary,
+          fields: [],
+          interaction: "never",
+          availability: "available",
+          handler: "device.execute",
+        }),
+      );
+    }
+    if (path[0] === "system") {
+      if (path.length === 1)
+        return (await this.source.configuredSystems()).map((system) => ({
+          id: `system.${system.id}`,
+          path: ["system", system.id],
+          summaryKey: system.summary || system.id,
+          fields: [],
+          interaction: "when-incomplete",
+          availability:
+            system.available === false ? "unavailable" : "available",
+          ...(system.available === false
+            ? { unavailableReasonCode: "SYSTEM_UNAVAILABLE" }
+            : {}),
+        }));
+      return (await this.source.systemCapabilities(path[1]!)).map(
+        (capability) => ({
+          id: `system.${path[1]}.${capability.id}`,
+          path: ["system", path[1]!, capability.id],
+          summaryKey: capability.summary,
+          fields: [],
+          interaction: "never",
+          availability: "available",
+          handler: "system.execute",
+        }),
+      );
+    }
+    return [];
+  }
+}
+
 /** Static roots; Application may append context-dependent children at query time. */
 export const commandRoots: readonly CommandNode[] = [
   {

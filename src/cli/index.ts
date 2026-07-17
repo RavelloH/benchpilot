@@ -179,7 +179,15 @@ export async function main(adapters?: Adapter[]) {
       nodeVersion: process.versions.node,
       eventWriter: flags.jsonl ? new EventWriter(stdout) : undefined,
     });
-    const { config, runtime, queries, devices, systems, configuration } = scope;
+    const {
+      config,
+      runtime,
+      queries,
+      devices,
+      systems,
+      configuration,
+      catalog,
+    } = scope;
     const configuredLocale = (config.value.cli as Json | undefined)?.locale;
     const locale = isLocale(configuredLocale) ? configuredLocale : "en";
     presentationLocale = locale;
@@ -248,42 +256,42 @@ export async function main(adapters?: Adapter[]) {
           await session.choose([{ value: "info" }, { value: "doctor" }]),
         );
       } else if (group === "device") {
-        const devices = queries.listConfiguredDevices().devices;
-        if (!devices.length)
+        const deviceNodes = await catalog.children(["device"]);
+        if (!deviceNodes.length)
           fail("DEVICE_NOT_FOUND", 3, "No configured devices are available.");
         const id = await session.choose(
-          devices.map((device) => ({
-            value: String(device.id),
-            label: String(device.id),
+          deviceNodes.map((device) => ({
+            value: String(device.path[1]),
+            label: String(device.summaryKey),
           })),
         );
-        const catalog = await queries.deviceCapabilities(id);
-        parts.push(
-          id,
-          await session.choose(
-            catalog.capabilities.map((capability) => ({
-              value: capability.id,
-              label: `${capability.id} — ${capability.summary}`,
-            })),
-          ),
-        );
-      } else if (group === "system") {
-        const configuredSystems = queries.listSystems().systems;
-        if (!configuredSystems.length)
-          fail("SYSTEM_NOT_FOUND", 3, "No configured systems are available.");
-        const id = await session.choose(
-          configuredSystems.map((system) => ({
-            value: String(system.id),
-            label: String(system.id),
-          })),
-        );
-        const capabilities = (await systems.describe(id)).capabilities;
+        const capabilities = await catalog.children(["device", id]);
         parts.push(
           id,
           await session.choose(
             capabilities.map((capability) => ({
-              value: capability.id,
-              label: `${capability.id} — ${capability.summary}`,
+              value: String(capability.path[2]),
+              label: `${capability.path[2]} — ${capability.summaryKey}`,
+            })),
+          ),
+        );
+      } else if (group === "system") {
+        const systemNodes = await catalog.children(["system"]);
+        if (!systemNodes.length)
+          fail("SYSTEM_NOT_FOUND", 3, "No configured systems are available.");
+        const id = await session.choose(
+          systemNodes.map((system) => ({
+            value: String(system.path[1]),
+            label: String(system.summaryKey),
+          })),
+        );
+        const capabilities = await catalog.children(["system", id]);
+        parts.push(
+          id,
+          await session.choose(
+            capabilities.map((capability) => ({
+              value: String(capability.path[2]),
+              label: `${capability.path[2]} — ${capability.summaryKey}`,
             })),
           ),
         );
