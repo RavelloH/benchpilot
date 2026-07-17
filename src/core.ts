@@ -109,9 +109,11 @@ export {
 
 export type {
   Capability,
+  CapabilityDescriptor,
   DeviceRuntime,
   OptionDefinition,
   Safety,
 } from "./core/capabilities/types.js";
+export { describeCapability } from "./core/capabilities/descriptor.js";
 export { OperationRunner } from "./core/operations/operation-runner.js";
 export type { ProcessState } from "./core/process/process-runner.js";

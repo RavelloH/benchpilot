@@ -1,6 +1,8 @@
 import {
   BenchPilotError,
+  type CapabilityDescriptor,
   fail,
+  stable,
   type Json,
   type OperationRunner,
   type ResolvedConfig,
@@ -22,12 +24,7 @@ export interface SystemOperationResult {
   results: SystemMemberOutcome[];
 }
 
-export interface SystemCapabilityDescriptor {
-  id: string;
-  summary: string;
-  lockMode: string;
-  safety: Json;
-}
+export type SystemCapabilityDescriptor = CapabilityDescriptor;
 
 export interface SystemUseCaseDependencies {
   runner: OperationRunner;
@@ -132,16 +129,22 @@ export async function systemCapabilityIntersection(input: {
         return (
           match &&
           match.lockMode === candidate.lockMode &&
-          JSON.stringify(match.safety) === JSON.stringify(candidate.safety)
+          stable({
+            safety: match.safety,
+            inputSchema: match.inputSchema,
+            options: match.options,
+            defaultTimeoutMs: match.defaultTimeoutMs,
+          }) ===
+            stable({
+              safety: candidate.safety,
+              inputSchema: candidate.inputSchema,
+              options: candidate.options,
+              defaultTimeoutMs: candidate.defaultTimeoutMs,
+            })
         );
       }),
     )
-    .map((candidate) => ({
-      id: candidate.id,
-      summary: candidate.summary,
-      lockMode: candidate.lockMode,
-      safety: candidate.safety as unknown as Json,
-    }))
+    .map((candidate) => structuredClone(candidate))
     .sort((left, right) => left.id.localeCompare(right.id));
 }
 

@@ -1,4 +1,4 @@
-import { fail } from "../../core.js";
+import { fail, type CapabilityDescriptor } from "../../core.js";
 import type { CommandNode } from "./contracts.js";
 
 export interface DynamicCommandCatalogSource {
@@ -8,13 +8,53 @@ export interface DynamicCommandCatalogSource {
   configuredSystems(): Promise<
     Array<{ id: string; summary?: string; available?: boolean }>
   >;
-  deviceCapabilities(
-    id: string,
-  ): Promise<Array<{ id: string; summary: string }>>;
-  systemCapabilities(
-    id: string,
-  ): Promise<Array<{ id: string; summary: string }>>;
+  deviceCapabilities(id: string): Promise<CapabilityDescriptor[]>;
+  systemCapabilities(id: string): Promise<CapabilityDescriptor[]>;
 }
+
+const capabilityNode = (
+  group: "device" | "system",
+  instance: string,
+  capability: Partial<CapabilityDescriptor> & { id: string; summary: string },
+): CommandNode => {
+  const options = capability.options || [];
+  return {
+    id: `${group}.${instance}.${capability.id}`,
+    path: [group, instance, capability.id],
+    summaryKey: capability.summary,
+    fields: options
+      .filter((option) => option.positional !== undefined)
+      .map((option) => ({
+        name: option.name,
+        summary: option.summary,
+        required: option.required,
+        schema: option.schema,
+        secret: option.secret,
+        aliases: option.aliases,
+        positional: option.positional,
+        repeatable: option.repeatable,
+      })),
+    options: options.map((option) => ({
+      name: option.name,
+      summary: option.summary,
+      required: option.required,
+      schema: option.schema,
+      secret: option.secret,
+      aliases: option.aliases,
+      positional: option.positional,
+      repeatable: option.repeatable,
+    })),
+    interaction: "never",
+    availability: capability.availability || "available",
+    safety: capability.safety,
+    lockMode: capability.lockMode,
+    defaultTimeoutMs: capability.defaultTimeoutMs,
+    createsRun: capability.createsRun,
+    inputSchema: capability.inputSchema,
+    outputSchema: capability.outputSchema,
+    handler: `${group}.execute`,
+  };
+};
 
 /** Authoritative, read-only command tree for help and interactive selection. */
 export class CommandCatalog {
@@ -45,15 +85,7 @@ export class CommandCatalog {
             : {}),
         }));
       return (await this.source.deviceCapabilities(path[1]!)).map(
-        (capability) => ({
-          id: `device.${path[1]}.${capability.id}`,
-          path: ["device", path[1]!, capability.id],
-          summaryKey: capability.summary,
-          fields: [],
-          interaction: "never",
-          availability: "available",
-          handler: "device.execute",
-        }),
+        (capability) => capabilityNode("device", path[1]!, capability),
       );
     }
     if (path[0] === "system") {
@@ -71,15 +103,7 @@ export class CommandCatalog {
             : {}),
         }));
       return (await this.source.systemCapabilities(path[1]!)).map(
-        (capability) => ({
-          id: `system.${path[1]}.${capability.id}`,
-          path: ["system", path[1]!, capability.id],
-          summaryKey: capability.summary,
-          fields: [],
-          interaction: "never",
-          availability: "available",
-          handler: "system.execute",
-        }),
+        (capability) => capabilityNode("system", path[1]!, capability),
       );
     }
     return [];

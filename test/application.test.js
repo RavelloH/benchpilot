@@ -80,6 +80,68 @@ test("command catalog reloads dynamic capabilities before execution", async () =
   );
 });
 
+test("command catalog preserves read-only capability safety metadata", async () => {
+  const capability = {
+    id: "deploy",
+    summary: "deploy firmware",
+    options: [
+      {
+        name: "target",
+        summary: "deployment target",
+        required: true,
+        schema: { type: "string" },
+        aliases: ["t"],
+      },
+    ],
+    inputSchema: { type: "object", properties: { target: { type: "string" } } },
+    outputSchema: { type: "object" },
+    defaultTimeoutMs: 60_000,
+    lockMode: "exclusive",
+    createsRun: true,
+    safety: { mode: "danger-flag", flag: "confirm-deploy" },
+    availability: "available",
+  };
+  const catalog = new CommandCatalog({
+    async configuredDevices() {
+      return [{ id: "device-a" }];
+    },
+    async configuredSystems() {
+      return [];
+    },
+    async deviceCapabilities() {
+      return [capability];
+    },
+    async systemCapabilities() {
+      return [];
+    },
+  });
+  const [node] = await catalog.children(["device", "device-a"]);
+  assert.deepEqual(
+    {
+      handler: node.handler,
+      lockMode: node.lockMode,
+      defaultTimeoutMs: node.defaultTimeoutMs,
+      safety: node.safety,
+      inputSchema: node.inputSchema,
+      option: {
+        name: node.options[0].name,
+        summary: node.options[0].summary,
+        required: node.options[0].required,
+        schema: node.options[0].schema,
+        aliases: node.options[0].aliases,
+      },
+    },
+    {
+      handler: "device.execute",
+      lockMode: "exclusive",
+      defaultTimeoutMs: 60_000,
+      safety: { mode: "danger-flag", flag: "confirm-deploy" },
+      inputSchema: capability.inputSchema,
+      option: capability.options[0],
+    },
+  );
+});
+
 test("configuration key selectors expose stable existing leaf paths", () => {
   assert.deepEqual(
     configurationKeyPaths({

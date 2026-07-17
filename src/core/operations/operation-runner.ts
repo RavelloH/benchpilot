@@ -27,6 +27,7 @@ import { sha } from "../utilities/stable-json.js";
 import { RunManager } from "../runs/run-manager.js";
 import { ArtifactRegistry } from "../artifacts/artifact-registry.js";
 import type { ArtifactRecord as RegisteredArtifactRecord } from "../artifacts/types.js";
+import { describeCapability } from "../capabilities/descriptor.js";
 import {
   duration,
   projectStorageKey,
@@ -66,12 +67,7 @@ export class OperationRunner {
       this.s.config.value,
       this.s.paths,
     );
-    return runtime.capabilities().map((capability) => ({
-      id: capability.id,
-      summary: capability.summary,
-      lockMode: capability.lockMode,
-      safety: capability.safety,
-    }));
+    return runtime.capabilities().map(describeCapability);
   }
 
   /**

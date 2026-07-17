@@ -1,6 +1,7 @@
 import {
   type AdapterRegistry,
   BenchPilotError,
+  describeCapability,
   fail,
   getKey,
   isSupportedNodeVersion,
@@ -229,10 +230,7 @@ export class QueryUseCases {
     );
     return {
       adapter: { id: adapter.id, summary: adapter.summary },
-      capabilities: device.capabilities().map((capability) => ({
-        id: capability.id,
-        summary: capability.summary,
-      })),
+      capabilities: device.capabilities().map(describeCapability),
     };
   }
 }

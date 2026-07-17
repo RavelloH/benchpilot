@@ -36,6 +36,30 @@ export interface Capability {
   execute(context: OperationContext, input: Json): Promise<Json>;
 }
 
+/** Read-only, JSON-safe metadata for menus, help, and operation planning. */
+export interface CapabilityDescriptor {
+  id: string;
+  summary: string;
+  description?: string;
+  options: Array<{
+    name: string;
+    summary: string;
+    required?: boolean;
+    schema?: Json;
+    aliases?: string[];
+    positional?: number;
+    secret?: boolean;
+    repeatable?: boolean;
+  }>;
+  inputSchema?: Json;
+  outputSchema?: Json;
+  defaultTimeoutMs: number;
+  lockMode: "none" | "exclusive";
+  createsRun: boolean;
+  safety: Safety;
+  availability: "available";
+}
+
 export interface DeviceRuntime {
   identity: {
     instance: string;

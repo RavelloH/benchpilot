@@ -4,9 +4,13 @@ export type InteractionRequirement = "never" | "when-incomplete" | "required";
 
 export interface CommandField {
   name: string;
+  summary?: string;
   required?: boolean;
   schema?: Json;
   secret?: boolean;
+  aliases?: string[];
+  positional?: number;
+  repeatable?: boolean;
 }
 
 /** Transport-neutral command description used by argv, help, and interaction. */
@@ -17,6 +21,11 @@ export interface CommandNode {
   fields: readonly CommandField[];
   interaction: InteractionRequirement;
   safety?: Safety;
+  lockMode?: "none" | "exclusive";
+  defaultTimeoutMs?: number;
+  createsRun?: boolean;
+  inputSchema?: Json;
+  outputSchema?: Json;
   availability?: "available" | "unavailable";
   unavailableReason?: string;
   unavailableReasonCode?: string;
