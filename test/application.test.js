@@ -17,6 +17,7 @@ import { configurationKeyPaths } from "../dist/application/queries/use-case.js";
 import { ConfigurationCommandUseCases } from "../dist/application/config/command-use-case.js";
 import {
   executeSystemCapability,
+  SystemUseCases,
   systemCapabilityIntersection,
 } from "../dist/application/systems/use-case.js";
 
@@ -322,6 +323,49 @@ test("system capability preflight rejects before any member executes", async () 
       error.kind === "SYSTEM_CAPABILITY_UNAVAILABLE",
   );
   assert.deepEqual(executed, []);
+});
+
+test("system capability definition is read only after safe intersection", async () => {
+  const selected = [];
+  const definition = {
+    id: "deploy",
+    summary: "deploy",
+    defaultTimeoutMs: 60_000,
+    lockMode: "exclusive",
+    createsRun: true,
+    safety: { mode: "danger-flag", flag: "confirm-deploy" },
+    options: [],
+    execute: async () => ({}),
+  };
+  const systems = new SystemUseCases({
+    config: {
+      value: { systems: { fixture: { devices: ["second", "first"] } } },
+      origins: new Map(),
+      layers: [],
+    },
+    runner: {
+      async listCapabilities() {
+        return [
+          {
+            id: "deploy",
+            summary: "deploy",
+            defaultTimeoutMs: 60_000,
+            lockMode: "exclusive",
+            safety: { mode: "danger-flag", flag: "confirm-deploy" },
+            options: [],
+          },
+        ];
+      },
+    },
+    devices: {
+      async capability(device, capability) {
+        selected.push({ device, capability });
+        return { capability: definition };
+      },
+    },
+  });
+  assert.equal(await systems.capability("fixture", "deploy"), definition);
+  assert.deepEqual(selected, [{ device: "first", capability: "deploy" }]);
 });
 
 test("system status executes its safe intersection in parallel", async () => {

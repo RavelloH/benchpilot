@@ -1,12 +1,14 @@
 import {
   BenchPilotError,
   type CapabilityDescriptor,
+  type Capability,
   fail,
   stable,
   type Json,
   type OperationRunner,
   type ResolvedConfig,
 } from "../../core.js";
+import type { DeviceUseCases } from "../devices/use-case.js";
 
 export type SystemExecutionPolicy = "parallel" | "serial-fail-fast";
 
@@ -29,6 +31,7 @@ export type SystemCapabilityDescriptor = CapabilityDescriptor;
 export interface SystemUseCaseDependencies {
   runner: OperationRunner;
   config: ResolvedConfig;
+  devices: DeviceUseCases;
 }
 
 /** System command semantics, including lifecycle event orchestration. */
@@ -60,6 +63,24 @@ export class SystemUseCases {
         runner: this.dependencies.runner,
       }),
     };
+  }
+
+  /**
+   * Returns a real capability definition only after the system intersection
+   * confirms that every member exposes compatible safety/input metadata.
+   */
+  async capability(name: string, capabilityId: string): Promise<Capability> {
+    const description = await this.describe(name);
+    if (!description.capabilities.some((item) => item.id === capabilityId))
+      fail(
+        "SYSTEM_CAPABILITY_UNAVAILABLE",
+        3,
+        `Capability ${capabilityId} is not safely available on every system member.`,
+      );
+    const first = [...description.devices].sort()[0];
+    if (!first) fail("SYSTEM_NOT_FOUND", 3, `System has no members: ${name}`);
+    return (await this.dependencies.devices.capability(first!, capabilityId))
+      .capability;
   }
 
   async execute(name: string, capability: string, capabilityInput?: Json) {

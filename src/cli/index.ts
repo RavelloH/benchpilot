@@ -14,7 +14,11 @@ import {
 import { parse } from "./parser.js";
 import { handleDeviceCommand } from "./commands/device.js";
 import { handleRuntimeCommand } from "./commands/runtime.js";
-import { commandOptionFlags } from "./option-parser.js";
+import {
+  capabilityInput,
+  commandOptionFlags,
+  optionEnabled,
+} from "./option-parser.js";
 import {
   humanErrorMessage,
   write,
@@ -542,7 +546,19 @@ export async function main(adapters?: Adapter[]) {
         return;
       }
       await catalog.executable(["system", parts[1], parts[2]]);
-      const result = await systems.execute(parts[1], parts[2]);
+      const definition = await systems.capability(parts[1], parts[2]);
+      const input = capabilityInput(
+        rawOptions,
+        definition.options || [],
+        definition.safety.flag,
+        parts.slice(3),
+      );
+      if (definition.safety.mode !== "normal" && definition.safety.flag)
+        flags[definition.safety.flag] = optionEnabled(
+          rawOptions,
+          definition.safety.flag,
+        );
+      const result = await systems.execute(parts[1], parts[2], input);
       if (!flags.jsonl) write(result, flags);
       return;
     }

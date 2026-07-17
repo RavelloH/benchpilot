@@ -93,7 +93,7 @@ export async function openApplicationRequest(
     config,
     paths,
   });
-  const systems = createSystemUseCases({ runner, config });
+  const systems = createSystemUseCases({ runner, config, devices });
   const configuration = createConfigurationUseCases({ paths, project });
   const configurationCommands = createConfigurationCommandUseCases(
     queries,
