@@ -9,6 +9,7 @@ import { interactionDecision } from "../dist/cli/interaction/policy.js";
 import {
   InteractionCancelledError,
   InteractionSession,
+  promptInit,
 } from "../dist/cli/interaction/prompter.js";
 import { fullHelp, humanFull } from "../dist/cli/help-renderer.js";
 import { commandRoots } from "../dist/application/commands/catalog.js";
@@ -111,6 +112,23 @@ test("interactive session treats EOF as cancellation", async () => {
   } finally {
     session.close();
   }
+});
+
+test("init selects a locale before collecting required project fields", async () => {
+  prompts.inject(["zh-CN", "demo", "演示项目"]);
+  assert.deepEqual(await promptInit({ locale: "en" }), {
+    locale: "zh-CN",
+    projectId: "demo",
+    projectName: "演示项目",
+  });
+  prompts.inject(["demo", "Demo"]);
+  assert.deepEqual(
+    await promptInit({
+      locale: "en",
+      selectedLocale: "en",
+    }),
+    { locale: "en", projectId: "demo", projectName: "Demo" },
+  );
 });
 
 test("presenter keeps machine failures on stdout and human failures on stderr", () => {
