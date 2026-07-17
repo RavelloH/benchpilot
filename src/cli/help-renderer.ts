@@ -13,6 +13,7 @@ const globalOptions = [
 ];
 
 import { t, type Locale } from "../i18n/index.js";
+import { commandRoots } from "../application/commands/catalog.js";
 
 const groups: Record<string, { summaryKey: string; children: string[] }> = {
   root: {
@@ -111,6 +112,6 @@ export function humanFull(parts: string[], locale: Locale = "en") {
   return `${t(locale, "help.name")}\n  benchpilot ${displayName} — ${t(locale, groups[parts.at(-1) || "root"]?.summaryKey || "help.group.root")}\n\n${t(locale, "help.synopsis")}\n  benchpilot ${displayName} [OPTIONS]\n\n${t(locale, "help.description")}\n  ${t(locale, "help.descriptionText")}\n\n${t(locale, "help.workflow")}\n  ${t(locale, "help.workflowText")}\n\n${t(locale, "help.arguments")}\n  ${t(locale, "help.argumentsText")}\n\n${t(locale, "help.options")}\n  ${globalOptions.join("\n  ")}\n\n${t(locale, "help.configuration")}\n  ${t(locale, "help.configurationText")}\n\n${t(locale, "help.output")}\n  ${t(locale, "help.outputText")}\n\n${t(locale, "help.safety")}\n  ${JSON.stringify(help.safety)}\n\n${t(locale, "help.exitCodes")}\n  ${t(locale, "help.exitCodesText")}\n\n${t(locale, "help.errorKinds")}\n  ${help.errors.join(", ")}\n\n${t(locale, "help.examples")}\n  ${help.examples.join("\n  ")}\n\n${t(locale, "help.seeAlso")}\n  benchpilot help --all\n`;
 }
 
-export const commandGroups = Object.keys(groups);
+export const commandGroups = commandRoots.map((command) => command.path[0]!);
 export const isCommandGroup = (name: string | undefined) =>
   Boolean(name && groups[name]);

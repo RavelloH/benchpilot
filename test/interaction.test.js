@@ -8,6 +8,7 @@ import {
   InteractionSession,
 } from "../dist/cli/interaction/prompter.js";
 import { fullHelp, humanFull } from "../dist/cli/help-renderer.js";
+import { commandRoots } from "../dist/application/commands/catalog.js";
 import { assertCatalogCompleteness, t } from "../dist/i18n/index.js";
 
 test("agent detection only accepts fixed environment and file markers", () => {
@@ -100,4 +101,28 @@ test("interactive session treats EOF as cancellation", async () => {
   } finally {
     session.close();
   }
+});
+
+test("command catalog is the CLI root-menu source", () => {
+  assert.deepEqual(
+    commandRoots.map((command) => command.path[0]),
+    [
+      "init",
+      "doctor",
+      "config",
+      "adapters",
+      "adapter",
+      "devices",
+      "device",
+      "systems",
+      "system",
+      "runs",
+      "run",
+      "locks",
+      "lock",
+      "approvals",
+      "approval",
+      "help",
+    ],
+  );
 });
