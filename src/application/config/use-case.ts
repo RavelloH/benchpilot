@@ -29,7 +29,7 @@ export async function editConfiguration(input: EditConfigInput): Promise<Json> {
       : scope === "project"
         ? input.project?.config
         : input.paths.globalConfig();
-  if (!file)
+  if (typeof file !== "string")
     fail("PROJECT_NOT_FOUND", 3, "--project requires a BenchPilot project.");
   const targetFile = file;
   let config: Json = {};
