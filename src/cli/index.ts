@@ -482,6 +482,10 @@ export async function main(adapters?: Adapter[]) {
       if (!flags.jsonl) write(result, flags);
       return;
     }
+    // Approval confirmation is intrinsically human-only. Check this before
+    // loading a record so an agent cannot use record validity as an oracle.
+    if (parts[0] === "approval" && parts[1] && parts[2] === "approve")
+      interactive(locale, parts);
     if (
       await handleRuntimeCommand({
         parts,

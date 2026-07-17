@@ -129,6 +129,26 @@ test("agent init without parameters is rejected without writing project files", 
   }
 });
 
+test("agent approval confirmation is rejected before approval lookup", async () => {
+  const dir = await mkdtemp(
+    path.join(os.tmpdir(), "benchpilot-agent-approval-"),
+  );
+  try {
+    const error = await runAgent(
+      dir,
+      "approval",
+      "missing-approval",
+      "approve",
+      "--json",
+    ).catch((failure) => failure);
+    const result = JSON.parse(error.stdout);
+    assert.equal(result.kind, "AGENT_INTERACTION_UNSUPPORTED");
+    assert.equal(error.stderr, "");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("capability metadata maps long and short aliases back to schema fields", () => {
   const parsed = parse([
     "device",
