@@ -1,17 +1,18 @@
-import { stdin, stdout } from "node:process";
 import { fail, type Json } from "../../core.js";
 import type { RuntimeUseCases } from "../../application/runtime/use-case.js";
 import { brief } from "../help-renderer.js";
 import type { Flags } from "../parser.js";
 import { write } from "../output-renderer.js";
-import { detectAgent } from "../agent/detector.js";
-import { interactionDecision } from "../interaction/policy.js";
 
 interface RuntimeCommandContext {
   parts: string[];
   flags: Flags;
   commandFlags: Json;
   runtime: RuntimeUseCases;
+  readApprovalChallenge: (input: {
+    approvalId: string;
+    physicalId: string;
+  }) => Promise<string>;
 }
 
 export async function handleRuntimeCommand({
@@ -19,10 +20,11 @@ export async function handleRuntimeCommand({
   flags,
   commandFlags,
   runtime,
+  readApprovalChallenge,
 }: RuntimeCommandContext): Promise<boolean> {
   if (parts[0] === "runs") {
     if (parts.length === 1) {
-      stdout.write(brief("runs"));
+      process.stdout.write(brief("runs"));
       return true;
     }
     if (parts[1] === "list") {
@@ -59,7 +61,7 @@ export async function handleRuntimeCommand({
   }
   if (parts[0] === "run" && parts[1]) {
     if (parts.length === 2) {
-      stdout.write(
+      process.stdout.write(
         "benchpilot run <run-id> — Commands: show, logs, artifacts\n",
       );
       return true;
@@ -75,7 +77,7 @@ export async function handleRuntimeCommand({
   }
   if (parts[0] === "locks") {
     if (parts.length === 1) {
-      stdout.write(brief("locks"));
+      process.stdout.write(brief("locks"));
       return true;
     }
     if (parts[1] === "list") write(await runtime.listLocks(), flags);
@@ -87,7 +89,9 @@ export async function handleRuntimeCommand({
   }
   if (parts[0] === "lock" && parts[1]) {
     if (parts.length === 2) {
-      stdout.write("benchpilot lock <lock-id> — Commands: show, clear\n");
+      process.stdout.write(
+        "benchpilot lock <lock-id> — Commands: show, clear\n",
+      );
       return true;
     }
     if (parts[2] === "show" || parts[2] === "inspect")
@@ -108,7 +112,7 @@ export async function handleRuntimeCommand({
     return true;
   }
   if (parts[0] === "approvals" && parts.length === 1) {
-    stdout.write(brief("approvals"));
+    process.stdout.write(brief("approvals"));
     return true;
   }
   if (parts[0] === "approvals" && parts[1] === "list") {
@@ -117,7 +121,7 @@ export async function handleRuntimeCommand({
   }
   if (parts[0] === "approval" && parts[1]) {
     if (parts.length === 2) {
-      stdout.write(
+      process.stdout.write(
         "benchpilot approval <approval-id> — Commands: inspect, approve, reject\n",
       );
       return true;
@@ -127,31 +131,11 @@ export async function handleRuntimeCommand({
     else if (parts[2] === "reject") {
       write(await runtime.rejectApproval(parts[1]), flags);
     } else if (parts[2] === "approve") {
-      const decision = interactionDecision({
-        agent: detectAgent(),
-        json: flags.json,
-        jsonl: flags.jsonl,
-        stdinIsTTY: stdin.isTTY,
-        stdoutIsTTY: stdout.isTTY,
-        ci: Boolean(process.env.CI),
-      });
-      if (!decision.allowed)
-        fail(
-          decision.reason === "agent"
-            ? "AGENT_INTERACTION_UNSUPPORTED"
-            : "INTERACTIVE_APPROVAL_REQUIRED",
-          7,
-          decision.reason === "agent"
-            ? "Approval requires a human interactive session and cannot be run by an agent."
-            : "Approval requires an interactive TTY and cannot use machine output.",
-        );
       const challenge = await runtime.approvalChallenge(parts[1]);
-      stdout.write(
-        `Risk approval ${parts[1]}. Type physical device ID (${challenge.physicalId}): `,
-      );
-      const answer = await new Promise<string>((r) =>
-        stdin.once("data", (x) => r(String(x).trim())),
-      );
+      const answer = await readApprovalChallenge({
+        approvalId: challenge.id,
+        physicalId: challenge.physicalId,
+      });
       write(await runtime.approveApproval(parts[1], answer), flags);
     } else fail("USAGE_ERROR", 2, "Unknown approval command.");
     return true;

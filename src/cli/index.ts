@@ -481,6 +481,10 @@ export async function main(adapters?: Adapter[]) {
         flags,
         commandFlags,
         runtime,
+        readApprovalChallenge: async ({ approvalId, physicalId }) =>
+          interactive(locale, ["approval", approvalId, "approve"]).value(
+            `physical device ID (${physicalId})`,
+          ),
       })
     )
       return;

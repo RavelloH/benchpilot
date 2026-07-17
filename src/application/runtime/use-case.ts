@@ -182,7 +182,7 @@ export class RuntimeUseCases {
         7,
         "Approval does not contain a physical device challenge.",
       );
-    return { id: approval.id, physicalId };
+    return { id: approval.id, physicalId: physicalId as string };
   }
 
   async approveApproval(id: string, challenge: string) {
