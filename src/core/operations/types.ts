@@ -9,6 +9,9 @@ import type {
 import type { BenchPilotEventWriter } from "../events/types.js";
 import type { PathService } from "../paths/path-service.js";
 import type { Run } from "../runs/run-manager.js";
+import type { RunManager } from "../runs/run-manager.js";
+import type { LockManager } from "../locks/lock-manager.js";
+import type { ApprovalManager } from "../approvals/approval-manager.js";
 
 const Rlog = RlogModule.default;
 
@@ -48,6 +51,14 @@ export interface OperationServices {
   lockHeartbeatIntervalMs?: number;
   lockLeaseMs?: number;
   eventWriter?: BenchPilotEventWriter;
+  lifecycle?: OperationLifecycleFactories;
+}
+
+/** Core-owned factories for persisted operation lifecycle state. */
+export interface OperationLifecycleFactories {
+  locks: LockManager;
+  approvals: ApprovalManager;
+  runs(projectKey: string): RunManager;
 }
 
 export interface OperationExecutionOptions {

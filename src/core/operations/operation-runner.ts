@@ -17,6 +17,7 @@ import type { CleanupError, OperationOutcome } from "./operation-outcome.js";
 import type {
   OperationContext,
   OperationExecutionOptions,
+  OperationLifecycleFactories,
   OperationServices,
 } from "./types.js";
 import { runCleanupWithGrace } from "./cleanup.js";
@@ -38,7 +39,15 @@ const object = (value: unknown): value is Json =>
   !!value && typeof value === "object" && !Array.isArray(value);
 
 export class OperationRunner {
-  constructor(private s: OperationServices) {}
+  private readonly lifecycle: OperationLifecycleFactories;
+
+  constructor(private s: OperationServices) {
+    this.lifecycle = s.lifecycle ?? {
+      locks: new LockManager(s.paths),
+      approvals: new ApprovalManager(s.paths),
+      runs: (projectKey) => new RunManager(s.paths, projectKey),
+    };
+  }
 
   /**
    * Read-only capability catalog for application planning.  It creates the
@@ -138,7 +147,7 @@ export class OperationRunner {
         ? definition.redactInput(validated)
         : validated,
     };
-    const approvals = new ApprovalManager(this.s.paths);
+    const approvals = this.lifecycle.approvals;
     const approved =
       (await approvals.findMatchingApproval(binding)) ||
       (await approvals.recoverMatchingStaleClaim(binding));
@@ -273,7 +282,7 @@ export class OperationRunner {
         approvalRequired: safety.mode === "human-approval",
       };
     if (safety.mode === "human-approval") {
-      const approvals = new ApprovalManager(this.s.paths);
+      const approvals = this.lifecycle.approvals;
       const existing =
         (await approvals.findMatchingApproval(binding)) ||
         (await approvals.recoverMatchingStaleClaim(binding));
@@ -297,9 +306,9 @@ export class OperationRunner {
     });
     const session = new OperationSession(command);
     session.transition("prepared");
-    const runManager = new RunManager(this.s.paths, projectKey);
+    const runManager = this.lifecycle.runs(projectKey);
     const run = capability.createsRun
-      ? await new RunManager(this.s.paths, projectKey).create(command, {
+      ? await runManager.create(command, {
           device: runtime.identity,
           adapter: d.adapter,
           adapterVersion: this.s.registry.get(String(d.adapter)).version,
@@ -409,7 +418,7 @@ export class OperationRunner {
       emit("operation.started", { command, runId: run?.id });
       if (capability.lockMode === "exclusive") {
         emit("lock.acquiring", { lockId });
-        lock = await new LockManager(this.s.paths).acquire(
+        lock = await this.lifecycle.locks.acquire(
           lockId,
           command,
           run?.id,
@@ -420,7 +429,7 @@ export class OperationRunner {
           },
           this.s.flags.session ? String(this.s.flags.session) : undefined,
         );
-        lease = new LockManager(this.s.paths).startHeartbeat(
+        lease = this.lifecycle.locks.startHeartbeat(
           lock,
           this.s.lockHeartbeatIntervalMs,
           this.s.lockLeaseMs,
@@ -428,18 +437,15 @@ export class OperationRunner {
         emit("lock.acquired", { lockId });
       }
       if (safety.mode === "human-approval") {
-        claimedApproval = await new ApprovalManager(this.s.paths).claim(
-          binding,
-        );
+        claimedApproval = await this.lifecycle.approvals.claim(binding);
         if (!claimedApproval)
           throw new BenchPilotError(
             "APPROVAL_ALREADY_CLAIMED",
             7,
             "Matching approval is no longer available.",
           );
-        approvalLease = new ApprovalManager(this.s.paths).startClaimLease(
-          claimedApproval,
-        );
+        approvalLease =
+          this.lifecycle.approvals.startClaimLease(claimedApproval);
         emit("approval.claimed", { approvalId: claimedApproval.id });
         approvalLoss = approvalLease.lost.then((error) => {
           if (!controller.signal.aborted)
@@ -629,10 +635,10 @@ export class OperationRunner {
     if (claimedApproval) {
       try {
         if (operationSucceeded || dangerousEffectStarted) {
-          await new ApprovalManager(this.s.paths).consumeClaim(claimedApproval);
+          await this.lifecycle.approvals.consumeClaim(claimedApproval);
           approvalFinalStatus = "consumed";
         } else {
-          await new ApprovalManager(this.s.paths).releaseClaim(claimedApproval);
+          await this.lifecycle.approvals.releaseClaim(claimedApproval);
           approvalFinalStatus = "released";
         }
       } catch (error: unknown) {
@@ -651,7 +657,7 @@ export class OperationRunner {
     );
     if (lock) {
       try {
-        const locks = new LockManager(this.s.paths);
+        const locks = this.lifecycle.locks;
         if (physicalCleanupUnsafe) {
           const reason = {
             kind: "CLEANUP_FAILED",
@@ -679,7 +685,7 @@ export class OperationRunner {
             runId: run?.id,
           };
           try {
-            const locks = new LockManager(this.s.paths);
+            const locks = this.lifecycle.locks;
             await locks.recordQuarantineFailure(lock, reason);
             await locks.markQuarantineFailed(lock, reason);
             lockFinalStatus = "quarantine-failed";

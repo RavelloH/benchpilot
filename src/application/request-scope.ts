@@ -3,9 +3,12 @@ import {
   type BenchPilotEventWriter,
   type Json,
   loadConfig,
+  LockManager,
   OperationRunner,
   PathService,
+  ApprovalManager,
   type ResolvedConfig,
+  RunManager,
 } from "../core.js";
 import { createApplication } from "./application.js";
 import {
@@ -65,6 +68,11 @@ export async function openApplicationRequest(
     project,
     flags: request.flags,
     eventWriter: request.eventWriter,
+    lifecycle: {
+      locks: new LockManager(paths),
+      approvals: new ApprovalManager(paths),
+      runs: (projectKey) => new RunManager(paths, projectKey),
+    },
   });
   const runtime = createRuntimeUseCases({ paths, project, config });
   const queries = createQueryUseCases({
