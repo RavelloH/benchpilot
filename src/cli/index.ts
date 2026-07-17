@@ -15,7 +15,12 @@ import { parse } from "./parser.js";
 import { handleDeviceCommand } from "./commands/device.js";
 import { handleRuntimeCommand } from "./commands/runtime.js";
 import { commandOptionFlags } from "./option-parser.js";
-import { write, writeFailure, writeText } from "./output-renderer.js";
+import {
+  humanErrorMessage,
+  write,
+  writeFailure,
+  writeText,
+} from "./output-renderer.js";
 import { detectAgent } from "./agent/detector.js";
 import { interactionDecision } from "./interaction/policy.js";
 import {
@@ -536,7 +541,11 @@ export async function main(adapters?: Adapter[]) {
         (err as BenchPilotError & { jsonlTerminalEmitted?: boolean })
           .jsonlTerminalEmitted,
       ),
-      humanMessage: `${err.kind}: ${err.message}`,
+      humanMessage: `${err.kind}: ${humanErrorMessage(
+        presentationLocale,
+        err.kind,
+        err.message,
+      )}`,
       ...(needsHelp
         ? {
             help: humanFull(

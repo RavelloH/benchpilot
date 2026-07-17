@@ -79,4 +79,13 @@ export const zhCN: MessageCatalog = {
   "help.examples": "示例",
   "help.seeAlso": "另请参阅",
   "error.unknown": "命令失败：{message}",
+  "error.usage": "用法错误：{message}",
+  "error.configuration": "配置错误：{message}",
+  "error.device": "设备错误：{message}",
+  "error.system": "系统错误：{message}",
+  "error.lock": "锁错误：{message}",
+  "error.approval": "审批错误：{message}",
+  "error.operation": "操作错误：{message}",
+  "error.interaction": "交互错误：{message}",
+  "error.internal": "内部错误：{message}",
 };

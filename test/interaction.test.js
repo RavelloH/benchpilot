@@ -12,7 +12,10 @@ import {
 } from "../dist/cli/interaction/prompter.js";
 import { fullHelp, humanFull } from "../dist/cli/help-renderer.js";
 import { commandRoots } from "../dist/application/commands/catalog.js";
-import { writeFailure } from "../dist/cli/output-renderer.js";
+import {
+  humanErrorMessage,
+  writeFailure,
+} from "../dist/cli/output-renderer.js";
 import { assertCatalogCompleteness, t } from "../dist/i18n/index.js";
 
 test("agent detection only accepts fixed environment and file markers", () => {
@@ -136,6 +139,17 @@ test("presenter keeps machine failures on stdout and human failures on stderr", 
     sink,
   });
   assert.match(stderr.join(""), /invalid input/);
+});
+
+test("presenter localizes human error categories without changing machine kinds", () => {
+  assert.equal(
+    humanErrorMessage("zh-CN", "DEVICE_NOT_FOUND", "Device not found: demo"),
+    "设备错误：Device not found: demo",
+  );
+  assert.equal(
+    humanErrorMessage("en", "DEVICE_NOT_FOUND", "Device not found: demo"),
+    "Device error: Device not found: demo",
+  );
 });
 
 test("command catalog is the CLI root-menu source", () => {

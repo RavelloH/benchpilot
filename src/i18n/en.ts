@@ -82,4 +82,13 @@ export const en: MessageCatalog = {
   "help.examples": "EXAMPLES",
   "help.seeAlso": "SEE ALSO",
   "error.unknown": "Command failed: {message}",
+  "error.usage": "Usage error: {message}",
+  "error.configuration": "Configuration error: {message}",
+  "error.device": "Device error: {message}",
+  "error.system": "System error: {message}",
+  "error.lock": "Lock error: {message}",
+  "error.approval": "Approval error: {message}",
+  "error.operation": "Operation error: {message}",
+  "error.interaction": "Interaction error: {message}",
+  "error.internal": "Internal error: {message}",
 };
