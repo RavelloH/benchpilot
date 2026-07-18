@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFile, spawn } from "node:child_process";
-import { access, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -13,7 +13,12 @@ const cli = path.resolve("dist/cli/index.js");
 async function run(dir, ...args) {
   return exec(process.execPath, [cli, ...args], {
     cwd: dir,
-    env: { ...process.env, TEMP: path.join(dir, "runtime") },
+    env: {
+      ...process.env,
+      HOME: dir,
+      USERPROFILE: dir,
+      TEMP: path.join(dir, "runtime"),
+    },
     encoding: "utf8",
   });
 }
@@ -23,6 +28,8 @@ async function runAgent(dir, ...args) {
     env: {
       ...process.env,
       AI_AGENT: "fixture-agent",
+      HOME: dir,
+      USERPROFILE: dir,
       TEMP: path.join(dir, "runtime"),
     },
     encoding: "utf8",
@@ -106,6 +113,40 @@ test("root command prints help without starting an interactive session", async (
       { schema: machine.schema, version: machine.version },
       { schema: "benchpilot.help", version: 2 },
     );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("language persists the global CLI locale", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "benchpilot-language-"));
+  try {
+    const listed = await run(dir, "language", "list");
+    assert.match(listed.stdout, /en\s+English/);
+    assert.match(listed.stdout, /zh-CN\s+简体中文/);
+    const updated = await run(dir, "language", "set", "zh-CN");
+    assert.equal(updated.stdout, "zh-CN\n");
+    assert.match(
+      await readFile(path.join(dir, ".benchpilot", "config.toml"), "utf8"),
+      /locale = "zh-CN"/,
+    );
+    assert.equal((await run(dir, "language", "get")).stdout, "zh-CN\n");
+    assert.match((await run(dir)).stdout, /面向 Agent 的设备生命周期 CLI/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("language without an action requires an interactive human session", async () => {
+  const dir = await mkdtemp(
+    path.join(os.tmpdir(), "benchpilot-language-agent-"),
+  );
+  try {
+    const error = await run(dir, "language", "--agent").catch(
+      (failure) => failure,
+    );
+    assert.equal(error.code, 2);
+    assert.match(error.stderr, /AGENT_INTERACTION_UNSUPPORTED/);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -321,9 +362,9 @@ test("unknown administrative subcommands are usage errors", async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "benchpilot-admin-usage-"));
   try {
     for (const args of [
-      ["runs", "unknown"],
-      ["locks", "unknown"],
-      ["approvals", "unknown"],
+      ["run", "list", "unknown"],
+      ["lock", "list", "unknown"],
+      ["approval", "list", "unknown"],
     ]) {
       const error = await run(dir, ...args, "--json").catch(
         (failure) => failure,
@@ -414,7 +455,7 @@ test("declarative demo executes build, deploy, and capture", async () => {
   try {
     await initDemo(dir);
     const adapters = JSON.parse(
-      (await run(dir, "adapters", "list", "--json")).stdout,
+      (await run(dir, "adapter", "list", "--json")).stdout,
     );
     assert.deepEqual(
       adapters.data.adapters.map((adapter) => adapter.id),
@@ -664,7 +705,7 @@ test("declarative demo aborts an action when the operation times out", async () 
       "core.operation-timeout",
     );
     assert.deepEqual(
-      JSON.parse((await run(dir, "locks", "list", "--json")).stdout).data.locks,
+      JSON.parse((await run(dir, "lock", "list", "--json")).stdout).data.locks,
       [],
     );
   } finally {
@@ -821,15 +862,15 @@ test("dry-run creates no run, lock, approval, or artifact state", async () => {
     );
     assert.deepEqual(dryRunEvents[0].data.result, plan);
     assert.deepEqual(
-      JSON.parse((await run(dir, "runs", "list", "--json")).stdout).data.runs,
+      JSON.parse((await run(dir, "run", "list", "--json")).stdout).data.runs,
       [],
     );
     assert.deepEqual(
-      JSON.parse((await run(dir, "locks", "list", "--json")).stdout).data.locks,
+      JSON.parse((await run(dir, "lock", "list", "--json")).stdout).data.locks,
       [],
     );
     assert.deepEqual(
-      JSON.parse((await run(dir, "approvals", "list", "--json")).stdout).data
+      JSON.parse((await run(dir, "approval", "list", "--json")).stdout).data
         .approvals,
       [],
     );

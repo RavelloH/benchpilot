@@ -49,7 +49,12 @@ try {
     cwd: project,
     stdio: "inherit",
   });
-  const env = { ...process.env, TEMP: path.join(project, "runtime") };
+  const env = {
+    ...process.env,
+    HOME: temp,
+    USERPROFILE: temp,
+    TEMP: path.join(project, "runtime"),
+  };
   const run = (...args) =>
     npmCommand(["exec", "--no", "--", "benchpilot", ...args], {
       cwd: project,
@@ -65,7 +70,7 @@ try {
       "benchpilot",
       "dist",
       "i18n",
-      "zh-CN.js",
+      "catalogs.generated.js",
     ),
   );
   await access(
@@ -108,12 +113,12 @@ operation_delay_ms = 1
   const commands = [
     ["help", "--json"],
     ["doctor", "--json"],
-    ["adapters", "list", "--json"],
-    ["devices", "scan", "--json"],
+    ["adapter", "list", "--json"],
+    ["device", "scan", "--json"],
     ["device", "demo", "build", "--json"],
     ["device", "demo", "deploy", "--json"],
     ["device", "demo", "capture", "--json"],
-    ["runs", "list", "--json"],
+    ["run", "list", "--json"],
   ];
   for (const args of commands) {
     const result = JSON.parse(run(...args));

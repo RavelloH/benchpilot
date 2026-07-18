@@ -9,10 +9,10 @@ schema.
 
 The root command (`benchpilot`) always prints help and never opens a menu. An incomplete legal nested command enters a continuous `prompts` selection menu for a human terminal. It prefers discovered choices over free-form entry; `init` asks for the required project values only when flags do not provide them. Agent callers, `--json`, `--jsonl`, and unavailable terminals receive a structured interaction error with Help instead. Full help is available through `--help` or `help <path>` and has a JSON form. Global options include config path, JSON/JSONL output, quiet/verbose, timeout, dry-run, color and session controls. `--jsonl` writes real-time `benchpilot.event` records to stdout; Operation results are represented only by the one terminal event. Capability options are resolved after selecting the Capability, so boolean options such as `--erase`, `--verify=false`, and `--no-verify` do not require CLI parser changes. Exit codes are 0 success, 2 usage, 3 resource/configuration, 4 lock, 5 operation, 6 timeout, 7 safety, 8 internal.
 
-The stable command roots are `init`, `doctor`, `config`, `adapters`, `adapter`, `devices`, `device`, `systems`, `system`, `runs`, `run`, `locks`, `lock`, `approvals`, `approval`, and `help`. Use `benchpilot help --all --json` to obtain the complete machine-readable command index.
+The stable resource roots are `adapter`, `device`, `system`, `run`, `lock`, and `approval`. Collection actions use the same singular root (for example, `benchpilot device list` and `benchpilot run list`); instance actions use `<id> <action>` (for example, `benchpilot adapter <id> show` and `benchpilot run <id> logs`). Use `benchpilot help --all --json` to obtain the complete machine-readable command index.
 
 Operation streams include approval, stage, cleanup and lock lifecycle events. Non-operation commands finish with `command.result` or `command.failed`; operations finish exactly once with `operation.completed` or `operation.failed`.
 
-`benchpilot devices scan` is passive and does not open a serial device or run an
+`benchpilot device scan` is passive and does not open a serial device or run an
 Adapter Probe. `--probe` and `--confirm-device-probe` are rejected: a probe must
 be modeled as a declared Capability and executed through the Operation Runner.

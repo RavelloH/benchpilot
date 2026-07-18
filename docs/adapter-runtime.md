@@ -56,7 +56,7 @@ Core operation cancellation remains the outer boundary and retains its own
 `ADAPTER_ACTION_TIMEOUT`, `ADAPTER_WORKFLOW_TIMEOUT`, or
 `ADAPTER_TOOL_PROBE_TIMEOUT` errors with retry guidance.
 
-`benchpilot devices scan` is passive. The bundled runtime enumerates available
+`benchpilot device scan` is passive. The bundled runtime enumerates available
 serial port names on POSIX and Windows and can consume declared static records
 or Core-injected passive USB/network providers; it neither opens a serial port
 nor changes DTR/RTS. Network sources never scan a LAN. A targeted `command`

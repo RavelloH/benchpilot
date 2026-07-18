@@ -125,28 +125,27 @@ test("root help does not repeat the executable name", () => {
   assert.match(humanFull([]), /benchpilot —/);
   assert.doesNotMatch(humanFull([]), /benchpilot  —/);
   const root = brief("root", "zh-CN");
-  assert.ok(root.indexOf("交互式界面") < root.indexOf("开始使用"));
+  assert.ok(root.indexOf("交互模式") < root.indexOf("开始使用"));
   assert.match(root, /开始使用/);
-  assert.match(root, /device <name> <capability>/);
-  assert.match(root, /常用选项/);
-  assert.match(root, /更多：benchpilot <command> --help/);
-  assert.match(root, /\$ benchpilot devices scan/);
+  assert.match(root, /^  device\s+/m);
+  assert.match(root, /全局选项/);
+  assert.match(root, /详细帮助：benchpilot <command> --help/);
+  assert.match(root, /\$ benchpilot device scan/);
   for (const command of [
     "init",
+    "setup",
     "doctor",
+    "language",
     "config",
-    "adapters",
     "adapter",
-    "devices",
     "device",
-    "systems",
     "system",
-    "runs",
+    "workflow",
     "run",
-    "locks",
     "lock",
-    "approvals",
     "approval",
+    "skill",
+    "docs",
     "help",
     "home",
     "version",
@@ -291,18 +290,13 @@ test("command catalog is the CLI root-menu source", () => {
     [
       "init",
       "doctor",
+      "language",
       "config",
-      "adapters",
       "adapter",
-      "devices",
       "device",
-      "systems",
       "system",
-      "runs",
       "run",
-      "locks",
       "lock",
-      "approvals",
       "approval",
       "help",
       "home",

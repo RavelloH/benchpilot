@@ -92,7 +92,7 @@ try {
       `Doctor did not pass ${id}`,
     );
 
-  const scan = await run(["devices", "scan", "--json"]);
+  const scan = await run(["device", "scan", "--json"]);
   expect(
     scan.devices.some(
       (device) => device.adapter === "esp-idf" && device.fields?.port === port,

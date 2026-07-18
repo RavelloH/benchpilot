@@ -23,16 +23,14 @@ export const rootHelpSections: readonly RootHelpSection[] = [
       { command: "init", summaryKey: "help.command.init" },
       { command: "setup", summaryKey: "screen.root.setup" },
       { command: "doctor", summaryKey: "help.command.doctor" },
+      { command: "language", summaryKey: "screen.root.language" },
     ],
   },
   {
     titleKey: "screen.root.configure",
     entries: [
       { command: "config", summaryKey: "screen.root.config" },
-      { command: "adapters", summaryKey: "screen.root.adapters" },
       { command: "adapter", summaryKey: "screen.root.adapter" },
-      { command: "devices", summaryKey: "screen.root.devices" },
-      { command: "systems", summaryKey: "screen.root.systems" },
     ],
   },
   {
@@ -46,23 +44,21 @@ export const rootHelpSections: readonly RootHelpSection[] = [
         command: "system",
         summaryKey: "help.command.system",
       },
+      { command: "workflow", summaryKey: "screen.root.workflow" },
     ],
   },
   {
     titleKey: "screen.root.records",
     entries: [
-      { command: "runs", summaryKey: "screen.root.runs" },
       { command: "run", summaryKey: "screen.root.run" },
-      { command: "approvals", summaryKey: "screen.root.approvals" },
       { command: "approval", summaryKey: "screen.root.approval" },
-      { command: "locks", summaryKey: "screen.root.locks" },
       { command: "lock", summaryKey: "screen.root.lock" },
     ],
   },
   {
     titleKey: "screen.root.help",
     entries: [
-      { command: "skills", summaryKey: "screen.root.skills" },
+      { command: "skill", summaryKey: "screen.root.skill" },
       { command: "docs", summaryKey: "screen.root.docs" },
       { command: "help", summaryKey: "help.command.help" },
       { command: "version", summaryKey: "help.command.version" },
@@ -71,7 +67,7 @@ export const rootHelpSections: readonly RootHelpSection[] = [
 ];
 
 const sections = rootHelpSections;
-const rootCommandWidth = Math.max(
+const rootEntryWidth = Math.max(
   ...sections.flatMap((section) =>
     section.entries.map((entry) => entry.command.length),
   ),
@@ -86,6 +82,10 @@ const commonOptions = [
   },
   { option: "--help", summaryKey: "screen.root.optionHelp" },
 ] as const;
+const rootColumnWidth = Math.max(
+  rootEntryWidth,
+  ...commonOptions.map(({ option }) => option.length),
+);
 
 function renderEntries(
   entries: readonly RootHelpEntry[],
@@ -96,7 +96,7 @@ function renderEntries(
   return entries
     .map(
       (entry) =>
-        `  ${renderCommandPath(entry.command.padEnd(rootCommandWidth), theme)}  ${t(locale, entry.summaryKey)}`,
+        `  ${renderCommandPath(entry.command.padEnd(rootColumnWidth), theme)}  ${t(locale, entry.summaryKey)}`,
     )
     .join("\n");
 }
@@ -147,11 +147,10 @@ function renderOptions(
   locale: Locale,
   theme: ReturnType<typeof terminalTheme>,
 ) {
-  const width = Math.max(...options.map(({ option }) => option.length));
   return options
     .map(
       ({ option, summaryKey }) =>
-        `  ${renderOption(option, theme)}${" ".repeat(width - option.length)}  ${t(locale, summaryKey)}`,
+        `  ${renderOption(option, theme)}${" ".repeat(rootColumnWidth - option.length)}  ${t(locale, summaryKey)}`,
     )
     .join("\n");
 }
@@ -174,7 +173,7 @@ export function renderRootHelp(
     )}\n\n${theme.heading(t(locale, "screen.root.commonOptions"))}\n${renderOptions(commonOptions, locale, theme)}\n\n${theme.heading(t(locale, "help.examples"))}\n  ${theme.muted("$")} ${theme.executable("benchpilot")} ${renderExample(
     theme,
     [
-      { value: "devices", kind: "command" },
+      { value: "device", kind: "command" },
       { value: "scan", kind: "command" },
     ],
   )}\n  ${theme.muted("$")} ${theme.executable("benchpilot")} ${renderExample(
@@ -192,5 +191,5 @@ export function renderRootHelp(
       { value: "deploy", kind: "command" },
       { value: "--json", kind: "flag" },
     ],
-  )}\n\n${theme.muted(t(locale, "screen.root.more"))}\n`;
+  )}\n\n${theme.muted(t(locale, "screen.root.more"))}\n${theme.muted(t(locale, "screen.root.repository"))}\n`;
 }

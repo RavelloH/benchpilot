@@ -47,7 +47,7 @@ stable identity is available. The simulated Demo explicitly opts into instance
 fallback.
 
 Device Discovery is passive by default. A `devices.toml` Probe is never run by
-ordinary `devices scan` or Doctor, and the Runtime does not execute it through
+ordinary `device scan` or Doctor, and the Runtime does not execute it through
 `--probe`. Hardware-affecting checks must instead be declared as Capabilities,
 which execute through the Core operation lifecycle. Passive discovery does not
 open serial ports, toggle DTR/RTS, or implement a serial executor.

@@ -39,6 +39,11 @@ import {
 import { isLocale, t, type Locale, type MessageKey } from "../i18n/index.js";
 
 const version = "0.0.0";
+const supportedLanguages = [
+  { value: "en", label: "English" },
+  { value: "zh-CN", label: "简体中文" },
+] as const;
+
 export async function main(adapters?: Adapter[]) {
   let parsed;
   let interaction: InteractionSession | undefined;
@@ -318,6 +323,61 @@ export async function main(adapters?: Adapter[]) {
     const configuredLocale = (config.value.cli as Json | undefined)?.locale;
     const locale = isLocale(configuredLocale) ? configuredLocale : "en";
     presentationLocale = locale;
+    if (parts[0] === "language") {
+      const globalLayer = config.layers.find(
+        (layer) => layer.scope === "global",
+      );
+      const globalLocale = (globalLayer?.value.cli as Json | undefined)?.locale;
+      const current = isLocale(globalLocale) ? globalLocale : "en";
+      if (parts.length === 1) {
+        const session = interactive(locale, ["language"]);
+        parts.push(
+          await session.choose([
+            { value: "list", label: t(locale, "menu.action.list") },
+            { value: "get", label: t(locale, "menu.action.get") },
+            { value: "set", label: t(locale, "menu.action.set") },
+          ]),
+        );
+      }
+      if (parts[1] === "set" && parts.length === 2)
+        parts.push(
+          await interactive(locale, ["language", "set"]).choose(
+            supportedLanguages,
+          ),
+        );
+      const action = parts[1];
+      if (!action || !["list", "get", "set"].includes(action))
+        fail("USAGE_ERROR", 2, "language expects list, get, or set <locale>.");
+      if (action === "list") {
+        if (parts.length !== 2)
+          fail("USAGE_ERROR", 2, "language list takes no arguments.");
+        write(
+          { languages: supportedLanguages },
+          flags,
+          `${supportedLanguages.map(({ value, label }) => `${value.padEnd(7)} ${label}`).join("\n")}\n`,
+        );
+        return;
+      }
+      if (action === "get") {
+        if (parts.length !== 2)
+          fail("USAGE_ERROR", 2, "language get takes no arguments.");
+        write({ language: current }, flags, `${current}\n`);
+        return;
+      }
+      if (parts.length !== 3)
+        fail("USAGE_ERROR", 2, "language set requires <locale>.");
+      const requested = parts[2];
+      if (!isLocale(requested))
+        fail("USAGE_ERROR", 2, `Unsupported CLI language: ${requested}.`);
+      await configurationCommands.execute({
+        action: "set",
+        key: "cli.locale",
+        value: requested,
+        scopes: ["global"],
+      });
+      write({ language: requested }, flags, `${requested}\n`);
+      return;
+    }
     const menuActionKeys = {
       get: "menu.action.get",
       set: "menu.action.set",
@@ -329,7 +389,6 @@ export async function main(adapters?: Adapter[]) {
       prune: "menu.action.prune",
       scan: "menu.action.scan",
       "clear-stale": "menu.action.clear-stale",
-      info: "menu.action.info",
       doctor: "menu.action.doctor",
       show: "menu.action.show",
       logs: "menu.action.logs",
@@ -382,7 +441,7 @@ export async function main(adapters?: Adapter[]) {
         if (["get", "unset", "explain"].includes(sub))
           parts.push(await chooseExistingConfigurationKey(session));
         if (sub === "set") parts.push(...(await completeConfigSet(session)));
-      } else if (group === "runs") {
+      } else if (group === "run") {
         const sub = await session.choose(menuChoices(["list", "prune"]));
         parts.push(sub);
         if (sub === "prune") {
@@ -405,14 +464,7 @@ export async function main(adapters?: Adapter[]) {
               [mode]: await session.value(mode),
             };
         }
-      } else if (group === "adapters") parts.push("list");
-      else if (group === "devices")
-        parts.push(await session.choose(menuChoices(["list", "scan"])));
-      else if (group === "systems") parts.push("list");
-      else if (group === "locks")
-        parts.push(await session.choose(menuChoices(["list", "clear-stale"])));
-      else if (group === "approvals") parts.push("list");
-      else if (group === "adapter") {
+      } else if (group === "adapter") {
         const adapters = queries.listAdapters().adapters;
         if (!adapters.length)
           fail("ADAPTER_NOT_FOUND", 3, "No adapters are available.");
@@ -422,7 +474,7 @@ export async function main(adapters?: Adapter[]) {
             label: `${adapter.id} — ${adapter.summary}`,
           })),
         );
-        parts.push(id, await session.choose(menuChoices(["info", "doctor"])));
+        parts.push(id, await session.choose(menuChoices(["show", "doctor"])));
       } else if (group === "device") {
         const deviceNodes = await catalog.children(["device"]);
         if (!deviceNodes.length)
@@ -462,16 +514,6 @@ export async function main(adapters?: Adapter[]) {
               label: `${capability.path[2]} — ${capability.summaryKey}`,
             })),
           ),
-        );
-      } else if (group === "run") {
-        const runs = await runtime.listRuns();
-        if (!runs.runs.length)
-          fail("RUN_NOT_FOUND", 3, "No runs are available.");
-        parts.push(
-          await session.choose(
-            runs.runs.map((run) => ({ value: run.id, label: run.id })),
-          ),
-          await session.choose(menuChoices(["show", "logs", "artifacts"])),
         );
       } else if (group === "lock") {
         const locks = await runtime.listLocks();
@@ -515,13 +557,23 @@ export async function main(adapters?: Adapter[]) {
       else if (parts[1] === "set")
         parts.push(...(await completeConfigSet(session)));
     }
-    if (!flags.help && parts[0] === "adapter" && parts.length === 2)
+    if (
+      !flags.help &&
+      parts[0] === "adapter" &&
+      parts.length === 2 &&
+      parts[1] !== "list"
+    )
       parts.push(
         await interactive(locale, parts).choose(
-          menuChoices(["info", "doctor"]),
+          menuChoices(["show", "doctor"]),
         ),
       );
-    if (!flags.help && parts[0] === "device" && parts.length === 2) {
+    if (
+      !flags.help &&
+      parts[0] === "device" &&
+      parts.length === 2 &&
+      !["list", "scan"].includes(parts[1]!)
+    ) {
       const session = interactive(locale, parts);
       const capabilities = await catalog.children(["device", parts[1]!]);
       if (!capabilities.length)
@@ -539,7 +591,12 @@ export async function main(adapters?: Adapter[]) {
         ),
       );
     }
-    if (!flags.help && parts[0] === "system" && parts.length === 2) {
+    if (
+      !flags.help &&
+      parts[0] === "system" &&
+      parts.length === 2 &&
+      parts[1] !== "list"
+    ) {
       const session = interactive(locale, parts);
       const capabilities = await catalog.children(["system", parts[1]!]);
       if (!capabilities.length)
@@ -557,17 +614,32 @@ export async function main(adapters?: Adapter[]) {
         ),
       );
     }
-    if (!flags.help && parts[0] === "run" && parts.length === 2)
+    if (
+      !flags.help &&
+      parts[0] === "run" &&
+      parts.length === 2 &&
+      !["list", "prune"].includes(parts[1]!)
+    )
       parts.push(
         await interactive(locale, parts).choose(
           menuChoices(["show", "logs", "artifacts"]),
         ),
       );
-    if (!flags.help && parts[0] === "lock" && parts.length === 2)
+    if (
+      !flags.help &&
+      parts[0] === "lock" &&
+      parts.length === 2 &&
+      !["list", "clear-stale"].includes(parts[1]!)
+    )
       parts.push(
         await interactive(locale, parts).choose(menuChoices(["show", "clear"])),
       );
-    if (!flags.help && parts[0] === "approval" && parts.length === 2)
+    if (
+      !flags.help &&
+      parts[0] === "approval" &&
+      parts.length === 2 &&
+      parts[1] !== "list"
+    )
       parts.push(
         await interactive(locale, parts).choose(
           menuChoices(["inspect", "approve", "reject"]),
@@ -616,31 +688,29 @@ export async function main(adapters?: Adapter[]) {
       );
       return;
     }
-    if (parts[0] === "adapters" && parts[1] === "list") {
+    if (parts[0] === "adapter" && parts[1] === "list") {
       write(queries.listAdapters(), flags);
       return;
     }
-    if (parts[0] === "adapter" && parts[1]) {
+    if (parts[0] === "adapter" && parts[1] && parts[1] !== "list") {
       const adapter = queries.adapterInfo(parts[1]);
       if (parts.length === 2) {
         write(
           fullHelp(["adapter"]),
           flags,
-          `benchpilot adapter ${adapter.id} — ${adapter.summary}\n\nCommands: info, doctor\n`,
+          `benchpilot adapter ${adapter.id} — ${adapter.summary}\n\nCommands: show, doctor\n`,
         );
         return;
       }
-      if (parts[2] === "info") write(adapter, flags);
+      if (parts[2] === "show") write(adapter, flags);
       else if (parts[2] === "doctor")
         write(await queries.adapterDoctor(parts[1]), flags);
       else fail("USAGE_ERROR", 2, "Unknown adapter command.");
       return;
     }
-    if (parts[0] === "devices") {
-      if (parts.length === 1) {
-        write(fullHelp(["devices"]), flags, brief("devices", locale));
-        return;
-      }
+    if (parts[0] === "device" && ["list", "scan"].includes(parts[1]!)) {
+      if (parts.length !== 2)
+        fail("USAGE_ERROR", 2, `device ${parts[1]} takes no arguments.`);
       if (parts[1] === "list") {
         write(queries.listConfiguredDevices(), flags);
         return;
@@ -670,11 +740,13 @@ export async function main(adapters?: Adapter[]) {
       })
     )
       return;
-    if (parts[0] === "systems" && parts[1] === "list") {
+    if (parts[0] === "system" && parts[1] === "list") {
+      if (parts.length !== 2)
+        fail("USAGE_ERROR", 2, "system list takes no arguments.");
       write(queries.listSystems(), flags);
       return;
     }
-    if (parts[0] === "system" && parts[1]) {
+    if (parts[0] === "system" && parts[1] && parts[1] !== "list") {
       const system = await systems.describe(parts[1]);
       if (parts.length === 2) {
         write(

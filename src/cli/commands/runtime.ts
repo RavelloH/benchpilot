@@ -22,42 +22,44 @@ export async function handleRuntimeCommand({
   runtimeCommands,
   readApprovalChallenge,
 }: RuntimeCommandContext): Promise<boolean> {
-  if (parts[0] === "runs") {
-    if (parts.length === 1) {
-      write(fullHelp(["runs"]), flags, brief("runs"));
-      return true;
-    }
-    if (parts[1] === "list") {
-      write(
-        (
-          await runtimeCommands.execute({
-            action: "runs.list",
-            status: commandFlags.status as Json | undefined,
-            limit: commandFlags.limit as Json | undefined,
-          })
-        ).data,
-        flags,
-      );
-      return true;
-    }
-    if (parts[1] === "prune") {
-      write(
-        (
-          await runtimeCommands.execute({
-            action: "runs.prune",
-            olderThan: commandFlags["older-than"] as Json | undefined,
-            keep: commandFlags.keep as Json | undefined,
-            dangerouslyRemoveAllRuns:
-              commandFlags["dangerously-remove-all-runs"] === true,
-          })
-        ).data,
-        flags,
-      );
-      return true;
-    }
-    fail("USAGE_ERROR", 2, "Unknown runs command.");
+  if (parts[0] === "run" && parts[1] === "list") {
+    if (parts.length !== 2)
+      fail("USAGE_ERROR", 2, "run list takes no arguments.");
+    write(
+      (
+        await runtimeCommands.execute({
+          action: "runs.list",
+          status: commandFlags.status as Json | undefined,
+          limit: commandFlags.limit as Json | undefined,
+        })
+      ).data,
+      flags,
+    );
+    return true;
   }
-  if (parts[0] === "run" && parts[1]) {
+  if (parts[0] === "run" && parts[1] === "prune") {
+    if (parts.length !== 2)
+      fail("USAGE_ERROR", 2, "run prune takes no arguments.");
+    write(
+      (
+        await runtimeCommands.execute({
+          action: "runs.prune",
+          olderThan: commandFlags["older-than"] as Json | undefined,
+          keep: commandFlags.keep as Json | undefined,
+          dangerouslyRemoveAllRuns:
+            commandFlags["dangerously-remove-all-runs"] === true,
+        })
+      ).data,
+      flags,
+    );
+    return true;
+  }
+  if (parts[0] === "run") {
+    if (parts.length === 1) {
+      write(fullHelp(["run"]), flags, brief("run"));
+      return true;
+    }
+    if (!parts[1]) fail("USAGE_ERROR", 2, "run requires an identifier.");
     if (parts.length === 2) {
       write(
         fullHelp(["run"]),
@@ -90,28 +92,30 @@ export async function handleRuntimeCommand({
     else fail("USAGE_ERROR", 2, "Unknown run command.");
     return true;
   }
-  if (parts[0] === "locks") {
-    if (parts.length === 1) {
-      write(fullHelp(["locks"]), flags, brief("locks"));
-      return true;
-    }
-    if (parts[1] === "list") {
-      write(
-        (await runtimeCommands.execute({ action: "locks.list" })).data,
-        flags,
-      );
-      return true;
-    }
-    if (parts[1] === "clear-stale") {
-      write(
-        (await runtimeCommands.execute({ action: "locks.clear-stale" })).data,
-        flags,
-      );
-      return true;
-    }
-    fail("USAGE_ERROR", 2, "Unknown locks command.");
+  if (parts[0] === "lock" && parts[1] === "list") {
+    if (parts.length !== 2)
+      fail("USAGE_ERROR", 2, "lock list takes no arguments.");
+    write(
+      (await runtimeCommands.execute({ action: "locks.list" })).data,
+      flags,
+    );
+    return true;
   }
-  if (parts[0] === "lock" && parts[1]) {
+  if (parts[0] === "lock" && parts[1] === "clear-stale") {
+    if (parts.length !== 2)
+      fail("USAGE_ERROR", 2, "lock clear-stale takes no arguments.");
+    write(
+      (await runtimeCommands.execute({ action: "locks.clear-stale" })).data,
+      flags,
+    );
+    return true;
+  }
+  if (parts[0] === "lock") {
+    if (parts.length === 1) {
+      write(fullHelp(["lock"]), flags, brief("lock"));
+      return true;
+    }
+    if (!parts[1]) fail("USAGE_ERROR", 2, "lock requires an identifier.");
     if (parts.length === 2) {
       write(
         fullHelp(["lock"]),
@@ -145,20 +149,21 @@ export async function handleRuntimeCommand({
     else fail("USAGE_ERROR", 2, "Unknown lock command.");
     return true;
   }
-  if (parts[0] === "approvals" && parts.length === 1) {
-    write(fullHelp(["approvals"]), flags, brief("approvals"));
-    return true;
-  }
-  if (parts[0] === "approvals" && parts[1] === "list") {
+  if (parts[0] === "approval" && parts[1] === "list") {
+    if (parts.length !== 2)
+      fail("USAGE_ERROR", 2, "approval list takes no arguments.");
     write(
       (await runtimeCommands.execute({ action: "approvals.list" })).data,
       flags,
     );
     return true;
   }
-  if (parts[0] === "approvals")
-    fail("USAGE_ERROR", 2, "Unknown approvals command.");
-  if (parts[0] === "approval" && parts[1]) {
+  if (parts[0] === "approval") {
+    if (parts.length === 1) {
+      write(fullHelp(["approval"]), flags, brief("approval"));
+      return true;
+    }
+    if (!parts[1]) fail("USAGE_ERROR", 2, "approval requires an identifier.");
     if (parts.length === 2) {
       write(
         fullHelp(["approval"]),
