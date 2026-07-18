@@ -28,7 +28,7 @@ export interface ArtifactRecord {
 export class RunManager {
   constructor(
     private paths: PathService,
-    private projectId: string,
+    private projectRoot: string,
   ) {}
   async create(command: string, context: Json): Promise<Run> {
     const id = `${new Date()
@@ -38,7 +38,7 @@ export class RunManager {
         /(\d{8}T\d{6})\.(\d{3})Z/,
         "$1.$2Z",
       )}-${command.replace(/[^a-zA-Z0-9_-]/g, "-")}-${randomBytes(3).toString("hex")}`;
-    const dir = resolveInside(this.paths.runsRoot(this.projectId), id);
+    const dir = resolveInside(this.paths.runsRoot(this.projectRoot), id);
     await fs.mkdir(path.join(dir, "captures"), { recursive: true });
     await fs.mkdir(path.join(dir, "artifacts"), { recursive: true });
     const started = Date.now();
@@ -99,7 +99,7 @@ export class RunManager {
     await this.finalize(run, status, result);
   }
   async list() {
-    const root = this.paths.runsRoot(this.projectId);
+    const root = this.paths.runsRoot(this.projectRoot);
     try {
       return await Promise.all(
         (await fs.readdir(root)).map(async (id) => ({
@@ -115,7 +115,7 @@ export class RunManager {
   async get(id: string) {
     if (!RUN_ID_PATTERN.test(id))
       fail("INVALID_RUN_ID", 2, `Invalid run ID: ${id}`);
-    const dir = resolveInside(this.paths.runsRoot(this.projectId), id);
+    const dir = resolveInside(this.paths.runsRoot(this.projectRoot), id);
     return {
       dir,
       manifest: await readJson<Json>(path.join(dir, "manifest.json")),

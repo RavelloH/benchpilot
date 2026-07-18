@@ -77,8 +77,8 @@ export async function openApplicationRequest(
   const application = createApplication(request.adapters);
   const lifecycle = {
     locks: new LockManager(paths),
-    approvals: new ApprovalManager(paths),
-    runs: (projectKey: string) => new RunManager(paths, projectKey),
+    approvals: (projectRoot: string) => new ApprovalManager(paths, projectRoot),
+    runs: (projectRoot: string) => new RunManager(paths, projectRoot),
   };
   const runner = new OperationRunner({
     paths,

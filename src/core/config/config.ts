@@ -1,5 +1,4 @@
 import { fail } from "../errors/benchpilot-error.js";
-import { sha } from "../utilities/stable-json.js";
 
 export type Json = Record<string, unknown>;
 export type Scope =
@@ -21,16 +20,6 @@ export interface ResolvedConfig {
   layers: Array<{ scope: Scope; path?: string; value: Json }>;
 }
 
-export function projectStorageKey(project: {
-  id?: string;
-  root?: string;
-}): string {
-  const prefix =
-    String(project.id || "outside-project")
-      .replace(/[^a-zA-Z0-9_-]/g, "-")
-      .slice(0, 24) || "project";
-  return `${prefix}-${sha({ id: project.id || "", root: project.root || "" }).slice(0, 24)}`;
-}
 const unsafeKey = (key: string) =>
   ["__proto__", "prototype", "constructor"].includes(key);
 export function assertSafeKeyPath(key: string) {

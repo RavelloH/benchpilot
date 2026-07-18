@@ -6,7 +6,6 @@ import {
   type Json,
   type OperationLifecycleFactories,
   type PathService,
-  projectStorageKey,
   readJson,
   type ResolvedConfig,
 } from "../../core.js";
@@ -35,19 +34,20 @@ export interface ClearLockInput {
  * the returned DTOs themselves.
  */
 export class RuntimeUseCases {
-  private readonly storageKey: string;
+  constructor(private readonly dependencies: RuntimeUseCaseDependencies) {}
 
-  constructor(private readonly dependencies: RuntimeUseCaseDependencies) {
-    this.storageKey = projectStorageKey({
-      id: String(
-        (dependencies.config.value.project as Json | undefined)?.id || "",
-      ),
-      root: dependencies.project?.root,
-    });
+  private projectRoot(): string {
+    if (!this.dependencies.project)
+      fail(
+        "PROJECT_NOT_FOUND",
+        3,
+        "A BenchPilot project is required for project state commands.",
+      );
+    return this.dependencies.project!.root;
   }
 
   private runs() {
-    return this.dependencies.lifecycle.runs(this.storageKey);
+    return this.dependencies.lifecycle.runs(this.projectRoot());
   }
 
   private locks() {
@@ -55,7 +55,7 @@ export class RuntimeUseCases {
   }
 
   private approvals() {
-    return this.dependencies.lifecycle.approvals;
+    return this.dependencies.lifecycle.approvals(this.projectRoot());
   }
 
   async listRuns(input: { status?: Json; limit?: number } = {}) {
@@ -106,7 +106,7 @@ export class RuntimeUseCases {
     }
     for (const run of remove)
       await fs.rm(
-        path.join(this.dependencies.paths.runsRoot(this.storageKey), run.id),
+        path.join(this.dependencies.paths.runsRoot(this.projectRoot()), run.id),
         {
           recursive: true,
           force: true,

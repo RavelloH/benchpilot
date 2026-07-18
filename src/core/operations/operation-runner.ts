@@ -28,12 +28,7 @@ import { RunManager } from "../runs/run-manager.js";
 import { ArtifactRegistry } from "../artifacts/artifact-registry.js";
 import type { ArtifactRecord as RegisteredArtifactRecord } from "../artifacts/types.js";
 import { describeCapability } from "../capabilities/descriptor.js";
-import {
-  duration,
-  projectStorageKey,
-  redactResolvedConfig,
-  type Json,
-} from "../config/config.js";
+import { duration, redactResolvedConfig, type Json } from "../config/config.js";
 const Rlog = RlogModule.default;
 
 const object = (value: unknown): value is Json =>
@@ -45,8 +40,8 @@ export class OperationRunner {
   constructor(private s: OperationServices) {
     this.lifecycle = s.lifecycle ?? {
       locks: new LockManager(s.paths),
-      approvals: new ApprovalManager(s.paths),
-      runs: (projectKey) => new RunManager(s.paths, projectKey),
+      approvals: (projectRoot) => new ApprovalManager(s.paths, projectRoot),
+      runs: (projectRoot) => new RunManager(s.paths, projectRoot),
     };
   }
 
@@ -77,6 +72,7 @@ export class OperationRunner {
    * requested.
    */
   async preflightApproval(instance: string, capabilityId: string, input: Json) {
+    const project = this.requireProject();
     const raw = (this.s.config.value.devices as Json | undefined)?.[instance];
     if (!object(raw))
       fail("DEVICE_NOT_FOUND", 3, `Device not found: ${instance}`);
@@ -143,7 +139,7 @@ export class OperationRunner {
         ? definition.redactInput(validated)
         : validated,
     };
-    const approvals = this.lifecycle.approvals;
+    const approvals = this.lifecycle.approvals(project.root);
     const approved =
       (await approvals.findMatchingApproval(binding)) ||
       (await approvals.recoverMatchingStaleClaim(binding));
@@ -166,6 +162,7 @@ export class OperationRunner {
     input: Json,
     options: OperationExecutionOptions = {},
   ): Promise<Json> {
+    const project = this.requireProject();
     const eventWriter =
       options.eventContext && this.s.eventWriter?.child
         ? this.s.eventWriter.child(options.eventContext)
@@ -246,6 +243,7 @@ export class OperationRunner {
         physicalId: runtime.identity.physicalId,
       });
     const safety = capability.safety;
+    const approvals = this.lifecycle.approvals(project.root);
     if (safety.mode !== "normal" && !this.s.flags[safety.flag!])
       fail(
         "DANGEROUS_CONFIRMATION_REQUIRED",
@@ -282,7 +280,6 @@ export class OperationRunner {
         approvalRequired: safety.mode === "human-approval",
       };
     if (safety.mode === "human-approval") {
-      const approvals = this.lifecycle.approvals;
       const existing =
         (await approvals.findMatchingApproval(binding)) ||
         (await approvals.recoverMatchingStaleClaim(binding));
@@ -300,13 +297,9 @@ export class OperationRunner {
         );
       }
     }
-    const projectKey = projectStorageKey({
-      id: String((this.s.config.value.project as Json | undefined)?.id || ""),
-      root: this.s.project?.root,
-    });
     const session = new OperationSession(command);
     session.transition("prepared");
-    const runManager = this.lifecycle.runs(projectKey);
+    const runManager = this.lifecycle.runs(project.root);
     const run = capability.createsRun
       ? await runManager.create(command, {
           device: runtime.identity,
@@ -437,15 +430,14 @@ export class OperationRunner {
         emit("lock.acquired", { lockId });
       }
       if (safety.mode === "human-approval") {
-        claimedApproval = await this.lifecycle.approvals.claim(binding);
+        claimedApproval = await approvals.claim(binding);
         if (!claimedApproval)
           throw new BenchPilotError(
             "APPROVAL_ALREADY_CLAIMED",
             7,
             "Matching approval is no longer available.",
           );
-        approvalLease =
-          this.lifecycle.approvals.startClaimLease(claimedApproval);
+        approvalLease = approvals.startClaimLease(claimedApproval);
         emit("approval.claimed", { approvalId: claimedApproval.id });
         approvalLoss = approvalLease.lost.then((error) => {
           if (!controller.signal.aborted)
@@ -463,8 +455,8 @@ export class OperationRunner {
           signal: controller.signal,
           logger,
           run,
-          stateRoot: this.s.paths.stateRoot(),
-          project: this.s.project,
+          stateRoot: this.s.paths.projectStateRoot(project.root),
+          project,
           config: this.s.config.value,
           device: runtime,
           registerCleanup(name, handler, options) {
@@ -635,10 +627,10 @@ export class OperationRunner {
     if (claimedApproval) {
       try {
         if (operationSucceeded || dangerousEffectStarted) {
-          await this.lifecycle.approvals.consumeClaim(claimedApproval);
+          await approvals.consumeClaim(claimedApproval);
           approvalFinalStatus = "consumed";
         } else {
-          await this.lifecycle.approvals.releaseClaim(claimedApproval);
+          await approvals.releaseClaim(claimedApproval);
           approvalFinalStatus = "released";
         }
       } catch (error: unknown) {
@@ -815,5 +807,15 @@ export class OperationRunner {
 
   emitSystemEvent(type: string, data: Json = {}) {
     this.s.eventWriter?.emit(type, data);
+  }
+
+  private requireProject(): { root: string; config: string } {
+    if (!this.s.project)
+      fail(
+        "PROJECT_NOT_FOUND",
+        3,
+        "A BenchPilot project is required for persistent operation state.",
+      );
+    return this.s.project!;
   }
 }

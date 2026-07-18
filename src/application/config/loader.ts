@@ -28,7 +28,7 @@ const environmentLayer = (env: NodeJS.ProcessEnv) => {
   const value: Json = {},
     names = new Map<string, string>();
   for (const [name, raw] of Object.entries(env)) {
-    if (!name.startsWith("BENCHPILOT_") || name === "BENCHPILOT_HOME") continue;
+    if (!name.startsWith("BENCHPILOT_")) continue;
     const parts = name.slice("BENCHPILOT_".length).toLowerCase().split("__");
     if (parts.some(unsafeKey))
       fail(

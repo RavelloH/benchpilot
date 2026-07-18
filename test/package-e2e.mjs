@@ -49,7 +49,7 @@ try {
     cwd: project,
     stdio: "inherit",
   });
-  const env = { ...process.env, BENCHPILOT_HOME: path.join(project, "home") };
+  const env = { ...process.env, TEMP: path.join(project, "runtime") };
   const run = (...args) =>
     npmCommand(["exec", "--no", "--", "benchpilot", ...args], {
       cwd: project,

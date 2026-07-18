@@ -13,7 +13,7 @@ const cli = path.resolve("dist/cli/index.js");
 async function run(dir, ...args) {
   return exec(process.execPath, [cli, ...args], {
     cwd: dir,
-    env: { ...process.env, BENCHPILOT_HOME: path.join(dir, "home") },
+    env: { ...process.env, TEMP: path.join(dir, "runtime") },
     encoding: "utf8",
   });
 }
@@ -23,7 +23,7 @@ async function runAgent(dir, ...args) {
     env: {
       ...process.env,
       AI_AGENT: "fixture-agent",
-      BENCHPILOT_HOME: path.join(dir, "home"),
+      TEMP: path.join(dir, "runtime"),
     },
     encoding: "utf8",
   });
@@ -448,9 +448,9 @@ test("secret approval bindings are redacted but matched by their real digest", a
     assert.equal(requested.kind, "HUMAN_APPROVAL_REQUIRED");
     const paths = new PathService({
       ...process.env,
-      BENCHPILOT_HOME: path.join(dir, "home"),
+      TEMP: path.join(dir, "runtime"),
     });
-    const approvals = new ApprovalManager(paths);
+    const approvals = new ApprovalManager(paths, dir);
     const record = await approvals.get(requested.details.approvalId);
     assert.equal(JSON.stringify(record).includes(token), false);
     assert.equal(record.binding.input.token, "[REDACTED]");
@@ -504,7 +504,7 @@ test("jsonl streams operation events before a delayed operation finishes", async
       [cli, "device", "demo", "deploy", "--jsonl"],
       {
         cwd: dir,
-        env: { ...process.env, BENCHPILOT_HOME: path.join(dir, "home") },
+        env: { ...process.env, TEMP: path.join(dir, "runtime") },
         stdio: ["ignore", "pipe", "pipe"],
       },
     );
@@ -677,7 +677,7 @@ test("a failed system status waits for every child before its terminal event", a
         cwd: dir,
         env: {
           ...process.env,
-          BENCHPILOT_HOME: path.join(dir, "home"),
+          TEMP: path.join(dir, "runtime"),
           BENCHPILOT_NO_AUTORUN: "1",
         },
         encoding: "utf8",
@@ -723,7 +723,7 @@ test("injected adapter executes through the dynamic CLI route", async () => {
         cwd: dir,
         env: {
           ...process.env,
-          BENCHPILOT_HOME: path.join(dir, "home"),
+          TEMP: path.join(dir, "runtime"),
           BENCHPILOT_NO_AUTORUN: "1",
         },
         encoding: "utf8",

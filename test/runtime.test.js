@@ -2070,11 +2070,11 @@ test("declarative adapters execute through the Core operation lifecycle", async 
     };
     const registry = new AdapterRegistry();
     registry.register(createDeclarativeAdapter(runtime));
-    const paths = new PathService({ BENCHPILOT_HOME: root });
+    const paths = new PathService({ TEMP: join(root, "runtime") }, "win32");
     const result = await new OperationRunner({
       paths,
       registry,
-      project: undefined,
+      project: { root, config: join(root, "benchpilot.toml") },
       flags: { quiet: true },
       config: {
         value: {
@@ -2089,11 +2089,11 @@ test("declarative adapters execute through the Core operation lifecycle", async 
     assert.equal(result.data.temp.endsWith(join(result.runId, "tmp")), true);
     assert.equal((await lstat(result.data.temp)).isDirectory(), true);
     const snapshots = (
-      await readdir(paths.stateRoot(), { recursive: true })
+      await readdir(paths.projectStateRoot(root), { recursive: true })
     ).filter((entry) => entry.endsWith("resolved-config.json"));
     assert.equal(snapshots.length, 1);
     const snapshot = await readFile(
-      join(paths.stateRoot(), snapshots[0]),
+      join(paths.projectStateRoot(root), snapshots[0]),
       "utf8",
     );
     assert.match(snapshot, /\[REDACTED\]/);

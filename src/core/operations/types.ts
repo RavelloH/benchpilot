@@ -57,8 +57,8 @@ export interface OperationServices {
 /** Core-owned factories for persisted operation lifecycle state. */
 export interface OperationLifecycleFactories {
   locks: LockManager;
-  approvals: ApprovalManager;
-  runs(projectKey: string): RunManager;
+  approvals(projectRoot: string): ApprovalManager;
+  runs(projectRoot: string): RunManager;
 }
 
 export interface OperationExecutionOptions {

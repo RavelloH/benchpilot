@@ -305,7 +305,7 @@ test("init creates the minimum project files and preserves them on repeat", asyn
     assert.match(await readFile(config, "utf8"), /id = "demo"/);
     assert.match(await readFile(local, "utf8"), /locale = "zh-CN"/);
     assert.equal(await readFile(gitignore, "utf8"), "*\n!.gitignore\n");
-    const paths = new PathService({ BENCHPILOT_HOME: path.join(cwd, "home") });
+    const paths = new PathService({ TEMP: path.join(cwd, "runtime") }, "win32");
     const resolved = await loadApplicationConfig(
       paths,
       await paths.project(cwd),

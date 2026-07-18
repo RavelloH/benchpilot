@@ -31,7 +31,10 @@ const releasedClaim = (record: ApprovalRecord): ApprovalRecord => ({
 });
 
 export class ApprovalManager {
-  constructor(private paths: PathService) {}
+  constructor(
+    private paths: PathService,
+    private projectRoot: string,
+  ) {}
 
   private assertId(id: string) {
     if (!APPROVAL_ID_PATTERN.test(id))
@@ -40,12 +43,18 @@ export class ApprovalManager {
 
   private file(id: string) {
     this.assertId(id);
-    return resolveInside(this.paths.approvalsRoot(), `${id}.json`);
+    return resolveInside(
+      this.paths.approvalsRoot(this.projectRoot),
+      `${id}.json`,
+    );
   }
 
   private guardFile(id: string) {
     this.assertId(id);
-    return resolveInside(this.paths.approvalGuardsRoot(), `${id}.lock`);
+    return resolveInside(
+      this.paths.approvalGuardsRoot(this.projectRoot),
+      `${id}.lock`,
+    );
   }
 
   private async withGuard<T>(id: string, action: () => Promise<T>): Promise<T> {
@@ -65,7 +74,9 @@ export class ApprovalManager {
     ttl = 3_600_000,
     storedBinding: Json = binding,
   ): Promise<ApprovalRecord> {
-    await fs.mkdir(this.paths.approvalsRoot(), { recursive: true });
+    await fs.mkdir(this.paths.approvalsRoot(this.projectRoot), {
+      recursive: true,
+    });
     const id = `approval-${randomBytes(5).toString("hex")}`;
     const record: ApprovalRecord = {
       schema: "benchpilot.approval",
@@ -83,12 +94,14 @@ export class ApprovalManager {
 
   async list(): Promise<ApprovalRecord[]> {
     try {
-      const files = (await fs.readdir(this.paths.approvalsRoot())).filter(
-        (file) => file.endsWith(".json"),
-      );
+      const files = (
+        await fs.readdir(this.paths.approvalsRoot(this.projectRoot))
+      ).filter((file) => file.endsWith(".json"));
       const records = await Promise.all(
         files.map((file) =>
-          readJson<ApprovalRecord>(path.join(this.paths.approvalsRoot(), file)),
+          readJson<ApprovalRecord>(
+            path.join(this.paths.approvalsRoot(this.projectRoot), file),
+          ),
         ),
       );
       return records.filter((record): record is ApprovalRecord =>

@@ -17,7 +17,6 @@ import {
   enumSchema,
   BenchPilotError,
   PathService,
-  projectStorageKey,
   RunManager,
   SchemaValidationError,
   lockIdentity,
@@ -91,7 +90,7 @@ test("core hardening uses safe lock names and redacts config", () => {
   );
 });
 
-test("persistent paths use the user .benchpilot directory on every platform", () => {
+test("global configuration and project state use their dedicated roots", () => {
   for (const platform of ["win32", "darwin", "linux"]) {
     const home = path.join(os.tmpdir(), `benchpilot-${platform}-home`);
     const paths = new PathService(
@@ -109,27 +108,32 @@ test("persistent paths use the user .benchpilot directory on every platform", ()
       paths.globalConfig(),
       path.join(home, ".benchpilot", "config.toml"),
     );
-    assert.equal(paths.stateRoot(), path.join(home, ".benchpilot", "state"));
+    const project = path.join(home, "project");
     assert.equal(
-      paths.approvalsRoot(),
-      path.join(home, ".benchpilot", "state", "approvals"),
+      paths.projectStateRoot(project),
+      path.join(project, ".benchpilot", "state"),
     );
     assert.equal(
-      paths.runsRoot("project"),
-      path.join(home, ".benchpilot", "state", "projects", "project", "runs"),
+      paths.approvalsRoot(project),
+      path.join(project, ".benchpilot", "state", "approvals"),
+    );
+    assert.equal(
+      paths.runsRoot(project),
+      path.join(project, ".benchpilot", "state", "runs"),
     );
   }
 });
 
-test("BENCHPILOT_HOME keeps persistent and runtime paths isolated for tests", () => {
-  const root = path.join(os.tmpdir(), "benchpilot-portable-home");
-  const paths = new PathService({ BENCHPILOT_HOME: root });
-  assert.equal(paths.globalConfig(), path.join(root, "config.toml"));
-  assert.equal(paths.stateRoot(), path.join(root, "state"));
-  assert.equal(paths.runtimeRoot(), path.join(root, "runtime", "locks"));
+test("project state and runtime locks are isolated", () => {
+  const root = path.join(os.tmpdir(), "benchpilot-project-root");
+  const paths = new PathService({ TEMP: path.join(root, "runtime") }, "win32");
   assert.equal(
-    paths.runsRoot("project"),
-    path.join(root, "state", "projects", "project", "runs"),
+    paths.runsRoot(root),
+    path.join(root, ".benchpilot", "state", "runs"),
+  );
+  assert.equal(
+    paths.runtimeRoot(),
+    path.join(root, "runtime", "benchpilot", "locks"),
   );
 });
 
@@ -155,7 +159,7 @@ test("BENCHPILOT_ environment configuration preserves the first key segment", as
   );
 });
 
-test("approval guards use persistent state while lock guards use runtime state", () => {
+test("approval guards are project-local while lock guards use runtime state", () => {
   const home = path.join(os.tmpdir(), "benchpilot-guard-home");
   const first = new PathService(
     { TEMP: path.join(os.tmpdir(), "benchpilot-first-temp") },
@@ -167,7 +171,11 @@ test("approval guards use persistent state while lock guards use runtime state",
     "win32",
     home,
   );
-  assert.equal(first.approvalGuardsRoot(), second.approvalGuardsRoot());
+  const project = path.join(home, "project");
+  assert.equal(
+    first.approvalGuardsRoot(project),
+    second.approvalGuardsRoot(project),
+  );
   assert.notEqual(first.lockGuardsRoot(), second.lockGuardsRoot());
 });
 
@@ -316,7 +324,8 @@ test("approval claims are exclusive", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "benchpilot-approval-"));
   try {
     const manager = new ApprovalManager(
-      new PathService({ BENCHPILOT_HOME: root }),
+      new PathService({ TEMP: path.join(root, "runtime") }, "win32"),
+      root,
     );
     const binding = { command: "device.burn", device: "demo" };
     const request = await manager.request(binding);
@@ -341,7 +350,10 @@ test("approval claims are exclusive", async () => {
 test("stale file guards recover without allowing an old owner to delete a replacement", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "benchpilot-file-guard-"));
   try {
-    const paths = new PathService({ BENCHPILOT_HOME: root });
+    const paths = new PathService(
+      { TEMP: path.join(root, "runtime") },
+      "win32",
+    );
     const file = path.join(paths.lockGuardsRoot(), "resource.lock");
     await mkdir(paths.lockGuardsRoot(), { recursive: true });
     await atomicJson(file, {
@@ -445,7 +457,8 @@ test("approval claim is exclusive across processes", async () => {
   );
   try {
     const manager = new ApprovalManager(
-      new PathService({ BENCHPILOT_HOME: root }),
+      new PathService({ TEMP: path.join(root, "runtime") }, "win32"),
+      root,
     );
     const binding = { command: "device.burn", device: "demo" };
     const request = await manager.request(binding);
@@ -469,17 +482,23 @@ test("expired approval claim is recovered before a new claim", async () => {
     path.join(os.tmpdir(), "benchpilot-approval-stale-"),
   );
   try {
-    const paths = new PathService({ BENCHPILOT_HOME: root });
-    const manager = new ApprovalManager(paths);
+    const paths = new PathService(
+      { TEMP: path.join(root, "runtime") },
+      "win32",
+    );
+    const manager = new ApprovalManager(paths, root);
     const binding = { command: "device.burn", device: "demo" };
     const request = await manager.request(binding);
     await manager.change(request.id, "approved");
     const first = await manager.claim(binding);
-    await atomicJson(path.join(paths.approvalsRoot(), `${request.id}.json`), {
-      ...first,
-      claimedBy: "unreachable-host:999999",
-      claimExpiresAt: new Date(0).toISOString(),
-    });
+    await atomicJson(
+      path.join(paths.approvalsRoot(root), `${request.id}.json`),
+      {
+        ...first,
+        claimedBy: "unreachable-host:999999",
+        claimExpiresAt: new Date(0).toISOString(),
+      },
+    );
     const recovered = await manager.claim(binding);
     assert.ok(recovered);
     assert.notEqual(recovered.claimToken, first.claimToken);
@@ -494,14 +513,21 @@ test("an expired approval claim remains active while its local PID is alive", as
   );
   try {
     const manager = new ApprovalManager(
-      new PathService({ BENCHPILOT_HOME: root }),
+      new PathService({ TEMP: path.join(root, "runtime") }, "win32"),
+      root,
     );
     const binding = { command: "device.burn", device: "demo" };
     const request = await manager.request(binding);
     await manager.change(request.id, "approved");
     const claim = await manager.claim(binding);
     await atomicJson(
-      path.join(root, "state", "approvals", `${request.id}.json`),
+      path.join(
+        root,
+        ".benchpilot",
+        "state",
+        "approvals",
+        `${request.id}.json`,
+      ),
       { ...claim, claimExpiresAt: new Date(0).toISOString() },
     );
     const active = await manager.get(request.id);
@@ -519,7 +545,8 @@ test("approval lease renews an active claim", async () => {
   );
   try {
     const manager = new ApprovalManager(
-      new PathService({ BENCHPILOT_HOME: root }),
+      new PathService({ TEMP: path.join(root, "runtime") }, "win32"),
+      root,
     );
     const binding = { command: "device.burn", device: "demo" };
     const request = await manager.request(binding);
@@ -552,7 +579,10 @@ test("a normal operation recovers and reuses a stale approval claim", async () =
     path.join(os.tmpdir(), "benchpilot-approval-runner-recovery-"),
   );
   try {
-    const paths = new PathService({ BENCHPILOT_HOME: root });
+    const paths = new PathService(
+      { TEMP: path.join(root, "runtime") },
+      "win32",
+    );
     const registry = new AdapterRegistry();
     registry.register({
       id: "approval-recovery",
@@ -597,19 +627,22 @@ test("a normal operation recovers and reuses a stale approval claim", async () =
       project: "outside-project",
       configDigest: (await import("../dist/index.js")).sha(config.value),
     };
-    const approvals = new ApprovalManager(paths);
+    const approvals = new ApprovalManager(paths, root);
     const request = await approvals.request(binding);
     await approvals.change(request.id, "approved");
     const claim = await approvals.claim(binding);
-    await atomicJson(path.join(paths.approvalsRoot(), `${request.id}.json`), {
-      ...claim,
-      claimedBy: "dead-host:1",
-      claimExpiresAt: new Date(0).toISOString(),
-    });
+    await atomicJson(
+      path.join(paths.approvalsRoot(root), `${request.id}.json`),
+      {
+        ...claim,
+        claimedBy: "dead-host:1",
+        claimExpiresAt: new Date(0).toISOString(),
+      },
+    );
     const runner = new OperationRunner({
       paths,
       registry,
-      project: undefined,
+      project: { root, config: path.join(root, "benchpilot.toml") },
       flags: { quiet: true, danger: true },
       config,
     });
@@ -722,7 +755,7 @@ test("adapter definitions require a supported API and configuration schema", () 
       "device",
       { port: 42 },
       { adapters: { "device-configured": {} } },
-      new PathService({ BENCHPILOT_HOME: os.tmpdir() }),
+      new PathService({}, process.platform, os.tmpdir()),
     ),
     (error) =>
       error instanceof BenchPilotError &&
@@ -735,7 +768,10 @@ test("registry injects validated adapter config into createDevice", async () => 
     path.join(os.tmpdir(), "benchpilot-adapter-config-"),
   );
   try {
-    const paths = new PathService({ BENCHPILOT_HOME: root });
+    const paths = new PathService(
+      { TEMP: path.join(root, "runtime") },
+      "win32",
+    );
     const registry = new AdapterRegistry();
     let received;
     registry.register({
@@ -791,7 +827,10 @@ test("output schema failures are classified as INVALID_CAPABILITY_OUTPUT", async
     path.join(os.tmpdir(), "benchpilot-output-schema-"),
   );
   try {
-    const paths = new PathService({ BENCHPILOT_HOME: root });
+    const paths = new PathService(
+      { TEMP: path.join(root, "runtime") },
+      "win32",
+    );
     const registry = new AdapterRegistry();
     registry.register({
       id: "output-schema",
@@ -831,7 +870,7 @@ test("output schema failures are classified as INVALID_CAPABILITY_OUTPUT", async
     const runner = new OperationRunner({
       paths,
       registry,
-      project: undefined,
+      project: { root, config: path.join(root, "benchpilot.toml") },
       flags: { quiet: true },
       config: {
         value: { devices: { device: { adapter: "output-schema" } } },
@@ -949,7 +988,10 @@ test("artifact registry accepts a canonicalized run path without escaping it", a
 test("lock lease stops before release and rejects unsafe IDs", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "benchpilot-lock-"));
   try {
-    const paths = new PathService({ BENCHPILOT_HOME: root });
+    const paths = new PathService(
+      { TEMP: path.join(root, "runtime") },
+      "win32",
+    );
     const locks = new LockManager(paths);
     const lock = await locks.acquire("demo-device-safe", "test");
     assert.equal(lock.version, 2);
@@ -970,7 +1012,10 @@ test("lock acquire recovers empty directories but rejects corrupt contents", asy
     path.join(os.tmpdir(), "benchpilot-lock-corrupt-"),
   );
   try {
-    const paths = new PathService({ BENCHPILOT_HOME: root });
+    const paths = new PathService(
+      { TEMP: path.join(root, "runtime") },
+      "win32",
+    );
     const locks = new LockManager(paths);
     await mkdir(locks.directory("empty-lock"), { recursive: true });
     const recovered = await locks.acquire("empty-lock", "test");
@@ -1008,7 +1053,10 @@ test(
   async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "benchpilot-lock-long-"));
     try {
-      const paths = new PathService({ BENCHPILOT_HOME: root });
+      const paths = new PathService(
+        { TEMP: path.join(root, "runtime") },
+        "win32",
+      );
       const locks = new LockManager(paths);
       const lock = await locks.acquire("demo-device-long-heartbeat", "test");
       const originalExpiry = Date.parse(lock.expiresAt);
@@ -1030,7 +1078,10 @@ test("lock ownership loss aborts the capability and preserves the replacement", 
   let aborted = false;
   let cleaned = false;
   try {
-    const paths = new PathService({ BENCHPILOT_HOME: root });
+    const paths = new PathService(
+      { TEMP: path.join(root, "runtime") },
+      "win32",
+    );
     const registry = new AdapterRegistry();
     registry.register({
       id: "lock-loss",
@@ -1077,7 +1128,7 @@ test("lock ownership loss aborts the capability and preserves the replacement", 
     const runner = new OperationRunner({
       paths,
       registry,
-      project: undefined,
+      project: { root, config: path.join(root, "benchpilot.toml") },
       flags: { quiet: true },
       lockHeartbeatIntervalMs: 1_000,
       lockLeaseMs: 100,
@@ -1112,7 +1163,10 @@ test("lock ownership loss aborts the capability and preserves the replacement", 
 test("heartbeat reports lock ownership loss without deleting a replacement", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "benchpilot-lock-lost-"));
   try {
-    const paths = new PathService({ BENCHPILOT_HOME: root });
+    const paths = new PathService(
+      { TEMP: path.join(root, "runtime") },
+      "win32",
+    );
     const locks = new LockManager(paths);
     const lock = await locks.acquire("demo-device-lost", "test");
     await atomicJson(locks.file(lock.lockId), {
@@ -1141,7 +1195,10 @@ test("heartbeat rechecks ownership after a guarded asynchronous step", async () 
   const root = await mkdtemp(path.join(os.tmpdir(), "benchpilot-lock-cas-"));
   let resume;
   try {
-    const paths = new PathService({ BENCHPILOT_HOME: root });
+    const paths = new PathService(
+      { TEMP: path.join(root, "runtime") },
+      "win32",
+    );
     const locks = new LockManager(paths, {
       heartbeatRead: () =>
         new Promise((resolve) => {
@@ -1173,7 +1230,10 @@ test("release rechecks ownership after a guarded asynchronous step", async () =>
   const root = await mkdtemp(path.join(os.tmpdir(), "benchpilot-release-cas-"));
   let resume;
   try {
-    const paths = new PathService({ BENCHPILOT_HOME: root });
+    const paths = new PathService(
+      { TEMP: path.join(root, "runtime") },
+      "win32",
+    );
     const locks = new LockManager(paths, {
       releaseRead: () =>
         new Promise((resolve) => {
@@ -1205,7 +1265,10 @@ test("clear rechecks ownership after a guarded asynchronous step", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "benchpilot-clear-cas-"));
   let resume;
   try {
-    const paths = new PathService({ BENCHPILOT_HOME: root });
+    const paths = new PathService(
+      { TEMP: path.join(root, "runtime") },
+      "win32",
+    );
     const locks = new LockManager(paths, {
       clearRead: () =>
         new Promise((resolve) => {
@@ -1238,7 +1301,10 @@ test("stale cleanup cannot remove a manual quarantine recovery record", async ()
     path.join(os.tmpdir(), "benchpilot-lock-recovery-"),
   );
   try {
-    const paths = new PathService({ BENCHPILOT_HOME: root });
+    const paths = new PathService(
+      { TEMP: path.join(root, "runtime") },
+      "win32",
+    );
     const locks = new LockManager(paths);
     const lock = await locks.acquire("recovery-device", "test");
     await locks.recordQuarantineFailure(lock, {
@@ -1285,7 +1351,7 @@ test("separate processes cannot acquire the same physical lock", async () => {
       holder.once("error", reject);
     });
     const moduleUrl = new URL("../dist/index.js", import.meta.url).href;
-    const script = `import { LockManager, PathService } from ${JSON.stringify(moduleUrl)}; const manager = new LockManager(new PathService({ BENCHPILOT_HOME: process.argv[1] })); await manager.acquire(process.argv[2], "contender");`;
+    const script = `import { LockManager, PathService } from ${JSON.stringify(moduleUrl)}; const manager = new LockManager(new PathService({ TEMP: process.argv[1] }, "win32")); await manager.acquire(process.argv[2], "contender");`;
     const contender = await exec(process.execPath, [
       "--input-type=module",
       "-e",
@@ -1306,7 +1372,10 @@ test("critical cleanup failure quarantines its lock and finalizes a failed run",
   const root = await mkdtemp(path.join(os.tmpdir(), "benchpilot-cleanup-"));
   const events = [];
   try {
-    const paths = new PathService({ BENCHPILOT_HOME: root });
+    const paths = new PathService(
+      { TEMP: path.join(root, "runtime") },
+      "win32",
+    );
     const registry = new AdapterRegistry();
     registry.register({
       id: "test",
@@ -1339,7 +1408,7 @@ test("critical cleanup failure quarantines its lock and finalizes a failed run",
     const runner = new OperationRunner({
       paths,
       registry,
-      project: undefined,
+      project: { root, config: path.join(root, "benchpilot.toml") },
       flags: { quiet: true },
       eventWriter: {
         emit(type, data) {
@@ -1398,7 +1467,7 @@ test("critical cleanup failure quarantines its lock and finalizes a failed run",
         .length,
       1,
     );
-    const runs = await new RunManager(paths, projectStorageKey({})).list();
+    const runs = await new RunManager(paths, root).list();
     assert.equal(runs[0].manifest.status, "failed");
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -1409,7 +1478,10 @@ test("cleanup timeout quarantines a lock when a capability ignores AbortSignal",
   const root = await mkdtemp(path.join(os.tmpdir(), "benchpilot-timeout-"));
   let cleaned = false;
   try {
-    const paths = new PathService({ BENCHPILOT_HOME: root });
+    const paths = new PathService(
+      { TEMP: path.join(root, "runtime") },
+      "win32",
+    );
     const registry = new AdapterRegistry();
     registry.register({
       id: "timeout",
@@ -1451,7 +1523,7 @@ test("cleanup timeout quarantines a lock when a capability ignores AbortSignal",
     const runner = new OperationRunner({
       paths,
       registry,
-      project: undefined,
+      project: { root, config: path.join(root, "benchpilot.toml") },
       flags: { quiet: true, timeout: "10ms" },
       config: {
         value: { devices: { device: { adapter: "timeout" } } },
@@ -1473,7 +1545,7 @@ test("cleanup timeout quarantines a lock when a capability ignores AbortSignal",
 });
 
 async function runCleanupFailureScenario(root, options) {
-  const paths = new PathService({ BENCHPILOT_HOME: root });
+  const paths = new PathService({ TEMP: path.join(root, "runtime") }, "win32");
   const registry = new AdapterRegistry();
   registry.register({
     id: "cleanup-semantics",
@@ -1514,7 +1586,7 @@ async function runCleanupFailureScenario(root, options) {
   const runner = new OperationRunner({
     paths,
     registry,
-    project: undefined,
+    project: { root, config: path.join(root, "benchpilot.toml") },
     flags: { quiet: true },
     config: {
       value: { devices: { device: { adapter: "cleanup-semantics" } } },
@@ -1568,7 +1640,7 @@ test("non-physical cleanup failures preserve warning and release the lock", asyn
 });
 
 async function runDangerousFailure(root, markEffect) {
-  const paths = new PathService({ BENCHPILOT_HOME: root });
+  const paths = new PathService({ TEMP: path.join(root, "runtime") }, "win32");
   const registry = new AdapterRegistry();
   registry.register({
     id: "danger",
@@ -1614,13 +1686,13 @@ async function runDangerousFailure(root, markEffect) {
   };
   // OperationRunner derives the actual digest from the resolved config.
   binding.configDigest = (await import("../dist/index.js")).sha(config.value);
-  const approvals = new ApprovalManager(paths);
+  const approvals = new ApprovalManager(paths, root);
   const approval = await approvals.request(binding);
   await approvals.change(approval.id, "approved");
   const runner = new OperationRunner({
     paths,
     registry,
-    project: undefined,
+    project: { root, config: path.join(root, "benchpilot.toml") },
     flags: { quiet: true, danger: true },
     config,
   });
@@ -1656,7 +1728,10 @@ test("successful dangerous operation without a marker consumes approval and warn
   );
   const events = [];
   try {
-    const paths = new PathService({ BENCHPILOT_HOME: root });
+    const paths = new PathService(
+      { TEMP: path.join(root, "runtime") },
+      "win32",
+    );
     const registry = new AdapterRegistry();
     registry.register({
       id: "marker-missing",
@@ -1690,7 +1765,7 @@ test("successful dangerous operation without a marker consumes approval and warn
       origins: new Map(),
       layers: [],
     };
-    const approval = await new ApprovalManager(paths).request({
+    const approval = await new ApprovalManager(paths, root).request({
       command: "device.effect",
       device: {
         instance: "device",
@@ -1701,12 +1776,12 @@ test("successful dangerous operation without a marker consumes approval and warn
       project: "outside-project",
       configDigest: (await import("../dist/index.js")).sha(config.value),
     });
-    const approvals = new ApprovalManager(paths);
+    const approvals = new ApprovalManager(paths, root);
     await approvals.change(approval.id, "approved");
     const runner = new OperationRunner({
       paths,
       registry,
-      project: undefined,
+      project: { root, config: path.join(root, "benchpilot.toml") },
       flags: { quiet: true, danger: true },
       config,
       eventWriter: {

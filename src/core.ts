@@ -101,7 +101,6 @@ export {
   duration,
   getKey,
   merge,
-  projectStorageKey,
   redactResolvedConfig,
   setKey,
   validateConfig,

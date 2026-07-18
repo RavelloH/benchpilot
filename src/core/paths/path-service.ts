@@ -8,22 +8,13 @@ export class PathService {
     readonly home = os.homedir(),
     readonly temp = os.tmpdir(),
   ) {}
-  get portable() {
-    return this.env.BENCHPILOT_HOME;
-  }
   private persistentRoot() {
     return path.join(this.home, ".benchpilot");
   }
   globalConfig() {
-    if (this.portable) return path.join(this.portable, "config.toml");
     return path.join(this.persistentRoot(), "config.toml");
   }
-  stateRoot() {
-    if (this.portable) return path.join(this.portable, "state");
-    return path.join(this.persistentRoot(), "state");
-  }
   runtimeRoot() {
-    if (this.portable) return path.join(this.portable, "runtime", "locks");
     return path.join(
       this.platform === "win32"
         ? this.env.TEMP || this.temp
@@ -35,14 +26,20 @@ export class PathService {
   lockGuardsRoot() {
     return path.join(path.dirname(this.runtimeRoot()), "guards");
   }
-  runsRoot(projectKey: string) {
-    return path.join(this.stateRoot(), "projects", projectKey, "runs");
+  lockRecoveryRoot() {
+    return path.join(path.dirname(this.runtimeRoot()), "lock-recovery");
   }
-  approvalsRoot() {
-    return path.join(this.stateRoot(), "approvals");
+  projectStateRoot(projectRoot: string) {
+    return path.join(projectRoot, ".benchpilot", "state");
   }
-  approvalGuardsRoot() {
-    return path.join(this.stateRoot(), "approval-guards");
+  runsRoot(projectRoot: string) {
+    return path.join(this.projectStateRoot(projectRoot), "runs");
+  }
+  approvalsRoot(projectRoot: string) {
+    return path.join(this.projectStateRoot(projectRoot), "approvals");
+  }
+  approvalGuardsRoot(projectRoot: string) {
+    return path.join(this.projectStateRoot(projectRoot), "approval-guards");
   }
   async project(start = process.cwd(), explicit?: string) {
     if (explicit)

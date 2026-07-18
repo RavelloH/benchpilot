@@ -34,7 +34,7 @@ const adapterConfig = Object.fromEntries(
 const stateRoot = await mkdtemp(path.join(tmpdir(), "benchpilot-esp-idf-"));
 const environment = {
   ...process.env,
-  BENCHPILOT_HOME: stateRoot,
+  TEMP: path.join(stateRoot, "runtime"),
   BENCHPILOT_DEVICES__ESP32S3: JSON.stringify({
     adapter: "esp-idf",
     port,

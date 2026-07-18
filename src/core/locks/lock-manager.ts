@@ -38,7 +38,7 @@ export class LockManager {
   }
 
   private recoveryDirectory() {
-    return path.join(this.paths.stateRoot(), "lock-recovery");
+    return this.paths.lockRecoveryRoot();
   }
 
   private recoveryFile(id: string) {
