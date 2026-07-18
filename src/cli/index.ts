@@ -4,6 +4,7 @@ import { Adapter, BenchPilotError, EventWriter, fail, Json } from "../core.js";
 import { loadBuiltinAdapters } from "../adapters/runtime/builtin-adapters.js";
 import { createApplication } from "../application/application.js";
 import { openApplicationRequest } from "../application/request-scope.js";
+import { readProjectLocale } from "../application/config/locale.js";
 import {
   brief,
   commandGroups,
@@ -84,6 +85,11 @@ export async function main(adapters?: Adapter[]) {
       return;
     }
     if (parts[0] === "help") {
+      const locale = await readProjectLocale({
+        cwd: process.cwd(),
+        configPath: flags.config as string | undefined,
+      });
+      presentationLocale = locale;
       const target = parts.slice(1);
       if (commandFlags.all) {
         const value = {
@@ -95,17 +101,27 @@ export async function main(adapters?: Adapter[]) {
         return;
       }
       const h = fullHelp(target);
-      write(h, flags, humanFull(target));
+      write(h, flags, humanFull(target, locale));
       return;
     }
     const target = parts.length ? parts : [];
     if (flags.help && parts[0] !== "device") {
+      const locale = await readProjectLocale({
+        cwd: process.cwd(),
+        configPath: flags.config as string | undefined,
+      });
+      presentationLocale = locale;
       const h = fullHelp(target);
-      write(h, flags, humanFull(target));
+      write(h, flags, humanFull(target, locale));
       return;
     }
     if (!parts.length) {
-      write(fullHelp([]), flags, brief("root"));
+      const locale = await readProjectLocale({
+        cwd: process.cwd(),
+        configPath: flags.config as string | undefined,
+      });
+      presentationLocale = locale;
+      write(fullHelp([]), flags, brief("root", locale));
       return;
     }
     if (parts[0] === "init") {
@@ -529,6 +545,7 @@ export async function main(adapters?: Adapter[]) {
         rawOptions,
         devices,
         catalog,
+        locale,
       })
     )
       return;

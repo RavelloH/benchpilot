@@ -208,6 +208,49 @@ test("init switches human error presentation to the selected locale", async () =
   }
 });
 
+test("human command help uses the project-local locale", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "benchpilot-help-locale-"));
+  try {
+    await run(
+      dir,
+      "init",
+      "--project-id",
+      "demo",
+      "--project-name",
+      "演示",
+      "--locale",
+      "zh-CN",
+    );
+    assert.match((await run(dir)).stdout, /面向 Agent 的设备生命周期 CLI/);
+    assert.match((await run(dir, "help", "config")).stdout, /名称/);
+    assert.match(
+      (await run(dir, "config", "--help")).stdout,
+      /读取、解释、校验/,
+    );
+    const machine = JSON.parse((await run(dir, "--help", "--json")).stdout);
+    assert.equal(machine.summary, "Agent-first device lifecycle CLI.");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("dynamic device help localizes its presentation labels", async () => {
+  const dir = await mkdtemp(
+    path.join(os.tmpdir(), "benchpilot-device-help-zh-"),
+  );
+  try {
+    await initDemo(dir);
+    await writeFile(
+      path.join(dir, ".benchpilot", "config.local.toml"),
+      '[cli]\nlocale = "zh-CN"\n',
+    );
+    const result = await run(dir, "device", "demo", "--help");
+    assert.match(result.stdout, /命令:/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("unknown administrative subcommands are usage errors", async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "benchpilot-admin-usage-"));
   try {

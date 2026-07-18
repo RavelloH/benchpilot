@@ -8,6 +8,7 @@ import {
 } from "../option-parser.js";
 import type { Flags } from "../parser.js";
 import { write } from "../output-renderer.js";
+import { t, type Locale } from "../../i18n/index.js";
 
 interface DeviceCommandContext {
   parts: string[];
@@ -15,6 +16,7 @@ interface DeviceCommandContext {
   rawOptions: RawOption[];
   devices: DeviceUseCases;
   catalog: CommandCatalog;
+  locale: Locale;
 }
 
 export async function handleDeviceCommand({
@@ -23,6 +25,7 @@ export async function handleDeviceCommand({
   rawOptions,
   devices,
   catalog,
+  locale,
 }: DeviceCommandContext): Promise<boolean> {
   if (parts[0] === "device" && parts[1]) {
     const device = await devices.describe(parts[1]);
@@ -41,7 +44,7 @@ export async function handleDeviceCommand({
       write(
         help,
         flags,
-        `benchpilot device ${parts[1]} — ${device.adapter.summary}\n\nCommands:\n${device.capabilities
+        `benchpilot device ${parts[1]} — ${device.adapter.summary}\n\n${t(locale, "help.commands")}:\n${device.capabilities
           .map((x) => `  ${x.id.padEnd(17)} ${x.summary}`)
           .join("\n")}\n`,
       );
