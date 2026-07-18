@@ -30,7 +30,7 @@ workflows, parsers, artifacts, passive discovery, Doctor checks, and extension
 capabilities run from the compiled Bundle only. Adapter TOML is a build-time
 input and no arbitrary JavaScript is loaded from an adapter.
 
-`src/core.ts` is a compatibility export surface only. Implementations live in
+`src/core.ts` is the public Core export surface. Implementations live in
 `core/config`, `core/capabilities`, `core/operations`, `core/process`, and their
 resource-specific modules. CLI startup remains in `cli/index.ts`; project
 initialization, configuration mutation, and system workflows live under

@@ -12,10 +12,7 @@ import {
   type RuntimeSchema,
 } from "../../core.js";
 import { DeclarativeCapabilityRunner } from "./capability-runner.js";
-import {
-  discoverDevices,
-  discoverDevicesDetailed,
-} from "./devices/discovery.js";
+import { discoverDevicesDetailed } from "./devices/discovery.js";
 import { executeDeviceCommandSource } from "./devices/command-source.js";
 import { normalizePortIdentity } from "./devices/identity.js";
 import {
@@ -248,7 +245,7 @@ const doctorContext = (
   result: {},
 });
 
-/** Turns a validated compiled bundle into the legacy Core Adapter contract. */
+/** Turns a validated compiled bundle into the Core Adapter contract. */
 export const createDeclarativeAdapter = (runtime: RuntimeAdapter): Adapter => {
   const validator = new AdapterDataValidator(runtime.bundle);
   return {
@@ -315,13 +312,11 @@ export const createDeclarativeAdapter = (runtime: RuntimeAdapter): Adapter => {
         const tool = object(raw);
         const required = tool.required === true;
         try {
-          const launch = await resolver.resolve(
+          const launch = await resolver.resolveLaunch(
             String(id),
             object(rules.tools),
             object(rules.discoveries),
             runtimeContext,
-            object(rules.parsers),
-            { probe: false, adapterId: runtime.bundle.id },
           );
           const toolContext = object(runtimeContext.tool);
           const discoveryContext = object(runtimeContext.discovery);

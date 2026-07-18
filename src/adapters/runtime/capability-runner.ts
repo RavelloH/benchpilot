@@ -15,7 +15,7 @@ import {
 import { durationMs, planLaunch } from "./planning/launch-plan.js";
 import { collectArtifacts } from "./rules/artifact-collector.js";
 import { lookup, object, type RuleObject } from "./rules/template.js";
-import { ToolResolver, type ResolvedTool } from "./tools/resolver.js";
+import { ToolResolver, type ResolvedToolLaunch } from "./tools/resolver.js";
 import type { AdapterRuntimeContext, RuntimeAdapter } from "./types.js";
 import { AdapterDataValidator } from "./validation/data-validator.js";
 import {
@@ -315,9 +315,7 @@ export class DeclarativeCapabilityRunner {
             actionSignal,
             {
               ...tool,
-              ...(Object.keys(probe).length
-                ? { probeResult: probe, probe }
-                : {}),
+              ...(Object.keys(probe).length ? { probeResult: probe } : {}),
             },
             environment.environment,
             dangerous,
@@ -349,7 +347,7 @@ export class DeclarativeCapabilityRunner {
     actionContext: RuleObject,
     operation: OperationContext,
     signal: AbortSignal,
-    tool: ResolvedTool | undefined,
+    tool: ResolvedToolLaunch | undefined,
     environment: NodeJS.ProcessEnv,
     dangerous: boolean,
     capabilityId: string,
@@ -431,19 +429,17 @@ export class DeclarativeCapabilityRunner {
     toolId: string,
     context: RuleObject,
     signal: AbortSignal,
-  ): Promise<ResolvedTool> {
-    const tool = await this.tools.resolve(
+  ): Promise<ResolvedToolLaunch> {
+    const tool = await this.tools.resolveLaunch(
       toolId,
       object(this.adapter.rules.tools),
       object(this.adapter.rules.discoveries),
       context,
-      object(this.adapter.rules.parsers),
-      { probe: false, adapterId: this.adapter.bundle.id, signal },
     );
     return tool;
   }
 
-  private writeToolDiscovery(context: RuleObject, tool: ResolvedTool) {
+  private writeToolDiscovery(context: RuleObject, tool: ResolvedToolLaunch) {
     for (const current of tool.chain) {
       (context.tool as Record<string, RuleObject>)[current.toolId] = {
         executable: current.executable,
@@ -461,7 +457,7 @@ export class DeclarativeCapabilityRunner {
 
   private writeToolProbes(
     context: RuleObject,
-    tool: ResolvedTool,
+    tool: ResolvedToolLaunch,
     probes: Map<string, RuleObject>,
   ) {
     for (const current of tool.chain) {

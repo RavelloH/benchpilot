@@ -27,14 +27,6 @@ export interface ResolvedToolLaunch {
   chain: ResolvedToolLaunch[];
 }
 
-/** @deprecated Use the explicit launch fields. Compatibility aliases are retained for v1 callers. */
-export interface ResolvedTool extends ResolvedToolLaunch {
-  id: string;
-  path: string;
-  prefixArgs: string[];
-  probe?: RuleObject;
-}
-
 interface DiscoveryResolution {
   path: string;
   candidateId: string;
@@ -132,50 +124,17 @@ export class ToolResolver {
     private readonly env: NodeJS.ProcessEnv,
   ) {}
 
-  /** Resolves a full Tool launch and, for backwards compatibility, performs its declared probe. */
-  async resolve(
-    toolId: string,
-    tools: RuleObject,
-    discoveries: RuleObject,
-    context: RuleObject,
-    parsers: RuleObject = {},
-    options: {
-      probe?: boolean;
-      environment?: NodeJS.ProcessEnv;
-      adapterId?: string;
-      signal?: AbortSignal;
-    } = {},
-  ): Promise<ResolvedTool> {
-    const launch = await this.resolveLaunch(
-      toolId,
-      tools,
-      discoveries,
-      context,
-    );
-    if (options.probe === false) return launch;
-    const probeResult = await this.probe(
-      launch,
-      discoveries,
-      context,
-      parsers,
-      options.environment ?? this.env,
-      options.adapterId ?? "unknown",
-      options.signal,
-    );
-    return this.withProbe(launch, probeResult);
-  }
-
   async resolveLaunch(
     toolId: string,
     tools: RuleObject,
     discoveries: RuleObject,
     context: RuleObject,
-  ): Promise<ResolvedTool> {
+  ): Promise<ResolvedToolLaunch> {
     return this.resolveTool(toolId, tools, discoveries, context, new Set());
   }
 
   async probe(
-    tool: ResolvedTool,
+    tool: ResolvedToolLaunch,
     discoveries: RuleObject,
     context: RuleObject,
     parsers: RuleObject,
@@ -283,7 +242,7 @@ export class ToolResolver {
 
   /** Probes every Tool in a via-tool chain exactly once, in dependency order. */
   async probeChain(
-    tool: ResolvedTool,
+    tool: ResolvedToolLaunch,
     discoveries: RuleObject,
     context: RuleObject,
     parsers: RuleObject,
@@ -291,18 +250,16 @@ export class ToolResolver {
     adapterId: string,
     signal?: AbortSignal,
     debugLog?: (message: string) => void,
-    environmentFor?: (tool: ResolvedTool) => Promise<NodeJS.ProcessEnv>,
+    environmentFor?: (tool: ResolvedToolLaunch) => Promise<NodeJS.ProcessEnv>,
   ): Promise<Map<string, RuleObject>> {
     const results = new Map<string, RuleObject>();
     for (const current of tool.chain) {
       const result = await this.probe(
-        current as ResolvedTool,
+        current,
         discoveries,
         context,
         parsers,
-        environmentFor
-          ? await environmentFor(current as ResolvedTool)
-          : environment,
+        environmentFor ? await environmentFor(current) : environment,
         adapterId,
         signal,
         debugLog,
@@ -312,19 +269,13 @@ export class ToolResolver {
     return results;
   }
 
-  private withProbe(tool: ResolvedTool, probeResult: RuleObject): ResolvedTool {
-    return Object.keys(probeResult).length
-      ? { ...tool, probeResult, probe: probeResult }
-      : tool;
-  }
-
   private async resolveTool(
     toolId: string,
     tools: RuleObject,
     discoveries: RuleObject,
     context: RuleObject,
     resolving: Set<string>,
-  ): Promise<ResolvedTool> {
+  ): Promise<ResolvedToolLaunch> {
     if (resolving.has(toolId))
       throw new AdapterRuntimeError(
         "ADAPTER_TOOL_NOT_FOUND",
@@ -369,7 +320,7 @@ export class ToolResolver {
           : undefined;
       const executable = parent?.executable ?? resolved.path;
       const argsPrefix = [...(parent?.argsPrefix ?? []), ...ownPrefix];
-      const current: ResolvedTool = {
+      const current: ResolvedToolLaunch = {
         toolId,
         executable,
         argsPrefix,
@@ -383,9 +334,6 @@ export class ToolResolver {
           path: resolved.path,
           candidateId: resolved.candidateId,
         },
-        id: toolId,
-        path: executable,
-        prefixArgs: argsPrefix,
         chain: [],
       };
       current.chain = [...(parent?.chain ?? []), current];

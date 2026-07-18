@@ -209,10 +209,3 @@ export const discoverDevicesDetailed = async (
     sources: diagnostics,
   };
 };
-
-/** Compatibility API for existing Core adapters. */
-export const discoverDevices = async (
-  adapter: string,
-  devices: RuleObject,
-  providers: DeviceDiscoveryProviders = {},
-) => (await discoverDevicesDetailed(adapter, devices, providers)).devices;

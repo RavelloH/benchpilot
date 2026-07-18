@@ -1,4 +1,4 @@
-import type { ResolvedTool } from "../tools/resolver.js";
+import type { ResolvedToolLaunch } from "../tools/resolver.js";
 import {
   planActionArguments,
   planActionEnvironment,
@@ -51,7 +51,7 @@ export const durationMs = (value: unknown, fallback = 0) => {
 export const planLaunch = (
   action: RuleObject,
   context: RuleObject,
-  tool: ResolvedTool | undefined,
+  tool: ResolvedToolLaunch | undefined,
   environment: NodeJS.ProcessEnv,
 ): LaunchPlan => {
   if (action.type === "process") {
@@ -59,9 +59,9 @@ export const planLaunch = (
       throw new Error(`Resolved tool is required: ${String(action.tool)}`);
     return {
       kind: "process",
-      executable: tool.executable ?? tool.path,
+      executable: tool.executable,
       args: [
-        ...tool.prefixArgs,
+        ...tool.argsPrefix,
         ...planActionArguments(action, context).map((argument) =>
           String(argument),
         ),

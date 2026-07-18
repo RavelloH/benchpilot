@@ -18,10 +18,7 @@ import { pathToFileURL } from "node:url";
 import test from "node:test";
 import { AdapterBundleLoader } from "../dist/adapters/runtime/bundle-loader.js";
 import { createDeclarativeAdapter } from "../dist/adapters/runtime/declarative-adapter.js";
-import {
-  discoverDevices,
-  discoverDevicesDetailed,
-} from "../dist/adapters/runtime/devices/discovery.js";
+import { discoverDevicesDetailed } from "../dist/adapters/runtime/devices/discovery.js";
 import { AdapterRuntimeError } from "../dist/adapters/runtime/errors.js";
 import { EnvironmentResolver } from "../dist/adapters/runtime/environments/resolver.js";
 import { executeProcess } from "../dist/adapters/runtime/executors/process-executor.js";
@@ -265,7 +262,7 @@ test("execution deadlines reduce the timeout available to later actions", async 
 });
 
 test("passive device discovery scores, deduplicates, and orders stable identities", async () => {
-  const devices = await discoverDevices("demo", {
+  const { devices } = await discoverDevicesDetailed("demo", {
     discovery: {
       enabled: true,
       sources: [
@@ -314,7 +311,7 @@ test("passive device discovery scores, deduplicates, and orders stable identitie
 });
 
 test("device discovery accepts injected passive providers without scanning hardware", async () => {
-  const devices = await discoverDevices(
+  const { devices } = await discoverDevicesDetailed(
     "demo",
     {
       discovery: {
@@ -545,7 +542,7 @@ test("tool discovery honors priority and rejects an invalid explicit path", asyn
     const resolver = new ToolResolver("windows", {});
     const context = { config: { tool_path: join(root, "missing.exe") } };
     await assert.rejects(
-      resolver.resolve(
+      resolver.resolveLaunch(
         "tool",
         {
           tool: {
@@ -573,7 +570,7 @@ test("tool discovery honors priority and rejects an invalid explicit path", asyn
         error instanceof AdapterRuntimeError &&
         error.code === "ADAPTER_TOOL_CONFIG_INVALID",
     );
-    const resolved = await resolver.resolve(
+    const resolved = await resolver.resolveLaunch(
       "tool",
       {
         tool: {
@@ -593,10 +590,10 @@ test("tool discovery honors priority and rejects an invalid explicit path", asyn
       { config: {} },
     );
     assert.equal(
-      resolved.path,
+      resolved.executable,
       await (await import("node:fs/promises")).realpath(first),
     );
-    const fallback = await resolver.resolve(
+    const fallback = await resolver.resolveLaunch(
       "tool",
       {
         tool: {
@@ -750,49 +747,61 @@ test("tool probes parse output and reject an unsuccessful candidate", async () =
       ],
     },
   };
-  const resolved = await resolver.resolve(
-    "node",
-    tools,
-    {
-      node: {
-        validation: { path_type: "file", executable: true },
-        candidates: [
-          { id: "node", type: "fixed", priority: 1, paths: [process.execPath] },
-        ],
-        probe: { args: ["--version"], parser: "version", timeout: "2s" },
-      },
+  const discoveries = {
+    node: {
+      validation: { path_type: "file", executable: true },
+      candidates: [
+        { id: "node", type: "fixed", priority: 1, paths: [process.execPath] },
+      ],
+      probe: { args: ["--version"], parser: "version", timeout: "2s" },
     },
+  };
+  const resolved = await resolver.resolveLaunch("node", tools, discoveries, {});
+  const probe = await resolver.probe(
+    resolved,
+    discoveries,
     {},
     parsers,
+    process.env,
+    "test",
   );
-  assert.match(resolved.probe.version, /^v\d+/);
-  await assert.rejects(
-    new ToolResolver(
-      process.platform === "win32" ? "windows" : "linux",
-      process.env,
-    ).resolve(
-      "node",
-      tools,
-      {
-        node: {
-          validation: { path_type: "file", executable: true },
-          candidates: [
-            {
-              id: "node",
-              type: "fixed",
-              priority: 1,
-              paths: [process.execPath],
-            },
-          ],
-          probe: {
-            args: ["--bad-benchpilot-probe"],
-            parser: "version",
-            timeout: "2s",
-          },
+  assert.match(String(probe.version), /^v\d+/);
+  const failingResolver = new ToolResolver(
+    process.platform === "win32" ? "windows" : "linux",
+    process.env,
+  );
+  const failingDiscoveries = {
+    node: {
+      validation: { path_type: "file", executable: true },
+      candidates: [
+        {
+          id: "node",
+          type: "fixed",
+          priority: 1,
+          paths: [process.execPath],
         },
+      ],
+      probe: {
+        args: ["--bad-benchpilot-probe"],
+        parser: "version",
+        timeout: "2s",
       },
+    },
+  };
+  const failingLaunch = await failingResolver.resolveLaunch(
+    "node",
+    tools,
+    failingDiscoveries,
+    {},
+  );
+  await assert.rejects(
+    failingResolver.probe(
+      failingLaunch,
+      failingDiscoveries,
       {},
       parsers,
+      process.env,
+      "test",
     ),
     (error) =>
       error instanceof AdapterRuntimeError &&
@@ -870,13 +879,11 @@ test("via-tool probes use the complete launch chain and isolate cache entries", 
         ],
       },
     };
-    const launch = await resolver.resolve(
+    const launch = await resolver.resolveLaunch(
       "target",
       tools,
       discoveries,
       {},
-      parsers,
-      { probe: false },
     );
     assert.equal(launch.executable, await realpath(process.execPath));
     assert.deepEqual(launch.argsPrefix, [
@@ -1364,7 +1371,7 @@ test("process launch plans use argv and parse structured output", async () => {
           arguments: [],
         },
         {},
-        { path: process.execPath, prefixArgs: [] },
+        { executable: process.execPath, argsPrefix: [] },
         {},
       ),
     (error) =>
@@ -1386,7 +1393,7 @@ test("process launch plans use argv and parse structured output", async () => {
       ],
     },
     { project: { root: process.cwd() } },
-    { path: process.execPath, prefixArgs: [] },
+    { executable: process.execPath, argsPrefix: [] },
     {},
   );
   assert.equal(plan.kind, "process");
