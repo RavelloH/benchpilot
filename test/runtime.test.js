@@ -1101,7 +1101,7 @@ test("passive discovery never launches a declared probe action", async () => {
     const discovered = await createDeclarativeAdapter(runtime).discoverDetailed(
       {
         adapterConfig: {},
-        paths: new PathService({ BENCHPILOT_HOME: root }),
+        paths: new PathService({ TEMP: join(root, "runtime") }, "win32"),
       },
     );
     assert.equal(discovered.devices.length, 1);
