@@ -1,6 +1,7 @@
 import { t, type Locale, type MessageKey } from "../../i18n/index.js";
 import type { PromptItem } from "../interaction/prompter.js";
 import { benchPilotWordmark as rootWordmark } from "./brand.js";
+import { screenPresentation, type CliNode } from "./page.js";
 import { terminalTheme } from "./theme.js";
 
 type RootHelpEntry = {
@@ -11,6 +12,16 @@ type RootHelpEntry = {
 type RootHelpSection = {
   titleKey: MessageKey;
   entries: readonly RootHelpEntry[];
+};
+
+export type AgentHelpEntry = RootHelpEntry & {
+  syntax: string;
+  usages?: readonly string[];
+};
+
+export type AgentHelpSection = {
+  titleKey: MessageKey;
+  entries: readonly AgentHelpEntry[];
 };
 
 export const rootHelpSections: readonly RootHelpSection[] = [
@@ -63,6 +74,171 @@ export const rootHelpSections: readonly RootHelpSection[] = [
       { command: "docs", summaryKey: "screen.root.docs" },
       { command: "help", summaryKey: "help.command.help" },
       { command: "version", summaryKey: "help.command.version" },
+    ],
+  },
+];
+
+export const agentHelpSections: readonly AgentHelpSection[] = [
+  {
+    titleKey: "screen.root.getStarted",
+    entries: [
+      {
+        command: "init",
+        summaryKey: "help.command.init",
+        syntax:
+          "benchpilot init --project-id <project-id> --project-name <project-name> --locale <locale> [options]",
+      },
+      {
+        command: "setup",
+        summaryKey: "screen.root.setup",
+        syntax: "benchpilot setup [arguments] [options]",
+      },
+      {
+        command: "doctor",
+        summaryKey: "help.command.doctor",
+        syntax: "benchpilot doctor [options]",
+      },
+      {
+        command: "language",
+        summaryKey: "screen.root.language",
+        syntax: "benchpilot language <list|get|set> [locale] [options]",
+        usages: [
+          "benchpilot language list [options]",
+          "benchpilot language get [options]",
+          "benchpilot language set <locale> [options]",
+        ],
+      },
+    ],
+  },
+  {
+    titleKey: "screen.root.configure",
+    entries: [
+      {
+        command: "config",
+        summaryKey: "screen.root.config",
+        syntax:
+          "benchpilot config <get|set|unset|resolved|explain|validate> [arguments] [options]",
+        usages: [
+          "benchpilot config get <key> [options]",
+          "benchpilot config set <key> <value> [options]",
+          "benchpilot config unset <key> [options]",
+          "benchpilot config resolved [options]",
+          "benchpilot config explain <key> [options]",
+          "benchpilot config validate [options]",
+        ],
+      },
+      {
+        command: "adapter",
+        summaryKey: "screen.root.adapter",
+        syntax: "benchpilot adapter <list|adapter-id> [action] [options]",
+        usages: [
+          "benchpilot adapter list [options]",
+          "benchpilot adapter <adapter-id> show [options]",
+          "benchpilot adapter <adapter-id> doctor [options]",
+        ],
+      },
+    ],
+  },
+  {
+    titleKey: "screen.root.execute",
+    entries: [
+      {
+        command: "device",
+        summaryKey: "screen.root.device",
+        syntax:
+          "benchpilot device <list|scan|device-instance> [capability] [arguments] [options]",
+        usages: [
+          "benchpilot device list [options]",
+          "benchpilot device scan [options]",
+          "benchpilot device <device-instance> <capability> [arguments] [options]",
+        ],
+      },
+      {
+        command: "system",
+        summaryKey: "screen.root.system",
+        syntax:
+          "benchpilot system <list|system-instance> [capability] [arguments] [options]",
+        usages: [
+          "benchpilot system list [options]",
+          "benchpilot system <system-instance> <capability> [arguments] [options]",
+        ],
+      },
+      {
+        command: "workflow",
+        summaryKey: "screen.root.workflow",
+        syntax: "benchpilot workflow [arguments] [options]",
+        usages: [
+          "benchpilot workflow list [options]",
+          "benchpilot workflow <workflow> run [arguments] [options]",
+        ],
+      },
+    ],
+  },
+  {
+    titleKey: "screen.root.records",
+    entries: [
+      {
+        command: "run",
+        summaryKey: "screen.root.run",
+        syntax:
+          "benchpilot run <list|prune|run-id> [show|logs|artifacts] [options]",
+        usages: [
+          "benchpilot run list [options]",
+          "benchpilot run prune [options]",
+          "benchpilot run <run-id> show [options]",
+          "benchpilot run <run-id> logs [options]",
+          "benchpilot run <run-id> artifacts [options]",
+        ],
+      },
+      {
+        command: "approval",
+        summaryKey: "screen.root.approval",
+        syntax:
+          "benchpilot approval <list|approval-id> [inspect|approve|reject] [options]",
+        usages: [
+          "benchpilot approval list [options]",
+          "benchpilot approval <approval-id> inspect [options]",
+          "benchpilot approval <approval-id> approve [options]",
+          "benchpilot approval <approval-id> reject [options]",
+        ],
+      },
+      {
+        command: "lock",
+        summaryKey: "screen.root.lock",
+        syntax:
+          "benchpilot lock <list|clear-stale|lock-id> [show|clear] [options]",
+        usages: [
+          "benchpilot lock list [options]",
+          "benchpilot lock clear-stale [options]",
+          "benchpilot lock <lock-id> show [options]",
+          "benchpilot lock <lock-id> clear [options]",
+        ],
+      },
+    ],
+  },
+  {
+    titleKey: "screen.root.help",
+    entries: [
+      {
+        command: "skill",
+        summaryKey: "screen.root.skill",
+        syntax: "benchpilot skill [arguments] [options]",
+      },
+      {
+        command: "docs",
+        summaryKey: "screen.root.docs",
+        syntax: "benchpilot docs [arguments] [options]",
+      },
+      {
+        command: "help",
+        summaryKey: "help.command.help",
+        syntax: "benchpilot help [command] [options]",
+      },
+      {
+        command: "version",
+        summaryKey: "help.command.version",
+        syntax: "benchpilot version [options]",
+      },
     ],
   },
 ];
@@ -184,41 +360,227 @@ function renderOptions(
     .join("\n");
 }
 
+const visibleEverywhere = ["screen", "json", "jsonl"] as const;
+
+const sectionNames = {
+  "screen.root.interactive": "interactive",
+  "screen.root.getStarted": "get-started",
+  "screen.root.configure": "environment-and-integration",
+  "screen.root.execute": "resources-and-orchestration",
+  "screen.root.records": "audit-and-safety",
+  "screen.root.help": "help",
+} as const satisfies Partial<Record<MessageKey, string>>;
+
+function sectionName(key: MessageKey) {
+  return (sectionNames as Partial<Record<MessageKey, string>>)[key] ?? key;
+}
+
+function renderSyntax(value: string, theme: ReturnType<typeof terminalTheme>) {
+  const [executable, ...rest] = value.split(" ");
+  return `${theme.executable(executable!)} ${renderCommandPath(rest.join(" "), theme)}`;
+}
+
+function agentRootHelpPage(locale: Locale, color: boolean): readonly CliNode[] {
+  const theme = terminalTheme(color);
+  return [
+    {
+      name: "introduction",
+      visibility: visibleEverywhere,
+      text: theme.muted(t(locale, "help.group.root")),
+    },
+    {
+      name: "command",
+      visibility: visibleEverywhere,
+      children: [
+        {
+          name: "usage",
+          visibility: visibleEverywhere,
+          lineBreak: true,
+          text: theme.heading(t(locale, "help.usage")),
+          children: [
+            {
+              name: "syntax",
+              visibility: visibleEverywhere,
+              text: renderSyntax(
+                "benchpilot <command> [arguments] [options]",
+                theme,
+              ),
+            },
+          ],
+        },
+        ...agentHelpSections.map((section) => ({
+          name: sectionName(section.titleKey),
+          visibility: visibleEverywhere,
+          lineBreak: true,
+          text: theme.heading(t(locale, section.titleKey)),
+          children: section.entries.map((entry, index) => ({
+            name: entry.command,
+            visibility: visibleEverywhere,
+            lineBreak: index < section.entries.length - 1,
+            text: renderSyntax(entry.syntax, theme),
+            children: [
+              {
+                name: "description",
+                visibility: visibleEverywhere,
+                text: t(locale, entry.summaryKey),
+              },
+              ...(entry.usages ?? []).map((usage, index) => ({
+                name: `usage-${index + 1}`,
+                visibility: visibleEverywhere,
+                text: renderSyntax(usage, theme),
+              })),
+            ],
+          })),
+        })),
+        {
+          name: "global-options",
+          visibility: visibleEverywhere,
+          text: theme.heading(t(locale, "screen.root.commonOptions")),
+          children: commonOptions.map(({ option, summaryKey }) => ({
+            name: option.slice(2).replace(/\s+<(.+)>/, "-$1"),
+            visibility: visibleEverywhere,
+            text: `${renderOption(option, theme)}  ${t(locale, summaryKey)}`,
+          })),
+        },
+      ],
+    },
+    {
+      name: "more",
+      visibility: visibleEverywhere,
+      children: [
+        {
+          name: "detailed-help",
+          visibility: visibleEverywhere,
+          text: theme.muted(t(locale, "screen.root.more")),
+        },
+      ],
+    },
+  ];
+}
+
+/** Structured root command index for screen, JSON, and JSONL projection. */
+export function rootHelpPage(
+  locale: Locale = "en",
+  color = false,
+  showWordmark = true,
+  view: "normal" | "agent" = "normal",
+): readonly CliNode[] {
+  if (view === "agent") return agentRootHelpPage(locale, color);
+  const theme = terminalTheme(color);
+  const sectionNodes: CliNode[] = sections.map((section) => {
+    const name = sectionName(section.titleKey);
+    return {
+      name,
+      visibility: visibleEverywhere,
+      lineBreak: true,
+      text: theme.heading(t(locale, section.titleKey)),
+      children: section.entries.map((entry) => ({
+        name: entry.command,
+        visibility: visibleEverywhere,
+        text: `${renderCommandPath(entry.command.padEnd(rootColumnWidth), theme)}  ${t(locale, entry.summaryKey)}`,
+      })),
+    };
+  });
+  const examples = [
+    [
+      { value: "device", kind: "command" as const },
+      { value: "scan", kind: "command" as const },
+    ],
+    [
+      { value: "device", kind: "command" as const },
+      { value: "demo", kind: "argument" as const },
+      { value: "deploy", kind: "command" as const },
+    ],
+    [
+      { value: "device", kind: "command" as const },
+      { value: "demo", kind: "argument" as const },
+      { value: "deploy", kind: "command" as const },
+      { value: "--json", kind: "flag" as const },
+    ],
+  ];
+  return [
+    ...(showWordmark
+      ? [
+          {
+            name: "logo",
+            visibility: ["screen"] as const,
+            text: theme.brand(rootWordmark),
+          },
+        ]
+      : []),
+    {
+      name: "introduction",
+      visibility: visibleEverywhere,
+      text: theme.muted(t(locale, "help.group.root")),
+    },
+    {
+      name: "command",
+      visibility: visibleEverywhere,
+      children: [
+        {
+          name: "usage",
+          visibility: visibleEverywhere,
+          lineBreak: true,
+          text: theme.heading(t(locale, "help.usage")),
+          children: [
+            {
+              name: "syntax",
+              visibility: visibleEverywhere,
+              text: `${theme.executable("benchpilot")} ${theme.command("<command>")} ${theme.command("[arguments]")} ${theme.optional("[options]")}`,
+            },
+          ],
+        },
+        ...sectionNodes,
+        {
+          name: "global-options",
+          visibility: visibleEverywhere,
+          lineBreak: true,
+          text: theme.heading(t(locale, "screen.root.commonOptions")),
+          children: commonOptions.map(({ option, summaryKey }) => {
+            const name = option.slice(2).replace(/\s+<(.+)>/, "-$1");
+            return {
+              name,
+              visibility: visibleEverywhere,
+              text: `${renderOption(option, theme)}${" ".repeat(rootColumnWidth - option.length)}  ${t(locale, summaryKey)}`,
+            };
+          }),
+        },
+        {
+          name: "examples",
+          visibility: visibleEverywhere,
+          text: theme.heading(t(locale, "help.examples")),
+          children: examples.map((example, index) => ({
+            name: `example-${index + 1}`,
+            visibility: visibleEverywhere,
+            text: `${theme.muted("$")} ${theme.executable("benchpilot")} ${renderExample(theme, example)}`,
+          })),
+        },
+      ],
+    },
+    {
+      name: "more",
+      visibility: visibleEverywhere,
+      children: [
+        {
+          name: "detailed-help",
+          visibility: visibleEverywhere,
+          text: theme.muted(t(locale, "screen.root.more")),
+        },
+        {
+          name: "repository",
+          visibility: visibleEverywhere,
+          text: theme.muted(t(locale, "screen.root.repository")),
+        },
+      ],
+    },
+  ];
+}
+
 /** Human-first root screen. Machine help remains the stable help DTO. */
 export function renderRootHelp(
   locale: Locale = "en",
   color = false,
   showWordmark = true,
 ) {
-  const theme = terminalTheme(color);
-  const benchPilotWordmark = showWordmark ? rootWordmark : "";
-  return `${theme.brand(benchPilotWordmark)}\n\n${theme.muted(t(locale, "help.group.root"))}\n\n${theme.heading(t(locale, "help.usage"))}\n  ${theme.executable("benchpilot")} ${theme.command("<command>")} ${theme.command("[arguments]")} ${theme.optional("[options]")}\n\n${sections
-    .map(
-      (section) =>
-        `${theme.heading(t(locale, section.titleKey))}\n${renderEntries(section.entries, locale, color)}`,
-    )
-    .join(
-      "\n\n",
-    )}\n\n${theme.heading(t(locale, "screen.root.commonOptions"))}\n${renderOptions(commonOptions, locale, theme)}\n\n${theme.heading(t(locale, "help.examples"))}\n  ${theme.muted("$")} ${theme.executable("benchpilot")} ${renderExample(
-    theme,
-    [
-      { value: "device", kind: "command" },
-      { value: "scan", kind: "command" },
-    ],
-  )}\n  ${theme.muted("$")} ${theme.executable("benchpilot")} ${renderExample(
-    theme,
-    [
-      { value: "device", kind: "command" },
-      { value: "demo", kind: "argument" },
-      { value: "deploy", kind: "command" },
-    ],
-  )}\n  ${theme.muted("$")} ${theme.executable("benchpilot")} ${renderExample(
-    theme,
-    [
-      { value: "device", kind: "command" },
-      { value: "demo", kind: "argument" },
-      { value: "deploy", kind: "command" },
-      { value: "--json", kind: "flag" },
-    ],
-  )}\n\n${theme.muted(t(locale, "screen.root.more"))}\n${theme.muted(t(locale, "screen.root.repository"))}\n`;
+  return screenPresentation(rootHelpPage(locale, color, showWordmark));
 }

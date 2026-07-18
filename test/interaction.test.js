@@ -29,6 +29,12 @@ import {
 import { t } from "../dist/i18n/index.js";
 import { shouldShowWordmark } from "../dist/cli/presentation/theme.js";
 import { renderVersion } from "../dist/cli/presentation/version.js";
+import {
+  jsonlPresentation,
+  jsonPresentation,
+  presentationView,
+  screenPresentation,
+} from "../dist/cli/presentation/page.js";
 
 const scriptedDriver = (...answers) => {
   let position = 0;
@@ -283,6 +289,55 @@ test("wordmarks are limited to human terminal screens", () => {
       false,
     ),
     /________/,
+  );
+});
+
+test("presentation trees project visibility, clean machine text, and flatten keys", () => {
+  const nodes = [
+    {
+      name: "logo",
+      visibility: ["screen"],
+      text: "\u001B[38;5;226mLOGO\u001B[0m\n",
+    },
+    {
+      name: "command",
+      visibility: ["screen", "json", "jsonl"],
+      lineBreak: true,
+      children: [
+        {
+          name: "help",
+          visibility: ["screen", "json", "jsonl"],
+          text: "\u001B[38;5;114m  skill\t  description\u001B[0m\n",
+        },
+        {
+          name: "screen-note",
+          visibility: ["screen"],
+          text: "screen only\n",
+        },
+      ],
+    },
+  ];
+  assert.match(screenPresentation(nodes), /LOGO/);
+  assert.deepEqual(jsonPresentation(nodes), [
+    {
+      name: "command",
+      children: [{ name: "help", text: "skill description" }],
+    },
+  ]);
+  assert.equal("lineBreak" in jsonPresentation(nodes)[0], false);
+  assert.deepEqual(jsonlPresentation(nodes), [
+    { op: "snapshot", key: "command", index: 0 },
+    {
+      op: "snapshot",
+      key: "command.help",
+      index: 1,
+      text: "skill description",
+    },
+  ]);
+  assert.equal("lineBreak" in jsonlPresentation(nodes)[0], false);
+  assert.equal(
+    presentationView({ help: true, agentDetected: true, agentMode: true }),
+    "help",
   );
 });
 

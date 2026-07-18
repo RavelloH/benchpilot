@@ -24,15 +24,19 @@ import {
   humanErrorMessage,
   write,
   writeFailure,
+  writePresentation,
   writeText,
 } from "./output-renderer.js";
 import { detectAgent } from "./agent/detector.js";
 import { interactionDecision } from "./interaction/policy.js";
-import { renderVersion } from "./presentation/version.js";
+import { renderVersion, versionPage } from "./presentation/version.js";
 import {
   renderInteractiveHomeHeader,
+  rootHelpPage,
   rootMenuChoices,
 } from "./presentation/root-help.js";
+import { commandHelpPage } from "./presentation/command-help.js";
+import { presentationView } from "./presentation/page.js";
 import { colorEnabled, shouldShowWordmark } from "./presentation/theme.js";
 import {
   InteractionCancelledError,
@@ -104,16 +108,52 @@ export async function main(adapters?: Adapter[]) {
       );
       return interaction;
     };
-    if (flags.version) {
-      writeText(`${version}\n`);
-      return;
-    }
-    if (parts[0] === "help") {
+    const currentPresentationView = (help = flags.help === true) =>
+      presentationView({
+        help,
+        agentDetected: Boolean(agent),
+        agentMode: flags.agent === true,
+      });
+    const present = (
+      nodes: Parameters<typeof writePresentation>[0]["nodes"],
+      view: ReturnType<typeof currentPresentationView>,
+    ) =>
+      writePresentation({
+        nodes,
+        flags,
+        locale: presentationLocale,
+        view,
+      });
+    const loadPresentationLocale = async () => {
       const locale = await readProjectLocale({
         cwd: process.cwd(),
         configPath: flags.config as string | undefined,
       });
       presentationLocale = locale;
+      return locale;
+    };
+    if (flags.version) {
+      const locale = await loadPresentationLocale();
+      if (flags.help) {
+        present(
+          commandHelpPage(
+            ["version"],
+            locale,
+            colorEnabled(flags, stdout.isTTY),
+          ),
+          currentPresentationView(),
+        );
+        return;
+      }
+      const value = { cliVersion: version, nodeVersion: process.version };
+      present(
+        versionPage(value, colorEnabled(flags, stdout.isTTY), showWordmark),
+        currentPresentationView(false),
+      );
+      return;
+    }
+    if (parts[0] === "help") {
+      const locale = await loadPresentationLocale();
       const target = parts.slice(1);
       if (commandFlags.all) {
         const value = {
@@ -124,42 +164,54 @@ export async function main(adapters?: Adapter[]) {
         write(value, flags, JSON.stringify(value, null, 2));
         return;
       }
+      if (
+        target.length === 0 ||
+        (target.length === 1 && target[0] === "version")
+      ) {
+        present(
+          commandHelpPage(target, locale, colorEnabled(flags, stdout.isTTY)),
+          currentPresentationView(true),
+        );
+        return;
+      }
       const h = fullHelp(target);
       write(h, flags, humanFull(target, locale));
       return;
     }
     const target = parts.length ? parts : [];
     if (flags.help && parts[0] !== "device") {
-      const locale = await readProjectLocale({
-        cwd: process.cwd(),
-        configPath: flags.config as string | undefined,
-      });
-      presentationLocale = locale;
+      const locale = await loadPresentationLocale();
+      if (
+        target.length === 0 ||
+        (target.length === 1 && target[0] === "version")
+      ) {
+        present(
+          commandHelpPage(target, locale, colorEnabled(flags, stdout.isTTY)),
+          currentPresentationView(),
+        );
+        return;
+      }
       const h = fullHelp(target);
       write(h, flags, humanFull(target, locale));
       return;
     }
     if (!parts.length) {
-      const locale = await readProjectLocale({
-        cwd: process.cwd(),
-        configPath: flags.config as string | undefined,
-      });
-      presentationLocale = locale;
-      write(
-        fullHelp([]),
-        flags,
-        brief("root", locale, colorEnabled(flags, stdout.isTTY), showWordmark),
+      const locale = await loadPresentationLocale();
+      present(
+        rootHelpPage(
+          locale,
+          colorEnabled(flags, stdout.isTTY),
+          showWordmark,
+          currentPresentationView(false) === "agent" ? "agent" : "normal",
+        ),
+        currentPresentationView(false),
       );
       return;
     }
     if (parts[0] === "home") {
       if (parts.length !== 1)
         fail("USAGE_ERROR", 2, "The home command takes no arguments.");
-      const locale = await readProjectLocale({
-        cwd: process.cwd(),
-        configPath: flags.config as string | undefined,
-      });
-      presentationLocale = locale;
+      const locale = await loadPresentationLocale();
       const decision = interactionDecision({
         agent,
         agentMode: flags.agent === true,
@@ -169,15 +221,14 @@ export async function main(adapters?: Adapter[]) {
         stdoutIsTTY: stdout.isTTY,
       });
       if (!decision.allowed) {
-        write(
-          fullHelp([]),
-          flags,
-          brief(
-            "root",
+        present(
+          rootHelpPage(
             locale,
             colorEnabled(flags, stdout.isTTY),
             showWordmark,
+            currentPresentationView(false) === "agent" ? "agent" : "normal",
           ),
+          currentPresentationView(false),
         );
         return;
       }
@@ -227,11 +278,11 @@ export async function main(adapters?: Adapter[]) {
     if (parts[0] === "version") {
       if (parts.length !== 1)
         fail("USAGE_ERROR", 2, "The version command takes no arguments.");
+      const locale = await loadPresentationLocale();
       const value = { cliVersion: version, nodeVersion: process.version };
-      write(
-        value,
-        flags,
-        renderVersion(value, colorEnabled(flags, stdout.isTTY), showWordmark),
+      present(
+        versionPage(value, colorEnabled(flags, stdout.isTTY), showWordmark),
+        currentPresentationView(false),
       );
       return;
     }

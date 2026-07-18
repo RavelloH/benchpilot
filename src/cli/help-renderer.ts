@@ -88,6 +88,13 @@ function groupFor(name: string) {
   return isCommandGroup(name) ? groups[name] : groups.root;
 }
 
+export function commandSummary(
+  parts: readonly string[],
+  locale: Locale = "en",
+) {
+  return t(locale, groupFor(parts.at(-1) || "root").summaryKey);
+}
+
 const commandSummaryKeys = {
   config: "help.command.config",
   get: "help.command.get",
@@ -151,7 +158,7 @@ export function fullHelp(parts: string[]) {
 export function humanFull(parts: string[], locale: Locale = "en") {
   const help = fullHelp(parts);
   const command = ["benchpilot", ...parts].join(" ");
-  return `${t(locale, "help.name")}\n  ${command} — ${t(locale, groupFor(parts.at(-1) || "root").summaryKey)}\n\n${t(locale, "help.synopsis")}\n  ${command} [OPTIONS]\n\n${t(locale, "help.description")}\n  ${t(locale, "help.descriptionText")}\n\n${t(locale, "help.workflow")}\n  ${t(locale, "help.workflowText")}\n\n${t(locale, "help.arguments")}\n  ${t(locale, "help.argumentsText")}\n\n${t(locale, "help.options")}\n  ${globalOptions.join("\n  ")}\n\n${t(locale, "help.configuration")}\n  ${t(locale, "help.configurationText")}\n\n${t(locale, "help.output")}\n  ${t(locale, "help.outputText")}\n\n${t(locale, "help.safety")}\n  ${JSON.stringify(help.safety)}\n\n${t(locale, "help.exitCodes")}\n  ${t(locale, "help.exitCodesText")}\n\n${t(locale, "help.errorKinds")}\n  ${help.errors.join(", ")}\n\n${t(locale, "help.examples")}\n  ${help.examples.join("\n  ")}\n\n${t(locale, "help.seeAlso")}\n  benchpilot help --all\n`;
+  return `${t(locale, "help.name")}\n  ${command} — ${commandSummary(parts, locale)}\n\n${t(locale, "help.synopsis")}\n  ${command} [OPTIONS]\n\n${t(locale, "help.description")}\n  ${t(locale, "help.descriptionText")}\n\n${t(locale, "help.workflow")}\n  ${t(locale, "help.workflowText")}\n\n${t(locale, "help.arguments")}\n  ${t(locale, "help.argumentsText")}\n\n${t(locale, "help.options")}\n  ${globalOptions.join("\n  ")}\n\n${t(locale, "help.configuration")}\n  ${t(locale, "help.configurationText")}\n\n${t(locale, "help.output")}\n  ${t(locale, "help.outputText")}\n\n${t(locale, "help.safety")}\n  ${JSON.stringify(help.safety)}\n\n${t(locale, "help.exitCodes")}\n  ${t(locale, "help.exitCodesText")}\n\n${t(locale, "help.errorKinds")}\n  ${help.errors.join(", ")}\n\n${t(locale, "help.examples")}\n  ${help.examples.join("\n  ")}\n\n${t(locale, "help.seeAlso")}\n  benchpilot help --all\n`;
 }
 
 export const commandGroups = commandRoots.map((command) => command.path[0]!);

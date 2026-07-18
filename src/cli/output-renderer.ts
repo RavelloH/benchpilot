@@ -2,6 +2,16 @@ import { stdout } from "node:process";
 import type { Json } from "../core.js";
 import { t, type Locale, type MessageKey } from "../i18n/index.js";
 import type { Flags } from "./parser.js";
+import {
+  jsonlPresentation,
+  jsonPresentation,
+  screenPresentation,
+  type CliNode,
+  type PresentationJsonlComplete,
+  type PresentationJsonlSnapshot,
+  type PresentationJsonlStart,
+  type PresentationView,
+} from "./presentation/page.js";
 
 export interface OutputSink {
   stdout: { write(value: string): unknown };
@@ -57,6 +67,44 @@ export function write(
 
 export function writeText(value: string, sink: OutputSink = processOutputSink) {
   sink.stdout.write(value);
+}
+
+/** The only stdout writer for presentation pages. */
+export function writePresentation(input: {
+  readonly nodes: readonly CliNode[];
+  readonly flags: Flags;
+  readonly locale: Locale;
+  readonly view: PresentationView;
+  readonly sink?: OutputSink;
+}) {
+  const sink = input.sink ?? processOutputSink;
+  if (input.flags.json) {
+    sink.stdout.write(`${JSON.stringify(jsonPresentation(input.nodes))}\n`);
+    return;
+  }
+  if (input.flags.jsonl) {
+    const snapshots = jsonlPresentation(input.nodes);
+    const records: readonly (
+      | PresentationJsonlStart
+      | PresentationJsonlSnapshot
+      | PresentationJsonlComplete
+    )[] = [
+      {
+        op: "start",
+        protocol: "benchpilot.presentation",
+        version: 1,
+        locale: input.locale,
+        view: input.view,
+      },
+      ...snapshots,
+      { op: "complete", count: snapshots.length },
+    ];
+    sink.stdout.write(
+      `${records.map((record) => JSON.stringify(record)).join("\n")}\n`,
+    );
+    return;
+  }
+  sink.stdout.write(screenPresentation(input.nodes));
 }
 
 export function writeFailure(input: {

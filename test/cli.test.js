@@ -10,15 +10,26 @@ import { parse } from "../dist/cli/parser.js";
 import { ApprovalManager, PathService } from "../dist/index.js";
 const exec = promisify(execFile);
 const cli = path.resolve("dist/cli/index.js");
+function cliEnv(dir) {
+  const env = {
+    ...process.env,
+    HOME: dir,
+    USERPROFILE: dir,
+    TEMP: path.join(dir, "runtime"),
+  };
+  for (const key of [
+    "CODEX_THREAD_ID",
+    "CODEX_CI",
+    "CODEX_SANDBOX",
+    "CODEX_SANDBOX_NETWORK_DISABLED",
+  ])
+    delete env[key];
+  return env;
+}
 async function run(dir, ...args) {
   return exec(process.execPath, [cli, ...args], {
     cwd: dir,
-    env: {
-      ...process.env,
-      HOME: dir,
-      USERPROFILE: dir,
-      TEMP: path.join(dir, "runtime"),
-    },
+    env: cliEnv(dir),
     encoding: "utf8",
   });
 }
@@ -26,11 +37,8 @@ async function runAgent(dir, ...args) {
   return exec(process.execPath, [cli, ...args], {
     cwd: dir,
     env: {
-      ...process.env,
+      ...cliEnv(dir),
       AI_AGENT: "fixture-agent",
-      HOME: dir,
-      USERPROFILE: dir,
-      TEMP: path.join(dir, "runtime"),
     },
     encoding: "utf8",
   });
@@ -109,10 +117,12 @@ test("root command prints help without starting an interactive session", async (
     assert.doesNotMatch(result.stdout, /████/);
     assert.equal(result.stderr, "");
     const machine = JSON.parse((await run(dir, "--json")).stdout);
-    assert.deepEqual(
-      { schema: machine.schema, version: machine.version },
-      { schema: "benchpilot.help", version: 2 },
-    );
+    assert.ok(Array.isArray(machine));
+    assert.equal(machine[0].name, "introduction");
+    assert.equal(machine[1].name, "command");
+    assert.equal("visibility" in machine[0], false);
+    assert.match(machine[0].text, /Agent-first device lifecycle CLI/);
+    assert.doesNotMatch(JSON.stringify(machine), /lineBreak|\\n/);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -169,16 +179,24 @@ test("color flags only affect human root output", async () => {
   }
 });
 
-test("home falls back to the static command index outside human TTY mode", async () => {
+test("home falls back to non-interactive Agent command syntax outside human TTY mode", async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "benchpilot-home-"));
   try {
     const human = await run(dir, "home", "--agent");
     assert.match(human.stdout, /Agent-first device lifecycle CLI/);
-    assert.match(human.stdout, /home/);
+    assert.doesNotMatch(human.stdout, /Open the guided interactive interface/);
+    assert.match(
+      human.stdout,
+      /benchpilot device <list\|scan\|device-instance>/,
+    );
     const machine = JSON.parse((await runAgent(dir, "home", "--json")).stdout);
-    assert.deepEqual(
-      { schema: machine.schema, version: machine.version, path: machine.path },
-      { schema: "benchpilot.help", version: 2, path: [] },
+    assert.ok(Array.isArray(machine));
+    assert.equal(machine[0].name, "introduction");
+    assert.doesNotMatch(JSON.stringify(machine), /___/);
+    assert.doesNotMatch(JSON.stringify(machine), /"home"/);
+    assert.match(
+      JSON.stringify(machine),
+      /benchpilot device <list\|scan\|device-instance>/,
     );
   } finally {
     await rm(dir, { recursive: true, force: true });
@@ -192,8 +210,84 @@ test("version command renders the large wordmark and supports machine output", a
     assert.doesNotMatch(human.stdout, /████/);
     assert.match(human.stdout, /BenchPilot v0\.0\.0/);
     const machine = JSON.parse((await run(dir, "version", "--json")).stdout);
-    assert.equal(machine.data.cliVersion, "0.0.0");
-    assert.equal(machine.data.nodeVersion, process.version);
+    assert.deepEqual(
+      machine.map((node) => node.name),
+      ["version"],
+    );
+    assert.match(machine[0].children[0].text, /BenchPilot v0\.0\.0/);
+    assert.match(machine[0].children[1].text, new RegExp(process.version));
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("root presentation JSONL frames a cleaned, ordered page snapshot", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "benchpilot-presentation-"));
+  try {
+    const raw = (await run(dir, "--color", "--jsonl")).stdout;
+    const events = raw
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    assert.deepEqual(events[0], {
+      op: "start",
+      protocol: "benchpilot.presentation",
+      version: 1,
+      locale: "en",
+      view: "normal",
+    });
+    assert.equal(events.at(-1).op, "complete");
+    assert.equal(events.at(-1).count, events.length - 2);
+    assert.deepEqual(
+      events.slice(1, -1).map((event) => event.index),
+      Array.from({ length: events.length - 2 }, (_, index) => index),
+    );
+    assert.deepEqual(Object.keys(events[1]).slice(0, 3), [
+      "op",
+      "index",
+      "key",
+    ]);
+    assert.doesNotMatch(raw, /lineBreak/);
+    const device = events.find(
+      (event) => event.key === "command.resources-and-orchestration.device",
+    );
+    assert.match(device.text, /^device /);
+    assert.doesNotMatch(device.text, /\u001B\[/);
+    assert.doesNotMatch(device.text, / {2,}|\t/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("root and version help pages take precedence over agent presentation", async () => {
+  const dir = await mkdtemp(
+    path.join(os.tmpdir(), "benchpilot-presentation-help-"),
+  );
+  try {
+    const root = (await runAgent(dir, "--help", "--jsonl")).stdout
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    assert.equal(root[0].view, "help");
+    assert.equal(root[1].key, "name");
+    const detailed = JSON.parse(
+      (await runAgent(dir, "--help", "--json")).stdout,
+    );
+    const commands = detailed.find((node) => node.name === "commands");
+    assert.ok(commands);
+    assert.match(
+      JSON.stringify(commands),
+      /benchpilot run <run-id> logs \[options\]/,
+    );
+    const version = JSON.parse(
+      (await runAgent(dir, "version", "--help", "--json")).stdout,
+    );
+    assert.equal(version[0].name, "name");
+    assert.ok(
+      version[0].children.some((node) => /benchpilot version/.test(node.text)),
+    );
+    const global = JSON.parse((await run(dir, "--version", "--json")).stdout);
+    assert.match(global[0].children[0].text, /BenchPilot v0\.0\.0/);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -332,10 +426,9 @@ test("human command help uses the project-local locale", async () => {
       /读取、解释、校验/,
     );
     const machine = JSON.parse((await run(dir, "--help", "--json")).stdout);
-    assert.equal(
-      machine.summary,
-      "Agent-first device lifecycle CLI. Made by RavelloH.",
-    );
+    assert.equal(machine[0].name, "name");
+    assert.match(machine[0].text, /名称/);
+    assert.match(machine[0].children[0].text, /面向 Agent 的设备生命周期 CLI/);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

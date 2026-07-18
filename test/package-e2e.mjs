@@ -122,6 +122,11 @@ operation_delay_ms = 1
   ];
   for (const args of commands) {
     const result = JSON.parse(run(...args));
+    if (args[0] === "help") {
+      assert.ok(Array.isArray(result), `${args.join(" ")} uses a page tree`);
+      assert.equal(result[0]?.name, "name");
+      continue;
+    }
     assert.equal(result.version, 2, `${args.join(" ")} uses protocol v2`);
     assert.match(result.schema, /^benchpilot\.(?:help|result)$/);
   }
