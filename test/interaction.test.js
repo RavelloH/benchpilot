@@ -13,13 +13,13 @@ import {
   InteractionSession,
   promptInit,
 } from "../dist/cli/interaction/prompter.js";
-import { fullHelp, humanFull } from "../dist/cli/help-renderer.js";
+import { brief, fullHelp, humanFull } from "../dist/cli/help-renderer.js";
 import { commandRoots } from "../dist/application/commands/catalog.js";
 import {
   humanErrorMessage,
   writeFailure,
 } from "../dist/cli/output-renderer.js";
-import { assertCatalogCompleteness, t } from "../dist/i18n/index.js";
+import { t } from "../dist/i18n/index.js";
 
 test("agent detection only accepts fixed environment and file markers", () => {
   assert.equal(AGENT_MARKER_CONTRACT_VERSION, 1);
@@ -100,8 +100,7 @@ test("interaction policy keeps agent identity separate from terminal availabilit
   );
 });
 
-test("screen catalogs are complete and leave machine protocol out of translation", () => {
-  assert.doesNotThrow(assertCatalogCompleteness);
+test("screen catalogs provide localized text and leave machine protocol out of translation", () => {
   assert.equal(t("zh-CN", "init.done"), "BenchPilot 项目已初始化。");
   assert.equal(t("zh-CN", "menu.action.set"), "写入配置");
   assert.equal(t("zh-CN", "menu.runs.keep"), "保留最新操作记录");
@@ -116,6 +115,8 @@ test("root help does not repeat the executable name", () => {
   assert.deepEqual(fullHelp([]).examples, ["benchpilot --json"]);
   assert.match(humanFull([]), /benchpilot —/);
   assert.doesNotMatch(humanFull([]), /benchpilot  —/);
+  assert.match(brief("root", "zh-CN"), /config\s+读取、解释、校验和编辑配置/);
+  assert.match(brief("root", "zh-CN"), /help\s+显示帮助/);
 });
 
 test("interactive sessions keep one conversation alive for sequential choices", async () => {

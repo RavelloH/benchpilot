@@ -33,7 +33,7 @@ import {
   InteractionSession,
   promptInit,
 } from "./interaction/prompter.js";
-import { isLocale, t, type Locale } from "../i18n/index.js";
+import { isLocale, t, type Locale, type MessageKey } from "../i18n/index.js";
 
 const version = "0.0.0";
 export async function main(adapters?: Adapter[]) {
@@ -218,10 +218,31 @@ export async function main(adapters?: Adapter[]) {
     const configuredLocale = (config.value.cli as Json | undefined)?.locale;
     const locale = isLocale(configuredLocale) ? configuredLocale : "en";
     presentationLocale = locale;
-    const menuChoices = (values: readonly string[]) =>
+    const menuActionKeys = {
+      get: "menu.action.get",
+      set: "menu.action.set",
+      unset: "menu.action.unset",
+      resolved: "menu.action.resolved",
+      explain: "menu.action.explain",
+      validate: "menu.action.validate",
+      list: "menu.action.list",
+      prune: "menu.action.prune",
+      scan: "menu.action.scan",
+      "clear-stale": "menu.action.clear-stale",
+      info: "menu.action.info",
+      doctor: "menu.action.doctor",
+      show: "menu.action.show",
+      logs: "menu.action.logs",
+      artifacts: "menu.action.artifacts",
+      clear: "menu.action.clear",
+      inspect: "menu.action.inspect",
+      approve: "menu.action.approve",
+      reject: "menu.action.reject",
+    } as const satisfies Record<string, MessageKey>;
+    const menuChoices = (values: readonly (keyof typeof menuActionKeys)[]) =>
       values.map((value) => ({
         value,
-        label: t(locale, `menu.action.${value}`),
+        label: t(locale, menuActionKeys[value]),
       }));
     const chooseExistingConfigurationKey = async (
       session: InteractionSession,

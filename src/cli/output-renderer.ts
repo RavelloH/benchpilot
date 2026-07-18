@@ -1,6 +1,6 @@
 import { stdout } from "node:process";
 import type { Json } from "../core.js";
-import { t, type Locale } from "../i18n/index.js";
+import { t, type Locale, type MessageKey } from "../i18n/index.js";
 import type { Flags } from "./parser.js";
 
 export interface OutputSink {
@@ -83,7 +83,7 @@ export function writeFailure(input: {
   if (input.help) sink.stderr.write(`\n${input.help}\n`);
 }
 
-const errorMessageKey = (kind: string) => {
+const errorMessageKey = (kind: string): MessageKey => {
   if (/^(USAGE|INVALID_)/.test(kind)) return "error.usage";
   if (/^(CONFIG|PROJECT|UNKNOWN_ADAPTER|ADAPTER_)/.test(kind))
     return "error.configuration";

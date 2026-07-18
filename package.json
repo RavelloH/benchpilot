@@ -49,8 +49,9 @@
   ],
   "scripts": {
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
-    "build": "pnpm run adapter:validate && pnpm run clean && tsc -p tsconfig.json && pnpm run adapter:compile && pnpm run adapter:test",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "pnpm run i18n:generate && pnpm run adapter:validate && pnpm run clean && tsc -p tsconfig.json && pnpm run adapter:compile && pnpm run adapter:test",
+    "typecheck": "pnpm run i18n:generate && tsc -p tsconfig.json --noEmit",
+    "i18n:generate": "node scripts/generate-i18n.mjs",
     "test": "pnpm run build && node --test test/*.test.js",
     "test:coverage": "pnpm run build && node --test --experimental-test-coverage test/*.test.js",
     "test:package": "pnpm run test:package:npm",
@@ -78,7 +79,8 @@
     "lint-staged": "^16.4.0",
     "prettier": "^3.8.3",
     "tsx": "^4.19.2",
-    "typescript": "^5.6.0"
+    "typescript": "^5.6.0",
+    "yaml": "^2.9.0"
   },
   "lint-staged": {
     "*.{js,mjs,cjs,ts,tsx,json,yml,yaml,md}": "prettier --write --ignore-unknown"
