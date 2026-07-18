@@ -29,6 +29,7 @@ import {
 import { detectAgent } from "./agent/detector.js";
 import { interactionDecision } from "./interaction/policy.js";
 import { renderVersion } from "./presentation/version.js";
+import { rootHelpSections } from "./presentation/root-help.js";
 import { colorEnabled, shouldShowWordmark } from "./presentation/theme.js";
 import {
   InteractionCancelledError,
@@ -51,12 +52,12 @@ export async function main(adapters?: Adapter[]) {
     const showWordmark = shouldShowWordmark({
       stdoutIsTTY: stdout.isTTY,
       agentDetected: Boolean(agent),
-      nonInteractive: flags["non-interactive"] === true,
+      agentMode: flags.agent === true,
     });
     const interactive = (locale: Locale, helpPath: string[]) => {
       const decision = interactionDecision({
         agent,
-        nonInteractive: flags["non-interactive"] === true,
+        agentMode: flags.agent === true,
         json: flags.json,
         jsonl: flags.jsonl,
         stdinIsTTY: stdin.isTTY,
@@ -137,6 +138,80 @@ export async function main(adapters?: Adapter[]) {
       );
       return;
     }
+    if (parts[0] === "home") {
+      if (parts.length !== 1)
+        fail("USAGE_ERROR", 2, "The home command takes no arguments.");
+      const locale = await readProjectLocale({
+        cwd: process.cwd(),
+        configPath: flags.config as string | undefined,
+      });
+      presentationLocale = locale;
+      const decision = interactionDecision({
+        agent,
+        agentMode: flags.agent === true,
+        json: flags.json,
+        jsonl: flags.jsonl,
+        stdinIsTTY: stdin.isTTY,
+        stdoutIsTTY: stdout.isTTY,
+      });
+      if (!decision.allowed) {
+        write(
+          fullHelp([]),
+          flags,
+          brief(
+            "root",
+            locale,
+            colorEnabled(flags, stdout.isTTY),
+            showWordmark,
+          ),
+        );
+        return;
+      }
+      interaction ??= new InteractionSession(locale);
+      const sectionIndex = Number(
+        await interaction.choose(
+          rootHelpSections.map((section, index) => ({
+            value: String(index),
+            label: t(locale, section.titleKey),
+          })),
+        ),
+      );
+      const section = rootHelpSections.at(sectionIndex);
+      if (!section)
+        fail("INTERNAL_ERROR", 8, "Interactive home selection failed.");
+      const selectedSection = section!;
+      const command = await interaction.choose(
+        selectedSection.entries
+          .filter((entry) => entry.command !== "home")
+          .map((entry) => ({
+            value: entry.command.split(" ")[0]!,
+            label: [entry.command, t(locale, entry.summaryKey)].join(" — "),
+          })),
+      );
+      if (command === "help") {
+        write(
+          fullHelp([]),
+          flags,
+          brief(
+            "root",
+            locale,
+            colorEnabled(flags, stdout.isTTY),
+            showWordmark,
+          ),
+        );
+        return;
+      }
+      if (command === "version") {
+        const value = { cliVersion: version, nodeVersion: process.version };
+        write(
+          value,
+          flags,
+          renderVersion(value, colorEnabled(flags, stdout.isTTY), showWordmark),
+        );
+        return;
+      }
+      parts = [command];
+    }
     if (parts[0] === "version") {
       if (parts.length !== 1)
         fail("USAGE_ERROR", 2, "The version command takes no arguments.");
@@ -168,7 +243,7 @@ export async function main(adapters?: Adapter[]) {
       if (!input) {
         const decision = interactionDecision({
           agent,
-          nonInteractive: flags["non-interactive"] === true,
+          agentMode: flags.agent === true,
           json: flags.json,
           jsonl: flags.jsonl,
           stdinIsTTY: stdin.isTTY,

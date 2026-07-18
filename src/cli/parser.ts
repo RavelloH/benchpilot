@@ -19,7 +19,7 @@ const globalBooleanOptions = new Set([
   "quiet",
   "verbose",
   "dry-run",
-  "non-interactive",
+  "agent",
   "color",
   "help",
   "version",

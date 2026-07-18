@@ -4,6 +4,9 @@ BenchPilot ships a simulated Demo adapter and a declarative ESP-IDF adapter for 
 
 BenchPilot is an agent-friendly, local-first device lifecycle CLI. Version `0.0.0` ships the **software-simulated Demo Adapter** and an opt-in ESP-IDF hardware Adapter. The ESP-IDF Adapter only performs hardware operations through declared capabilities, the Operation Runner, Device Locks, and human approval where required. Running the installed package requires Node.js 22.13 or newer. The repository uses pnpm 11 for development and CI; npm package users do not need pnpm.
 
+For repository development, run `pnpm dev` to continuously compile TypeScript,
+regenerate i18n catalogs, and rebuild adapter bundles as their sources change.
+
 ## Quick start
 
 ```bash

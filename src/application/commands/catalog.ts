@@ -274,6 +274,13 @@ export const commandRoots: readonly CommandNode[] = [
     interaction: "never",
   },
   {
+    id: "home",
+    path: ["home"],
+    summaryKey: "command.home",
+    fields: [],
+    interaction: "required",
+  },
+  {
     id: "version",
     path: ["version"],
     summaryKey: "command.version",

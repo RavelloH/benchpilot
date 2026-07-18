@@ -100,14 +100,13 @@ test("interaction policy keeps agent identity separate from terminal availabilit
     }).reason,
     "agent",
   );
-  const nonInteractive = interactionDecision({
-    nonInteractive: true,
+  const agentMode = interactionDecision({
+    agentMode: true,
     stdinIsTTY: true,
     stdoutIsTTY: true,
   });
-  assert.equal(nonInteractive.reason, "agent");
-  if (!nonInteractive.allowed)
-    assert.equal(nonInteractive.agent.marker, "--non-interactive");
+  assert.equal(agentMode.reason, "agent");
+  if (!agentMode.allowed) assert.equal(agentMode.agent.marker, "--agent");
 });
 
 test("screen catalogs provide localized text and leave machine protocol out of translation", () => {
@@ -126,10 +125,12 @@ test("root help does not repeat the executable name", () => {
   assert.match(humanFull([]), /benchpilot —/);
   assert.doesNotMatch(humanFull([]), /benchpilot  —/);
   const root = brief("root", "zh-CN");
+  assert.ok(root.indexOf("交互式界面") < root.indexOf("开始使用"));
   assert.match(root, /开始使用/);
   assert.match(root, /device <name> <capability>/);
   assert.match(root, /常用选项/);
   assert.match(root, /更多：benchpilot <command> --help/);
+  assert.match(root, /\$ benchpilot devices scan/);
   for (const command of [
     "init",
     "doctor",
@@ -147,6 +148,7 @@ test("root help does not repeat the executable name", () => {
     "approvals",
     "approval",
     "help",
+    "home",
     "version",
   ])
     assert.match(root, new RegExp(`^  ${command}(?:\\s|$)`, "m"));
@@ -157,7 +159,7 @@ test("wordmarks are limited to human terminal screens", () => {
     shouldShowWordmark({
       stdoutIsTTY: true,
       agentDetected: false,
-      nonInteractive: false,
+      agentMode: false,
     }),
     true,
   );
@@ -165,7 +167,7 @@ test("wordmarks are limited to human terminal screens", () => {
     shouldShowWordmark({
       stdoutIsTTY: true,
       agentDetected: true,
-      nonInteractive: false,
+      agentMode: false,
     }),
     false,
   );
@@ -173,7 +175,7 @@ test("wordmarks are limited to human terminal screens", () => {
     shouldShowWordmark({
       stdoutIsTTY: true,
       agentDetected: false,
-      nonInteractive: true,
+      agentMode: true,
     }),
     false,
   );
@@ -181,7 +183,7 @@ test("wordmarks are limited to human terminal screens", () => {
     shouldShowWordmark({
       stdoutIsTTY: false,
       agentDetected: false,
-      nonInteractive: false,
+      agentMode: false,
     }),
     false,
   );
@@ -303,6 +305,7 @@ test("command catalog is the CLI root-menu source", () => {
       "approvals",
       "approval",
       "help",
+      "home",
       "version",
     ],
   );

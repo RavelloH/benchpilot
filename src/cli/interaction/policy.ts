@@ -8,20 +8,20 @@ export type InteractionDecision =
 
 export function interactionDecision(input: {
   agent?: AgentDetection;
-  nonInteractive?: boolean;
+  agentMode?: boolean;
   json?: boolean;
   jsonl?: boolean;
   stdinIsTTY?: boolean;
   stdoutIsTTY?: boolean;
 }): InteractionDecision {
-  if (input.nonInteractive)
+  if (input.agentMode)
     return {
       allowed: false,
       reason: "agent",
       agent: {
         kind: "agent",
-        name: "Non-interactive mode",
-        marker: "--non-interactive",
+        name: "Agent mode",
+        marker: "--agent",
       },
     };
   if (input.agent)

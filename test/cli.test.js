@@ -128,6 +128,22 @@ test("color flags only affect human root output", async () => {
   }
 });
 
+test("home falls back to the static command index outside human TTY mode", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "benchpilot-home-"));
+  try {
+    const human = await run(dir, "home", "--agent");
+    assert.match(human.stdout, /Agent-first device lifecycle CLI/);
+    assert.match(human.stdout, /home/);
+    const machine = JSON.parse((await runAgent(dir, "home", "--json")).stdout);
+    assert.deepEqual(
+      { schema: machine.schema, version: machine.version, path: machine.path },
+      { schema: "benchpilot.help", version: 2, path: [] },
+    );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("version command renders the large wordmark and supports machine output", async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "benchpilot-version-"));
   try {
@@ -185,12 +201,10 @@ test("agent init without parameters is rejected without writing project files", 
   }
 });
 
-test("non-interactive mode rejects interactive commands like an agent", async () => {
-  const dir = await mkdtemp(
-    path.join(os.tmpdir(), "benchpilot-non-interactive-"),
-  );
+test("agent mode rejects interactive commands like an agent", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "benchpilot-agent-mode-"));
   try {
-    const error = await run(dir, "init", "--non-interactive", "--json").catch(
+    const error = await run(dir, "init", "--agent", "--json").catch(
       (failure) => failure,
     );
     const result = JSON.parse(error.stdout);

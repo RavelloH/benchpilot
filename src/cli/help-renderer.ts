@@ -6,7 +6,7 @@ const globalOptions = [
   "--verbose",
   "--timeout <duration>",
   "--dry-run",
-  "--non-interactive",
+  "--agent",
   "--no-color",
   "--session <name>",
   "--help",
@@ -39,6 +39,7 @@ const groups = {
       "approvals",
       "approval",
       "help",
+      "home",
       "version",
     ],
   },
@@ -80,6 +81,7 @@ const groups = {
     children: ["<approval-id>"],
   },
   version: { summaryKey: "help.group.version", children: [] },
+  home: { summaryKey: "help.group.home", children: [] },
 } as const satisfies Record<string, CommandGroup>;
 
 type CommandGroupName = keyof typeof groups;
@@ -123,6 +125,7 @@ const commandSummaryKeys = {
   locks: "help.command.locks",
   approvals: "help.command.approvals",
   help: "help.command.help",
+  home: "help.command.home",
   version: "help.command.version",
 } as const satisfies Record<CommandName, MessageKey>;
 

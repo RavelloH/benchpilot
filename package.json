@@ -50,6 +50,7 @@
   "scripts": {
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
     "build": "pnpm run i18n:generate && pnpm run adapter:validate && pnpm run clean && tsc -p tsconfig.json && pnpm run adapter:compile && pnpm run adapter:test",
+    "dev": "node scripts/dev.mjs",
     "typecheck": "pnpm run i18n:generate && tsc -p tsconfig.json --noEmit",
     "i18n:generate": "node scripts/generate-i18n.mjs",
     "test": "pnpm run build && node --test test/*.test.js",
