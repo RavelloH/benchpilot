@@ -20,6 +20,8 @@ import {
   writeFailure,
 } from "../dist/cli/output-renderer.js";
 import { t } from "../dist/i18n/index.js";
+import { shouldShowWordmark } from "../dist/cli/presentation/theme.js";
+import { renderVersion } from "../dist/cli/presentation/version.js";
 
 test("agent detection only accepts fixed environment and file markers", () => {
   assert.equal(AGENT_MARKER_CONTRACT_VERSION, 1);
@@ -98,6 +100,14 @@ test("interaction policy keeps agent identity separate from terminal availabilit
     }).reason,
     "agent",
   );
+  const nonInteractive = interactionDecision({
+    nonInteractive: true,
+    stdinIsTTY: true,
+    stdoutIsTTY: true,
+  });
+  assert.equal(nonInteractive.reason, "agent");
+  if (!nonInteractive.allowed)
+    assert.equal(nonInteractive.agent.marker, "--non-interactive");
 });
 
 test("screen catalogs provide localized text and leave machine protocol out of translation", () => {
@@ -115,8 +125,78 @@ test("root help does not repeat the executable name", () => {
   assert.deepEqual(fullHelp([]).examples, ["benchpilot --json"]);
   assert.match(humanFull([]), /benchpilot —/);
   assert.doesNotMatch(humanFull([]), /benchpilot  —/);
-  assert.match(brief("root", "zh-CN"), /config\s+读取、解释、校验和编辑配置/);
-  assert.match(brief("root", "zh-CN"), /help\s+显示帮助/);
+  const root = brief("root", "zh-CN");
+  assert.match(root, /开始使用/);
+  assert.match(root, /device <name> <capability>/);
+  assert.match(root, /常用选项/);
+  assert.match(root, /更多：benchpilot <command> --help/);
+  for (const command of [
+    "init",
+    "doctor",
+    "config",
+    "adapters",
+    "adapter",
+    "devices",
+    "device",
+    "systems",
+    "system",
+    "runs",
+    "run",
+    "locks",
+    "lock",
+    "approvals",
+    "approval",
+    "help",
+    "version",
+  ])
+    assert.match(root, new RegExp(`^  ${command}(?:\\s|$)`, "m"));
+});
+
+test("wordmarks are limited to human terminal screens", () => {
+  assert.equal(
+    shouldShowWordmark({
+      stdoutIsTTY: true,
+      agentDetected: false,
+      nonInteractive: false,
+    }),
+    true,
+  );
+  assert.equal(
+    shouldShowWordmark({
+      stdoutIsTTY: true,
+      agentDetected: true,
+      nonInteractive: false,
+    }),
+    false,
+  );
+  assert.equal(
+    shouldShowWordmark({
+      stdoutIsTTY: true,
+      agentDetected: false,
+      nonInteractive: true,
+    }),
+    false,
+  );
+  assert.equal(
+    shouldShowWordmark({
+      stdoutIsTTY: false,
+      agentDetected: false,
+      nonInteractive: false,
+    }),
+    false,
+  );
+  assert.match(
+    renderVersion({ cliVersion: "0.0.0", nodeVersion: "v24.0.0" }, false, true),
+    /________/,
+  );
+  assert.doesNotMatch(
+    renderVersion(
+      { cliVersion: "0.0.0", nodeVersion: "v24.0.0" },
+      false,
+      false,
+    ),
+    /________/,
+  );
 });
 
 test("interactive sessions keep one conversation alive for sequential choices", async () => {
@@ -223,6 +303,7 @@ test("command catalog is the CLI root-menu source", () => {
       "approvals",
       "approval",
       "help",
+      "version",
     ],
   );
 });

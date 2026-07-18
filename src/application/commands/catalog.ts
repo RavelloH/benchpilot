@@ -273,6 +273,13 @@ export const commandRoots: readonly CommandNode[] = [
     fields: [],
     interaction: "never",
   },
+  {
+    id: "version",
+    path: ["version"],
+    summaryKey: "command.version",
+    fields: [],
+    interaction: "never",
+  },
 ];
 
 export const approvalApproveNode: CommandNode = {

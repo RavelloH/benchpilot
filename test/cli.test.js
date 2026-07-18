@@ -99,12 +99,44 @@ test("root command prints help without starting an interactive session", async (
   try {
     const result = await run(dir);
     assert.match(result.stdout, /Agent-first device lifecycle CLI/);
+    assert.doesNotMatch(result.stdout, /████/);
     assert.equal(result.stderr, "");
     const machine = JSON.parse((await run(dir, "--json")).stdout);
     assert.deepEqual(
       { schema: machine.schema, version: machine.version },
       { schema: "benchpilot.help", version: 2 },
     );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("color flags only affect human root output", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "benchpilot-color-"));
+  try {
+    assert.match((await run(dir, "--color")).stdout, /\u001B\[/);
+    assert.doesNotMatch(
+      (await run(dir, "--color", "--no-color")).stdout,
+      /\u001B\[/,
+    );
+    assert.doesNotMatch(
+      (await run(dir, "--color", "--json")).stdout,
+      /\u001B\[/,
+    );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("version command renders the large wordmark and supports machine output", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "benchpilot-version-"));
+  try {
+    const human = await run(dir, "version");
+    assert.doesNotMatch(human.stdout, /████/);
+    assert.match(human.stdout, /BenchPilot v0\.0\.0/);
+    const machine = JSON.parse((await run(dir, "version", "--json")).stdout);
+    assert.equal(machine.data.cliVersion, "0.0.0");
+    assert.equal(machine.data.nodeVersion, process.version);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -147,6 +179,23 @@ test("agent init without parameters is rejected without writing project files", 
     assert.equal(events[0].event.type, "command.failed");
     assert.equal(events[0].data.error.kind, "AGENT_INTERACTION_UNSUPPORTED");
     assert.equal(stream.stderr, "");
+    await assert.rejects(access(path.join(dir, "benchpilot.toml")));
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("non-interactive mode rejects interactive commands like an agent", async () => {
+  const dir = await mkdtemp(
+    path.join(os.tmpdir(), "benchpilot-non-interactive-"),
+  );
+  try {
+    const error = await run(dir, "init", "--non-interactive", "--json").catch(
+      (failure) => failure,
+    );
+    const result = JSON.parse(error.stdout);
+    assert.equal(result.kind, "AGENT_INTERACTION_UNSUPPORTED");
+    assert.equal(error.stderr, "");
     await assert.rejects(access(path.join(dir, "benchpilot.toml")));
   } finally {
     await rm(dir, { recursive: true, force: true });
@@ -228,7 +277,10 @@ test("human command help uses the project-local locale", async () => {
       /读取、解释、校验/,
     );
     const machine = JSON.parse((await run(dir, "--help", "--json")).stdout);
-    assert.equal(machine.summary, "Agent-first device lifecycle CLI.");
+    assert.equal(
+      machine.summary,
+      "Agent-first device lifecycle CLI. Made by RavelloH.",
+    );
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

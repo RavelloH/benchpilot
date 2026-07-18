@@ -9,6 +9,7 @@ export type Flags = Json & {
   quiet?: boolean;
   verbose?: boolean;
   timeout?: string;
+  color?: boolean;
   [key: string]: unknown;
 };
 
@@ -18,6 +19,7 @@ const globalBooleanOptions = new Set([
   "quiet",
   "verbose",
   "dry-run",
+  "non-interactive",
   "color",
   "help",
   "version",

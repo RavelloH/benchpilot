@@ -28,6 +28,8 @@ import {
 } from "./output-renderer.js";
 import { detectAgent } from "./agent/detector.js";
 import { interactionDecision } from "./interaction/policy.js";
+import { renderVersion } from "./presentation/version.js";
+import { colorEnabled, shouldShowWordmark } from "./presentation/theme.js";
 import {
   InteractionCancelledError,
   InteractionSession,
@@ -45,9 +47,16 @@ export async function main(adapters?: Adapter[]) {
     let parts = [...parsed.path];
     const { flags, rawOptions } = parsed;
     let commandFlags = { ...flags, ...commandOptionFlags(rawOptions) };
+    const agent = detectAgent();
+    const showWordmark = shouldShowWordmark({
+      stdoutIsTTY: stdout.isTTY,
+      agentDetected: Boolean(agent),
+      nonInteractive: flags["non-interactive"] === true,
+    });
     const interactive = (locale: Locale, helpPath: string[]) => {
       const decision = interactionDecision({
-        agent: detectAgent(),
+        agent,
+        nonInteractive: flags["non-interactive"] === true,
         json: flags.json,
         jsonl: flags.jsonl,
         stdinIsTTY: stdin.isTTY,
@@ -121,7 +130,22 @@ export async function main(adapters?: Adapter[]) {
         configPath: flags.config as string | undefined,
       });
       presentationLocale = locale;
-      write(fullHelp([]), flags, brief("root", locale));
+      write(
+        fullHelp([]),
+        flags,
+        brief("root", locale, colorEnabled(flags, stdout.isTTY), showWordmark),
+      );
+      return;
+    }
+    if (parts[0] === "version") {
+      if (parts.length !== 1)
+        fail("USAGE_ERROR", 2, "The version command takes no arguments.");
+      const value = { cliVersion: version, nodeVersion: process.version };
+      write(
+        value,
+        flags,
+        renderVersion(value, colorEnabled(flags, stdout.isTTY), showWordmark),
+      );
       return;
     }
     if (parts[0] === "init") {
@@ -143,7 +167,8 @@ export async function main(adapters?: Adapter[]) {
           : undefined;
       if (!input) {
         const decision = interactionDecision({
-          agent: detectAgent(),
+          agent,
+          nonInteractive: flags["non-interactive"] === true,
           json: flags.json,
           jsonl: flags.jsonl,
           stdinIsTTY: stdin.isTTY,

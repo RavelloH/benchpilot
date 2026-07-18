@@ -1,6 +1,6 @@
 cli:
   interaction:
-    agent: "此命令需要人类交互会话，Agent 不应直接调用。"
+    agent: "此命令需要人类交互会话，Agent 或 --non-interactive 模式不应直接调用。"
     terminal: "此命令需要可交互的终端。"
     machine: "此命令需要交互式输入，不能与机器输出模式一起使用。"
     cancelled: "交互已取消。"
@@ -42,9 +42,29 @@ menu:
   field:
     key: "配置键"
     value: "配置值"
+screen:
+  root:
+    getStarted: "开始使用"
+    configure: "配置与发现"
+    execute: "执行操作"
+    records: "记录与安全"
+    help: "帮助"
+    adapter: "查看一个适配器"
+    devices: "已配置或已发现设备"
+    systems: "已配置系统"
+    runs: "操作记录与产物"
+    run: "查看一条操作记录"
+    approvals: "人工审批请求"
+    approval: "查看或处理一项审批"
+    locks: "物理资源锁"
+    lock: "查看或清除一个锁"
+    config: "项目配置"
+    adapters: "已安装适配器"
+    commonOptions: "常用选项"
+    more: "更多：benchpilot <command> --help"
 help:
   group:
-    root: "面向 Agent 的设备生命周期 CLI。"
+    root: "面向 Agent 的设备生命周期 CLI。Made by RavelloH。"
     config: "读取、解释、校验并安全编辑配置。"
     adapters: "列出已安装的适配器定义。"
     adapter: "查看一个适配器。"
@@ -58,6 +78,7 @@ help:
     lock: "查看或清除一个锁。"
     approvals: "列出本地人工审批请求。"
     approval: "查看或处理一项人工审批请求。"
+    version: "显示版本信息。"
   command:
     config: "读取、解释、校验和编辑配置"
     get: "读取最终配置值"
@@ -73,6 +94,7 @@ help:
     prune: "删除旧操作记录"
     clear-stale: "删除过期锁"
     help: "显示帮助"
+    version: "显示版本信息"
     adapter: "查看适配器"
     device: "操作设备"
     system: "操作系统"

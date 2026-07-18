@@ -6,6 +6,7 @@ const globalOptions = [
   "--verbose",
   "--timeout <duration>",
   "--dry-run",
+  "--non-interactive",
   "--no-color",
   "--session <name>",
   "--help",
@@ -14,6 +15,7 @@ const globalOptions = [
 
 import { t, type Locale, type MessageKey } from "../i18n/index.js";
 import { commandRoots } from "../application/commands/catalog.js";
+import { renderRootHelp } from "./presentation/root-help.js";
 
 type CommandGroup = { summaryKey: MessageKey; children: readonly string[] };
 
@@ -37,6 +39,7 @@ const groups = {
       "approvals",
       "approval",
       "help",
+      "version",
     ],
   },
   config: {
@@ -76,6 +79,7 @@ const groups = {
     summaryKey: "help.group.approval",
     children: ["<approval-id>"],
   },
+  version: { summaryKey: "help.group.version", children: [] },
 } as const satisfies Record<string, CommandGroup>;
 
 type CommandGroupName = keyof typeof groups;
@@ -119,6 +123,7 @@ const commandSummaryKeys = {
   locks: "help.command.locks",
   approvals: "help.command.approvals",
   help: "help.command.help",
+  version: "help.command.version",
 } as const satisfies Record<CommandName, MessageKey>;
 
 function summary(child: CommandChild, locale: Locale) {
@@ -126,7 +131,13 @@ function summary(child: CommandChild, locale: Locale) {
   return t(locale, commandSummaryKeys[child]);
 }
 
-export function brief(name: string, locale: Locale = "en") {
+export function brief(
+  name: string,
+  locale: Locale = "en",
+  color = false,
+  showWordmark = true,
+) {
+  if (name === "root") return renderRootHelp(locale, color, showWordmark);
   const group = groupFor(name);
   const command = name === "root" ? "benchpilot" : `benchpilot ${name}`;
   return `${command} — ${t(locale, group.summaryKey)}\n\n${t(locale, "help.usage")}: ${command} <command>\n\n${t(locale, "help.commands")}:\n${group.children.map((child) => `  ${child.padEnd(17)} ${summary(child, locale)}`).join("\n")}\n\n${t(locale, "help.globalOptions")}: ${globalOptions.slice(0, 5).join("  ")}\n${t(locale, "help.more", { command })}\n`;

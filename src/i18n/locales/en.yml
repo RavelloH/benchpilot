@@ -1,6 +1,6 @@
 cli:
   interaction:
-    agent: "This command requires an interactive human session and cannot be run by an agent."
+    agent: "This command requires an interactive human session and cannot be run by an agent or with --non-interactive."
     terminal: "This command requires an interactive terminal."
     machine: "This command requires interactive input and cannot be used with machine output."
     cancelled: "Interaction cancelled."
@@ -42,9 +42,29 @@ menu:
   field:
     key: "configuration key"
     value: "configuration value"
+screen:
+  root:
+    getStarted: "Get started"
+    configure: "Configure and discover"
+    execute: "Execute"
+    records: "Records and safety"
+    help: "Help"
+    adapter: "Inspect one adapter"
+    devices: "Configured or discovered devices"
+    systems: "Configured systems"
+    runs: "Operation records and artifacts"
+    run: "Inspect one operation record"
+    approvals: "Human approval requests"
+    approval: "Inspect or resolve one approval"
+    locks: "Physical-resource locks"
+    lock: "Inspect or clear one lock"
+    config: "Project configuration"
+    adapters: "Installed adapters"
+    commonOptions: "Common options"
+    more: "More: benchpilot <command> --help"
 help:
   group:
-    root: "Agent-first device lifecycle CLI."
+    root: "Agent-first device lifecycle CLI. Made by RavelloH."
     config: "Read, explain, validate and safely edit configuration."
     adapters: "List installed adapter definitions."
     adapter: "Inspect an adapter."
@@ -58,6 +78,7 @@ help:
     lock: "Inspect or clear one lock."
     approvals: "List local human approval requests."
     approval: "Inspect or resolve one human approval request."
+    version: "Show version information."
   command:
     config: "Read, explain, validate and edit configuration"
     get: "Get a resolved configuration value"
@@ -73,6 +94,7 @@ help:
     prune: "Remove old run records"
     clear-stale: "Remove stale locks"
     help: "Show help"
+    version: "Show version information"
     adapter: "Inspect an adapter"
     device: "Operate a device"
     system: "Operate a system"
