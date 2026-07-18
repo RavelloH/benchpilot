@@ -37,7 +37,7 @@ initialization, configuration mutation, and system workflows live under
 `application`. `benchpilot setup` is reserved for a future environment
 configuration wizard and is intentionally neither registered nor implemented.
 
-Human interaction is provided by `prompts` and starts only at legal incomplete
+Human interaction is provided by Inquirer and starts only at legal incomplete
 command nodes. Caller identity is determined solely by the versioned fixed
 environment/file marker contract; SSH, TTY, and CI are not identity heuristics.
 TTY availability controls whether a human interaction can proceed, while JSON

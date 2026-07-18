@@ -68,14 +68,15 @@
   },
   "dependencies": {
     "@iarna/toml": "^2.2.5",
+    "@inquirer/prompts": "^8.5.2",
+    "@inquirer/search": "^4.2.1",
+    "@inquirer/select": "^5.2.1",
     "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1",
-    "prompts": "^2.4.2",
     "rlog-js": "^3.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
-    "@types/prompts": "^2.4.9",
     "husky": "^9.1.7",
     "lint-staged": "^16.4.0",
     "prettier": "^3.8.3",

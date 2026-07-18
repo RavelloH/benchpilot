@@ -29,10 +29,15 @@ import {
 import { detectAgent } from "./agent/detector.js";
 import { interactionDecision } from "./interaction/policy.js";
 import { renderVersion } from "./presentation/version.js";
-import { rootHelpSections } from "./presentation/root-help.js";
+import {
+  renderInteractiveHomeHeader,
+  rootMenuChoices,
+} from "./presentation/root-help.js";
 import { colorEnabled, shouldShowWordmark } from "./presentation/theme.js";
 import {
   InteractionCancelledError,
+  InteractionBackError,
+  InteractionExitedError,
   InteractionSession,
   promptInit,
 } from "./interaction/prompter.js";
@@ -92,7 +97,11 @@ export async function main(adapters?: Adapter[]) {
           { help: fullHelp(helpPath) },
         );
       }
-      interaction ??= new InteractionSession(locale);
+      interaction ??= new InteractionSession(
+        locale,
+        undefined,
+        colorEnabled(flags, stdout.isTTY),
+      );
       return interaction;
     };
     if (flags.version) {
@@ -172,26 +181,24 @@ export async function main(adapters?: Adapter[]) {
         );
         return;
       }
-      interaction ??= new InteractionSession(locale);
-      const sectionIndex = Number(
-        await interaction.choose(
-          rootHelpSections.map((section, index) => ({
-            value: String(index),
-            label: t(locale, section.titleKey),
-          })),
+      writeText(
+        renderInteractiveHomeHeader(
+          locale,
+          colorEnabled(flags, stdout.isTTY),
+          showWordmark,
         ),
       );
-      const section = rootHelpSections.at(sectionIndex);
-      if (!section)
-        fail("INTERNAL_ERROR", 8, "Interactive home selection failed.");
-      const selectedSection = section!;
+      interaction ??= new InteractionSession(
+        locale,
+        undefined,
+        colorEnabled(flags, stdout.isTTY),
+      );
       const command = await interaction.choose(
-        selectedSection.entries
-          .filter((entry) => entry.command !== "home")
-          .map((entry) => ({
-            value: entry.command.split(" ")[0]!,
-            label: [entry.command, t(locale, entry.summaryKey)].join(" — "),
-          })),
+        rootMenuChoices(locale, colorEnabled(flags, stdout.isTTY)),
+        {
+          pageSize: 100,
+          searchable: true,
+        },
       );
       if (command === "help") {
         write(
@@ -278,6 +285,7 @@ export async function main(adapters?: Adapter[]) {
             locale: initLocale,
             projectId,
             projectName,
+            color: colorEnabled(flags, stdout.isTTY),
             selectedLocale: isLocale(suppliedLocale)
               ? suppliedLocale
               : undefined,
@@ -792,6 +800,8 @@ export async function main(adapters?: Adapter[]) {
       return;
     fail("UNKNOWN_COMMAND", 2, `Unknown command: ${parts.join(" ")}`);
   } catch (e: unknown) {
+    if (e instanceof InteractionExitedError) return;
+    if (e instanceof InteractionBackError) return main(adapters);
     const err =
       e instanceof InteractionCancelledError
         ? new BenchPilotError(

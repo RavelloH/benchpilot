@@ -1,6 +1,5 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import prompts from "prompts";
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
@@ -9,11 +8,19 @@ import {
 } from "../dist/cli/agent/detector.js";
 import { interactionDecision } from "../dist/cli/interaction/policy.js";
 import {
+  InteractionBackError,
   InteractionCancelledError,
+  InteractionExitedError,
   InteractionSession,
+  INTERACTION_BACK,
+  INTERACTION_EXIT,
   promptInit,
 } from "../dist/cli/interaction/prompter.js";
 import { brief, fullHelp, humanFull } from "../dist/cli/help-renderer.js";
+import {
+  renderInteractiveHomeHeader,
+  rootMenuChoices,
+} from "../dist/cli/presentation/root-help.js";
 import { commandRoots } from "../dist/application/commands/catalog.js";
 import {
   humanErrorMessage,
@@ -22,6 +29,12 @@ import {
 import { t } from "../dist/i18n/index.js";
 import { shouldShowWordmark } from "../dist/cli/presentation/theme.js";
 import { renderVersion } from "../dist/cli/presentation/version.js";
+
+const scriptedDriver = (...answers) => {
+  let position = 0;
+  const next = async () => answers[position++];
+  return { choose: next, value: next };
+};
 
 test("agent detection only accepts fixed environment and file markers", () => {
   assert.equal(AGENT_MARKER_CONTRACT_VERSION, 1);
@@ -153,6 +166,79 @@ test("root help does not repeat the executable name", () => {
     assert.match(root, new RegExp(`^  ${command}(?:\\s|$)`, "m"));
 });
 
+test("interactive home flattens commands under non-selectable categories", () => {
+  const choices = rootMenuChoices("zh-CN");
+  assert.deepEqual(
+    choices
+      .filter((choice) => "separator" in choice)
+      .map((choice) => choice.separator),
+    ["开始使用", "环境与接入", "资源与编排", "审计与安全", "帮助"],
+  );
+  assert.deepEqual(
+    choices.filter((choice) => "value" in choice).map((choice) => choice.value),
+    [
+      "init",
+      "setup",
+      "doctor",
+      "language",
+      "config",
+      "adapter",
+      "device",
+      "system",
+      "workflow",
+      "run",
+      "approval",
+      "lock",
+      "skill",
+      "docs",
+      "help",
+      "version",
+    ],
+  );
+});
+
+test("interactive sessions append navigation and distinguish back from exit", async () => {
+  const requests = [];
+  const session = new InteractionSession("en", {
+    choose: async (request) => {
+      requests.push(request);
+      return requests.length === 1 ? "list" : INTERACTION_BACK;
+    },
+    value: async () => undefined,
+  });
+  await session.choose([{ value: "list" }]);
+  await assert.rejects(
+    session.choose([{ value: "show" }]),
+    (error) => error instanceof InteractionBackError,
+  );
+  assert.deepEqual(
+    requests[0].choices.slice(-2).map((choice) => choice.value),
+    [undefined, INTERACTION_EXIT],
+  );
+  assert.deepEqual(
+    requests[1].choices.slice(-3).map((choice) => choice.value),
+    [undefined, INTERACTION_BACK, INTERACTION_EXIT],
+  );
+  assert.equal(requests[0].pageSize, 100);
+
+  const exiting = new InteractionSession("en", {
+    choose: async () => INTERACTION_EXIT,
+    value: async () => undefined,
+  });
+  await assert.rejects(
+    exiting.choose([{ value: "list" }]),
+    (error) => error instanceof InteractionExitedError,
+  );
+});
+
+test("interactive home header keeps the human root identity above the menu", () => {
+  const header = renderInteractiveHomeHeader("zh-CN", false, true);
+  assert.match(header, /面向 Agent 的设备生命周期 CLI/);
+  assert.match(header, /操作指引/);
+  assert.match(header, /输入以筛选命令/);
+  assert.match(header, /___/);
+});
+
 test("wordmarks are limited to human terminal screens", () => {
   assert.equal(
     shouldShowWordmark({
@@ -201,8 +287,10 @@ test("wordmarks are limited to human terminal screens", () => {
 });
 
 test("interactive sessions keep one conversation alive for sequential choices", async () => {
-  prompts.inject(["set", "project.name"]);
-  const session = new InteractionSession("en");
+  const session = new InteractionSession(
+    "en",
+    scriptedDriver("set", "project.name"),
+  );
   try {
     assert.equal(
       await session.choose([{ value: "get" }, { value: "set" }]),
@@ -215,8 +303,7 @@ test("interactive sessions keep one conversation alive for sequential choices", 
 });
 
 test("interactive session treats EOF as cancellation", async () => {
-  prompts.inject([undefined]);
-  const session = new InteractionSession("en");
+  const session = new InteractionSession("en", scriptedDriver(undefined));
   try {
     const selection = session.choose([{ value: "list" }]);
     await assert.rejects(
@@ -228,18 +315,74 @@ test("interactive session treats EOF as cancellation", async () => {
   }
 });
 
-test("init selects a locale before collecting required project fields", async () => {
-  prompts.inject(["zh-CN", "demo", "演示项目"]);
-  assert.deepEqual(await promptInit({ locale: "en" }), {
-    locale: "zh-CN",
-    projectId: "demo",
-    projectName: "演示项目",
+test("interactive session translates Inquirer exits into cancellation", async () => {
+  const session = new InteractionSession("en", {
+    choose: async () => {
+      const error = new Error("interrupted");
+      error.name = "ExitPromptError";
+      throw error;
+    },
+    value: async () => undefined,
   });
-  prompts.inject(["demo", "Demo"]);
+  await assert.rejects(
+    session.choose([{ value: "list" }]),
+    (error) => error instanceof InteractionCancelledError,
+  );
+});
+
+test("interactive sessions pass searchable prompt options to their driver", async () => {
+  let received;
+  const session = new InteractionSession("en", {
+    choose: async (request) => {
+      received = request;
+      return "init";
+    },
+    value: async () => undefined,
+  });
+  await session.choose([{ value: "init" }], {
+    pageSize: 100,
+    searchable: true,
+  });
+  assert.equal(received.pageSize, 100);
+  assert.equal(received.searchable, true);
+});
+
+test("interactive exit uses the localized error color on human terminals", async () => {
+  let received;
+  const session = new InteractionSession(
+    "zh-CN",
+    {
+      choose: async (request) => {
+        received = request;
+        return "list";
+      },
+      value: async () => undefined,
+    },
+    true,
+  );
+  await session.choose([{ value: "list" }]);
+  const exit = received.choices.at(-1);
+  assert.equal(exit.value, INTERACTION_EXIT);
+  assert.match(exit.label, /\u001B\[38;5;203m退出/);
+});
+
+test("init selects a locale before collecting required project fields", async () => {
+  assert.deepEqual(
+    await promptInit({
+      locale: "en",
+      driver: scriptedDriver("zh-CN", "demo", "演示项目"),
+    }),
+    {
+      locale: "zh-CN",
+      projectId: "demo",
+      projectName: "演示项目",
+    },
+  );
   assert.deepEqual(
     await promptInit({
       locale: "en",
       selectedLocale: "en",
+      driver: scriptedDriver("demo", "Demo"),
     }),
     { locale: "en", projectId: "demo", projectName: "Demo" },
   );

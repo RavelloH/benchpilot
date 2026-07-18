@@ -1,4 +1,5 @@
 import { t, type Locale, type MessageKey } from "../../i18n/index.js";
+import type { PromptItem } from "../interaction/prompter.js";
 import { benchPilotWordmark as rootWordmark } from "./brand.js";
 import { terminalTheme } from "./theme.js";
 
@@ -38,11 +39,11 @@ export const rootHelpSections: readonly RootHelpSection[] = [
     entries: [
       {
         command: "device",
-        summaryKey: "help.command.device",
+        summaryKey: "screen.root.device",
       },
       {
         command: "system",
-        summaryKey: "help.command.system",
+        summaryKey: "screen.root.system",
       },
       { command: "workflow", summaryKey: "screen.root.workflow" },
     ],
@@ -65,6 +66,34 @@ export const rootHelpSections: readonly RootHelpSection[] = [
     ],
   },
 ];
+
+/** Flatten the root command index into one grouped Inquirer selection menu. */
+export function rootMenuChoices(
+  locale: Locale,
+  color = false,
+): readonly PromptItem[] {
+  const theme = terminalTheme(color);
+  return rootHelpSections
+    .filter((section) => section.titleKey !== "screen.root.interactive")
+    .flatMap((section) => [
+      { separator: theme.heading(t(locale, section.titleKey)) },
+      ...section.entries.map((entry) => ({
+        value: entry.command.split(" ")[0]!,
+        label: `${theme.command(entry.command.padEnd(rootEntryWidth))}  ${t(locale, entry.summaryKey)}`,
+      })),
+    ]);
+}
+
+/** Header shown above the persistent, searchable interactive command menu. */
+export function renderInteractiveHomeHeader(
+  locale: Locale,
+  color: boolean,
+  showWordmark: boolean,
+) {
+  const theme = terminalTheme(color);
+  const benchPilotWordmark = showWordmark ? rootWordmark : "";
+  return `${theme.brand(benchPilotWordmark)}\n\n${theme.muted(t(locale, "help.group.root"))}\n\n${theme.heading(t(locale, "menu.homeGuideTitle"))}\n  ${theme.muted(t(locale, "menu.homeGuide"))}\n\n`;
+}
 
 const sections = rootHelpSections;
 const rootEntryWidth = Math.max(
