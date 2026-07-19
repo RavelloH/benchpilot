@@ -209,7 +209,7 @@ creates_run = false
 timeout = "10s"
 lock = "none"
 [extensions.secret-approval.safety]
-mode = "human-approval"
+mode = "destructive"
 flag = "approve-secret-approval"
 description = "Simulates an approval-bound secret operation."
 [extensions.secret-approval.platforms]
@@ -228,7 +228,7 @@ creates_run = true
 timeout = "30s"
 lock = "device"
 [extensions.dangerous-reset.safety]
-mode = "danger-flag"
+mode = "destructive"
 flag = "confirm-dangerous-reset"
 description = "Simulates a reset that may change device state."
 [extensions.dangerous-reset.platforms]

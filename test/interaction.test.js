@@ -741,6 +741,14 @@ test("presenter localizes human error categories without changing machine kinds"
     ),
     "配置错误：项目状态命令需要在 BenchPilot 项目中执行。",
   );
+  assert.equal(
+    humanErrorMessage(
+      "zh-CN",
+      "DANGEROUS_CONFIRMATION_REQUIRED",
+      "This operation requires --dangerously-info.",
+    ),
+    "安全确认错误：该操作缺少所需的显式安全确认选项。",
+  );
 });
 
 test("command catalog is the CLI root-menu source", () => {

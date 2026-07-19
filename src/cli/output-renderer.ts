@@ -152,8 +152,8 @@ const errorMessageKey = (kind: string): MessageKey => {
   if (/^(DEVICE|UNSUPPORTED_CAPABILITY)/.test(kind)) return "error.device";
   if (/^SYSTEM/.test(kind)) return "error.system";
   if (/^(LOCK|DEVICE_BUSY)/.test(kind)) return "error.lock";
-  if (/^(APPROVAL|HUMAN_APPROVAL|DANGEROUS_CONFIRMATION)/.test(kind))
-    return "error.approval";
+  if (/^DANGEROUS_CONFIRMATION/.test(kind)) return "error.safety";
+  if (/^(APPROVAL|HUMAN_APPROVAL)/.test(kind)) return "error.approval";
   if (/^(OPERATION|CLEANUP|INVALID_ARTIFACT)/.test(kind))
     return "error.operation";
   if (/^UPGRADE/.test(kind)) return "error.upgrade";

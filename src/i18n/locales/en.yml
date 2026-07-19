@@ -44,10 +44,10 @@ configCatalog:
     description: "Personal project policy for automated operation approvals."
     strict:
       name: "Strict"
-      description: "Require approval for operations declared as human approval."
+      description: "Require approval for every operation with a non-normal safety level."
     default:
       name: "Default"
-      description: "Require approval only for dangerous operations."
+      description: "Require approval only for irreversible destructive operations."
     bypass:
       name: "Bypass approvals"
       description: "Do not request approval for automated operations."
@@ -412,6 +412,7 @@ error:
   device: "Device error: {message}"
   system: "System error: {message}"
   lock: "Lock error: {message}"
+  safety: "Safety confirmation error: {message}"
   approval: "Approval error: {message}"
   operation: "Operation error: {message}"
   interaction: "Interaction error: {message}"
@@ -449,7 +450,7 @@ error:
     approvalChallengeFailed: "The device identity challenge did not match."
     approvalChallengeUnavailable: "The approval does not contain a physical device identity challenge."
     humanApprovalRequired: "Human approval is required before this operation can run."
-    dangerousConfirmationRequired: "This dangerous operation is missing its required explicit confirmation option."
+    dangerousConfirmationRequired: "This operation is missing its required explicit safety confirmation option."
     deviceNotFound: "The requested device was not found."
     deviceBusy: "The target device is currently held by another operation."
     deviceIdentityUnavailable: "A stable physical device identity is required before locking."

@@ -163,12 +163,13 @@ test("BENCHPILOT_ environment configuration preserves the first key segment", as
 
 test("approval levels use default as the normal project policy", () => {
   assert.equal(approvalLevel({}), "default");
-  assert.equal(requiresApproval("strict", "human-approval"), true);
-  assert.equal(requiresApproval("strict", "danger-flag"), false);
-  assert.equal(requiresApproval("default", "human-approval"), false);
-  assert.equal(requiresApproval("default", "danger-flag"), true);
-  assert.equal(requiresApproval("bypass", "human-approval"), false);
-  assert.equal(requiresApproval("bypass", "danger-flag"), false);
+  assert.equal(requiresApproval("strict", "caution"), true);
+  assert.equal(requiresApproval("strict", "destructive"), true);
+  assert.equal(requiresApproval("strict", "irreversible"), true);
+  assert.equal(requiresApproval("default", "caution"), false);
+  assert.equal(requiresApproval("default", "destructive"), false);
+  assert.equal(requiresApproval("default", "irreversible"), true);
+  assert.equal(requiresApproval("bypass", "irreversible"), false);
 });
 
 test("approval guards are project-local while lock guards use runtime state", () => {

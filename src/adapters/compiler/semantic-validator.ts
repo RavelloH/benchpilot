@@ -343,7 +343,9 @@ export const validateSemantics = async (
     const safety = obj(item.safety);
     if (
       safety.mode &&
-      !["normal", "danger-flag", "human-approval"].includes(String(safety.mode))
+      !["normal", "caution", "destructive", "irreversible"].includes(
+        String(safety.mode),
+      )
     )
       errors.push(
         diagnostic(
@@ -355,7 +357,9 @@ export const validateSemantics = async (
         ),
       );
     if (
-      ["danger-flag", "human-approval"].includes(String(safety.mode)) &&
+      ["caution", "destructive", "irreversible"].includes(
+        String(safety.mode),
+      ) &&
       (typeof safety.flag !== "string" ||
         typeof safety.description !== "string")
     )
@@ -383,7 +387,9 @@ export const validateSemantics = async (
       );
     if (
       enabled &&
-      ["danger-flag", "human-approval"].includes(String(safety.mode)) &&
+      ["caution", "destructive", "irreversible"].includes(
+        String(safety.mode),
+      ) &&
       typeof safety.flag === "string"
     ) {
       const existing = declaredSafetyFlags.get(safety.flag);

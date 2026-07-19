@@ -3,7 +3,7 @@ import type { Json } from "../config/config.js";
 import type { OperationContext } from "../operations/types.js";
 
 export interface Safety {
-  mode: "normal" | "danger-flag" | "human-approval";
+  mode: "normal" | "caution" | "destructive" | "irreversible";
   flag?: string;
   effects?: string[];
   approvalTtlMs?: number;

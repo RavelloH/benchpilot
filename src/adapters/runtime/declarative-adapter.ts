@@ -112,14 +112,16 @@ const capabilityFor = (
     createsRun: value.creates_run === true,
     safety: {
       mode:
-        safety.mode === "danger-flag" || safety.mode === "human-approval"
+        safety.mode === "caution" ||
+        safety.mode === "destructive" ||
+        safety.mode === "irreversible"
           ? safety.mode
           : "normal",
       ...(typeof safety.flag === "string" ? { flag: safety.flag } : {}),
       ...(typeof safety.description === "string"
         ? { effects: [safety.description] }
         : {}),
-      ...(safety.mode === "human-approval" ? { approvalTtlMs: 3_600_000 } : {}),
+      ...(safety.mode === "irreversible" ? { approvalTtlMs: 3_600_000 } : {}),
     },
     inputSchema: validatorSchema(validator, "input", id, inputDefinition),
     redactInput(input) {

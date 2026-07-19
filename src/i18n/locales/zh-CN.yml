@@ -44,10 +44,10 @@ configCatalog:
     description: "自动化操作的个人项目级审批策略。"
     strict:
       name: "严格"
-      description: "对声明为人工审批的操作要求审批。"
+      description: "对所有声明为非普通安全等级的操作要求审批。"
     default:
       name: "默认"
-      description: "仅对危险操作要求审批。"
+      description: "仅对不可逆的破坏性操作要求审批。"
     bypass:
       name: "绕过审批"
       description: "自动化操作不再请求审批。"
@@ -412,6 +412,7 @@ error:
   device: "设备错误：{message}"
   system: "系统错误：{message}"
   lock: "锁错误：{message}"
+  safety: "安全确认错误：{message}"
   approval: "审批错误：{message}"
   operation: "操作错误：{message}"
   interaction: "交互错误：{message}"
@@ -449,7 +450,7 @@ error:
     approvalChallengeFailed: "设备身份验证未通过。"
     approvalChallengeUnavailable: "审批中没有可用于验证的物理设备标识。"
     humanApprovalRequired: "该操作需要人工审批后才能执行。"
-    dangerousConfirmationRequired: "该危险操作缺少所需的显式确认选项。"
+    dangerousConfirmationRequired: "该操作缺少所需的显式安全确认选项。"
     deviceNotFound: "找不到指定设备。"
     deviceBusy: "目标设备正在被其他操作占用。"
     deviceIdentityUnavailable: "无法取得可安全加锁的稳定物理设备标识。"

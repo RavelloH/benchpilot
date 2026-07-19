@@ -39,11 +39,11 @@ export function approvalLevel(config: Json): ApprovalLevel {
 
 export function requiresApproval(
   level: ApprovalLevel,
-  safetyMode: "normal" | "danger-flag" | "human-approval",
+  safetyMode: "normal" | "caution" | "destructive" | "irreversible",
 ) {
   if (level === "bypass" || safetyMode === "normal") return false;
-  if (level === "strict") return safetyMode === "human-approval";
-  return safetyMode === "danger-flag";
+  if (level === "strict") return true;
+  return safetyMode === "irreversible";
 }
 
 /** Returns the project's explicit adapter allowlist. */

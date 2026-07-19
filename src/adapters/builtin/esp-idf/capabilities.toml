@@ -26,7 +26,7 @@ creates_run = true
 timeout = "2m"
 lock = "device"
 [capabilities.info.safety]
-mode = "danger-flag"
+mode = "caution"
 flag = "dangerously-info"
 description = "Connects to the target and may toggle DTR/RTS while esptool identifies it."
 [capabilities.info.platforms]
@@ -73,7 +73,7 @@ creates_run = false
 timeout = "10m"
 lock = "none"
 [capabilities.fullclean.safety]
-mode = "danger-flag"
+mode = "destructive"
 flag = "dangerously-fullclean"
 description = "Deletes the configured project build directory but never sdkconfig or source files."
 [capabilities.fullclean.platforms]
@@ -105,7 +105,7 @@ creates_run = true
 timeout = "15m"
 lock = "device"
 [capabilities.flash.safety]
-mode = "human-approval"
+mode = "destructive"
 flag = "approve-flash"
 description = "This will overwrite the current ESP32-S3 application firmware."
 [capabilities.flash.platforms]
@@ -122,7 +122,7 @@ creates_run = false
 timeout = "2m"
 lock = "device"
 [capabilities.reset.safety]
-mode = "danger-flag"
+mode = "caution"
 flag = "dangerously-reset"
 description = "Connects with esptool and hard-resets the target after the command."
 [capabilities.reset.platforms]
@@ -139,7 +139,7 @@ creates_run = true
 timeout = "45m"
 lock = "device"
 [capabilities.deploy.safety]
-mode = "human-approval"
+mode = "destructive"
 flag = "approve-deploy"
 description = "This will build and overwrite the current ESP32-S3 application firmware."
 [capabilities.deploy.platforms]
@@ -156,7 +156,7 @@ creates_run = true
 timeout = "30s"
 lock = "device"
 [capabilities.capture.safety]
-mode = "danger-flag"
+mode = "caution"
 flag = "dangerously-capture"
 description = "Opens the serial port for a bounded capture; USB serial adapters may reset the target when the port opens."
 [capabilities.capture.platforms]

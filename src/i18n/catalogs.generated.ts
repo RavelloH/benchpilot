@@ -70,13 +70,13 @@ export const catalogs = {
       "Do not request approval for automated operations.",
     "configCatalog.approvalLevel.bypass.name": "Bypass approvals",
     "configCatalog.approvalLevel.default.description":
-      "Require approval only for dangerous operations.",
+      "Require approval only for irreversible destructive operations.",
     "configCatalog.approvalLevel.default.name": "Default",
     "configCatalog.approvalLevel.description":
       "Personal project policy for automated operation approvals.",
     "configCatalog.approvalLevel.name": "Approval level",
     "configCatalog.approvalLevel.strict.description":
-      "Require approval for operations declared as human approval.",
+      "Require approval for every operation with a non-normal safety level.",
     "configCatalog.approvalLevel.strict.name": "Strict",
     "configCatalog.enabledAdapters.description":
       "Adapter IDs enabled for this project.",
@@ -172,7 +172,7 @@ export const catalogs = {
     "error.reason.configScopeInvalid":
       "This configuration item cannot be saved in the requested scope.",
     "error.reason.dangerousConfirmationRequired":
-      "This dangerous operation is missing its required explicit confirmation option.",
+      "This operation is missing its required explicit safety confirmation option.",
     "error.reason.deviceBusy":
       "The target device is currently held by another operation.",
     "error.reason.deviceIdentityUnavailable":
@@ -237,6 +237,7 @@ export const catalogs = {
     "error.reason.upgradeVersionNotFound":
       "The requested BenchPilot version is not available in the package registry.",
     "error.reason.usageError": "The command arguments or options are invalid.",
+    "error.safety": "Safety confirmation error: {message}",
     "error.system": "System error: {message}",
     "error.unknown": "Command failed: {message}",
     "error.upgrade": "Upgrade error: {message}",
@@ -539,13 +540,14 @@ export const catalogs = {
     "configCatalog.approvalLevel.bypass.description":
       "自动化操作不再请求审批。",
     "configCatalog.approvalLevel.bypass.name": "绕过审批",
-    "configCatalog.approvalLevel.default.description": "仅对危险操作要求审批。",
+    "configCatalog.approvalLevel.default.description":
+      "仅对不可逆的破坏性操作要求审批。",
     "configCatalog.approvalLevel.default.name": "默认",
     "configCatalog.approvalLevel.description":
       "自动化操作的个人项目级审批策略。",
     "configCatalog.approvalLevel.name": "审批级别",
     "configCatalog.approvalLevel.strict.description":
-      "对声明为人工审批的操作要求审批。",
+      "对所有声明为非普通安全等级的操作要求审批。",
     "configCatalog.approvalLevel.strict.name": "严格",
     "configCatalog.enabledAdapters.description":
       "当前项目已启用的适配器 ID 列表。",
@@ -631,7 +633,7 @@ export const catalogs = {
     "error.reason.configKeyNotFound": "找不到指定的配置项。",
     "error.reason.configScopeInvalid": "该配置项不能保存到请求的作用域。",
     "error.reason.dangerousConfirmationRequired":
-      "该危险操作缺少所需的显式确认选项。",
+      "该操作缺少所需的显式安全确认选项。",
     "error.reason.deviceBusy": "目标设备正在被其他操作占用。",
     "error.reason.deviceIdentityUnavailable":
       "无法取得可安全加锁的稳定物理设备标识。",
@@ -682,6 +684,7 @@ export const catalogs = {
     "error.reason.upgradeVersionNotFound":
       "包注册表中不存在请求的 BenchPilot 版本。",
     "error.reason.usageError": "命令参数或选项无效。",
+    "error.safety": "安全确认错误：{message}",
     "error.system": "系统错误：{message}",
     "error.unknown": "命令失败：{message}",
     "error.upgrade": "升级错误：{message}",
