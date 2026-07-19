@@ -501,13 +501,13 @@ export function rootHelpPage(
     ],
     [
       { value: "device", kind: "command" as const },
-      { value: "demo", kind: "argument" as const },
-      { value: "deploy", kind: "command" as const },
+      { value: "<device>", kind: "argument" as const },
+      { value: "status", kind: "command" as const },
     ],
     [
       { value: "device", kind: "command" as const },
-      { value: "demo", kind: "argument" as const },
-      { value: "deploy", kind: "command" as const },
+      { value: "<device>", kind: "argument" as const },
+      { value: "status", kind: "command" as const },
       { value: "--json", kind: "flag" as const },
     ],
   ];

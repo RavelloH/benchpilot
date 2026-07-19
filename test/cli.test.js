@@ -23,6 +23,7 @@ function cliEnv(dir) {
     HOME: dir,
     USERPROFILE: dir,
     TEMP: path.join(dir, "runtime"),
+    BENCHPILOT_TEST_ADAPTER_BUNDLES: path.resolve("test", ".adapter-bundles"),
   };
   for (const key of [
     "CODEX_THREAD_ID",

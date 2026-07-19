@@ -53,7 +53,7 @@
     "dev": "node scripts/dev.mjs",
     "typecheck": "pnpm run i18n:generate && tsc -p tsconfig.json --noEmit",
     "i18n:generate": "node scripts/generate-i18n.mjs",
-    "test": "pnpm run build && node --test test/*.test.js",
+    "test": "pnpm run build && node scripts/compile-test-adapter.mjs && node --test test/*.test.js",
     "test:coverage": "pnpm run build && node --test --experimental-test-coverage test/*.test.js",
     "test:package": "pnpm run test:package:npm",
     "test:package:npm": "pnpm run build && node test/package-e2e.mjs",

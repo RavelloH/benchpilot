@@ -34,8 +34,8 @@ machine-readable JSON diagnostic result and are not passed to the case runner.
 
 `test/fixtures/adapters/complete` is a separate, executable conformance fixture:
 it exercises every v1 declaration category and all case-runner types, but is not
-a builtin adapter and is never published. The declarative Demo is the CLI and
-package-test default. The `esp-idf` built-in demonstrates that ESP-IDF can be
+a builtin adapter and is never published. Test fixtures may exercise simulated
+operations without becoming production adapters. The `esp-idf` built-in demonstrates that ESP-IDF can be
 declared within Format v1 without Core branches for vendor tools.
 
 `[extensions.<id>]` uses the same capability declaration shape as standard
@@ -47,8 +47,7 @@ or shell command strings. Input properties can declare `x-benchpilot-cli` with
 Physical identities must be explicit. `identity.fields` is preferred, optional
 port fallback is next, and `allow_instance_fallback` defaults to `false`.
 Capabilities that lock a device fail with `DEVICE_IDENTITY_UNAVAILABLE` when no
-stable identity is available. The simulated Demo explicitly opts into instance
-fallback.
+stable identity is available.
 
 Device Discovery is passive by default. A `devices.toml` Probe is never run by
 ordinary `device scan` or Doctor, and the Runtime does not execute it through

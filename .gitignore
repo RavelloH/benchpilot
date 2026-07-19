@@ -155,3 +155,4 @@ Desktop.ini
 # Project local test config
 benchpilot.toml
 .benchpilot/
+test/.adapter-bundles/

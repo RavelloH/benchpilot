@@ -1,8 +1,8 @@
 # BenchPilot
 
-BenchPilot ships a simulated Demo adapter and a declarative ESP-IDF adapter for real Espressif hardware. Runtime requires Node.js >= 22.13. Repository development uses pnpm 11, while package users can install and run the tarball with npm alone.
+BenchPilot ships a declarative ESP-IDF adapter for real Espressif hardware. Runtime requires Node.js >= 22.13. Repository development uses pnpm 11, while package users can install and run the tarball with npm alone.
 
-BenchPilot is an agent-friendly, local-first device lifecycle CLI. Version `0.0.0` ships the **software-simulated Demo Adapter** and an opt-in ESP-IDF hardware Adapter. The ESP-IDF Adapter only performs hardware operations through declared capabilities, the Operation Runner, Device Locks, and human approval where required. Running the installed package requires Node.js 22.13 or newer. The repository uses pnpm 11 for development and CI; npm package users do not need pnpm.
+BenchPilot is an agent-friendly, local-first device lifecycle CLI. Version `0.0.0` ships an opt-in ESP-IDF hardware Adapter. The ESP-IDF Adapter only performs hardware operations through declared capabilities, the Operation Runner, Device Locks, and human approval where required. Running the installed package requires Node.js 22.13 or newer. The repository uses pnpm 11 for development and CI; npm package users do not need pnpm.
 
 For repository development, run `pnpm dev` to continuously compile TypeScript,
 regenerate i18n catalogs, and rebuild adapter bundles as their sources change.
@@ -13,8 +13,8 @@ regenerate i18n catalogs, and rebuild adapter bundles as their sources change.
 pnpm install
 pnpm run build
 node dist/cli/index.js init
-node dist/cli/index.js device demo deploy --json
-node dist/cli/index.js device demo capture
+node dist/cli/index.js adapter list
+node dist/cli/index.js device scan
 ```
 
 The command tree covers configuration, adapters/devices, systems, runs, locks and approvals. Device and adapter commands are resolved from the configured instance and registered adapter: adding an in-process adapter registration does not require a CLI routing change. Use `benchpilot help --all --json` for discoverable machine-readable help. `--json` emits one final result object; `--jsonl` is a real-time v2 `benchpilot.event` stream with exactly one terminal `operation.completed` or `operation.failed` event. RLog remains responsible for run logs, not public JSONL stdout.
@@ -27,12 +27,6 @@ contract, not SSH, TTY, or CI heuristics. Agents should provide complete flags;
 an interactive request returns a structured error in `--json`/`--jsonl` mode.
 The future `benchpilot setup` environment wizard is intentionally not exposed in
 this release.
-
-The bundled Demo Adapter is declarative. It simulates `status`, `info`,
-`build`, `flash`, `reset`, `capture`, and `deploy` through fixed Node scripts
-with `shell: false`; it never contacts hardware or the network. `build` writes
-its simulated firmware only inside the current Run and registers it as an
-Artifact.
 
 The bundled `esp-idf` Adapter provides passive ESP serial discovery, ESP-IDF
 project lifecycle actions, esptool information and reset operations, and
@@ -58,4 +52,4 @@ Suggested first release after expanding tests and hardening the TOML editor: `0.
 Use Conventional Commits with a mandatory scope:
 `<type>(<scope>): <imperative summary>`. Valid types are `feat`, `fix`,
 `docs`, `refactor`, `test`, `build`, `ci`, `chore`, and `perf`; for example,
-`feat(cli): add demo deploy command`.
+`feat(cli): add device deploy command`.

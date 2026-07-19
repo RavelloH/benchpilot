@@ -11,9 +11,8 @@ lifecycle, parsing, artifact registration, and output validation. Locks,
 approvals, Runs, cleanup, quarantine and JSON/JSONL terminal events remain
 owned by Core.
 
-The compiled `builtin/demo` bundle is the default Demo implementation. It is
-not an adapter extension mechanism: production loading remains limited to the
-bundles shipped with the package.
+Production loading remains limited to the bundles shipped with the package;
+test fixtures are compiled and loaded only by the test harness.
 
 Templates are deliberately limited to `${namespace.path}` lookups. Execution
 critical templates fail with `ADAPTER_TEMPLATE_VALUE_MISSING` when a value is
@@ -23,10 +22,8 @@ Runner with `shell: false`. Serial plans are accepted but report
 `ADAPTER_EXECUTOR_UNAVAILABLE` until a future runtime version supplies a
 serial executor.
 
-The built-in Demo intentionally invokes only fixed `node -e` scripts declared
-in the shipped Bundle. User input is passed as data, never inserted into script
-source. Its build action writes only inside the operation Run and registers a
-firmware artifact.
+Adapter actions use fixed declarations from their shipped Bundle. User input is
+passed as data, never inserted into executable source.
 
 ## Runtime Context and safety boundary
 
@@ -66,9 +63,10 @@ An Adapter Probe is never part of discovery. Probe declarations are not
 executed by this Runtime; hardware-affecting identification must be exposed as
 a declared Capability so it receives the full Core Run, Lock, approval, and
 cleanup lifecycle. Doctor always performs passive discovery only.
-There is no serial executor or ESP-IDF adapter in this release. Device identity
-uses declared physical fields, then an explicit port fallback. Instance fallback
-is disabled by default and is enabled only by the simulated Demo.
+There is no serial executor in this release. The bundled ESP-IDF adapter uses
+declared process actions and passive discovery. Device identity uses declared
+physical fields, then an explicit port fallback; instance fallback is disabled
+by default.
 
 Extension capabilities are compiled separately from the standard catalog and
 are exposed through the same dynamic `benchpilot device <id> <capability>`

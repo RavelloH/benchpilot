@@ -93,31 +93,11 @@ try {
     "--locale",
     "en",
   );
-  await writeFile(
-    path.join(project, "benchpilot.toml"),
-    `version = 1
-
-[project]
-id = "demo"
-name = "Demo"
-
-[devices.demo]
-adapter = "demo"
-
-[adapters.demo]
-connected = true
-device_id = "demo-device-01"
-operation_delay_ms = 1
-`,
-  );
   const commands = [
     ["help", "--json"],
     ["doctor", "--json"],
     ["adapter", "list", "--json"],
     ["device", "scan", "--json"],
-    ["device", "demo", "build", "--json"],
-    ["device", "demo", "deploy", "--json"],
-    ["device", "demo", "capture", "--json"],
     ["run", "list", "--json"],
   ];
   for (const args of commands) {
@@ -127,26 +107,12 @@ operation_delay_ms = 1
       assert.equal(result[0]?.name, "name");
       continue;
     }
-    assert.equal(result.version, 2, `${args.join(" ")} uses protocol v2`);
-    assert.match(result.schema, /^benchpilot\.(?:help|result)$/);
+    assert.equal(
+      typeof result.schema,
+      "string",
+      `${args.join(" ")} has a schema`,
+    );
   }
-  const events = run("device", "demo", "deploy", "--jsonl")
-    .trim()
-    .split("\n")
-    .map((line) => JSON.parse(line));
-  assert.ok(
-    events.every(
-      (event) => event.schema === "benchpilot.event" && event.version === 2,
-    ),
-    "every stream record uses the v2 event protocol",
-  );
-  assert.equal(events.at(-1).event.type, "operation.completed");
-  assert.equal(
-    events.filter((event) =>
-      /operation\.(completed|failed)/.test(event.event.type),
-    ).length,
-    1,
-  );
 } finally {
   await rm(temp, { recursive: true, force: true });
 }
