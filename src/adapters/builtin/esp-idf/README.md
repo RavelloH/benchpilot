@@ -10,7 +10,12 @@ candidates only.
 `capture`, and `deploy` are available. `flash` and `deploy` require a human
 approval. `info`, `fullclean`, `reset`, and bounded `capture` require their
 declared danger flags: opening a USB serial port may reset the target. Capture
-uses fixed Python code with independent argv values and always closes the port.
+uses fixed Python code with independent argv values, always closes the port,
+and saves its bounded raw output as the `serial-capture.txt` run artifact.
+Its `duration_seconds`, `max_lines`, and `max_bytes` inputs bound the capture;
+`timestamp` optionally prefixes each saved line with UTC time. The structured
+result reports the line and byte counts, marker detection, truncation, and the
+stop reason.
 Interactive logs, run, and stop remain disabled. No action uses `--force`,
 erase commands, eFuse operations, JTAG/OpenOCD, OTA, or a shell string.
 

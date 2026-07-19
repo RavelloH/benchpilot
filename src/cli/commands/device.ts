@@ -114,13 +114,16 @@ export async function handleDeviceCommand({
         : {}),
     });
     const r = result as Json;
-    write(
-      result,
-      flags,
-      r.dryRun
-        ? `${capability} dry-run plan created.`
-        : `${capability} completed${r.runId ? ` (run ${String(r.runId)})` : ""}.`,
-    );
+    if (capability === "info" && !flags.json && !flags.jsonl)
+      write(result, flags, `${JSON.stringify(r.data ?? {}, null, 2)}\n`);
+    else
+      write(
+        result,
+        flags,
+        r.dryRun
+          ? `${capability} dry-run plan created.`
+          : `${capability} completed${r.runId ? ` (run ${String(r.runId)})` : ""}.`,
+      );
     return true;
   }
   return false;

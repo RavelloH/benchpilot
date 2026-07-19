@@ -72,10 +72,15 @@
     "capture": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["lines", "marker"],
+      "required": ["lines", "bytes", "marker", "truncated", "stop_reason"],
       "properties": {
         "lines": { "type": "integer", "minimum": 0 },
-        "marker": { "type": "boolean" }
+        "bytes": { "type": "integer", "minimum": 0 },
+        "marker": { "type": "boolean" },
+        "truncated": { "type": "boolean" },
+        "stop_reason": {
+          "enum": ["timeout", "marker", "max_lines", "max_bytes"]
+        }
       }
     },
     "reset": { "type": "object", "additionalProperties": true },

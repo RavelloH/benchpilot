@@ -236,16 +236,21 @@ arguments = [
 [actions.capture]
 type = "process"
 tool = "python"
-cwd = "${project.root}"
+cwd = "${run.dir}/captures"
 timeout = "25s"
 parser = "serial-capture"
+artifact_set = "capture"
 arguments = [
   { kind = "literal", value = "-c" },
   { kind = "literal", value = '''import sys, time
 import serial
 
-port, baud, duration, max_lines = sys.argv[1], int(sys.argv[2]), float(sys.argv[3]), int(sys.argv[4])
+port, baud, duration, max_lines, max_bytes, timestamp = sys.argv[1], int(sys.argv[2]), float(sys.argv[3]), int(sys.argv[4]), int(sys.argv[5]), sys.argv[6] == "true"
 lines = []
+bytes_written = 0
+marker = False
+truncated = False
+stop_reason = "timeout"
 try:
   connection = serial.Serial(port=port, baudrate=baud, timeout=0.2, rtscts=False, dsrdtr=False)
   try:
@@ -255,15 +260,31 @@ try:
     pass
   try:
     deadline = time.monotonic() + duration
-    while time.monotonic() < deadline and len(lines) < max_lines:
-      raw = connection.readline()
-      if not raw:
-        continue
-      line = raw.decode("utf-8", errors="replace").rstrip("\\r\\n")
-      lines.append(line)
-      print(line, flush=True)
-      if "BENCHPILOT_ESP32S3_OK" in line:
-        break
+    with open("serial-capture.txt", "w", encoding="utf-8", newline="\n") as capture:
+      while time.monotonic() < deadline:
+        if len(lines) >= max_lines:
+          truncated = True
+          stop_reason = "max_lines"
+          break
+        raw = connection.readline()
+        if not raw:
+          continue
+        line = raw.decode("utf-8", errors="replace").rstrip("\r\n")
+        if timestamp:
+          line = f"{time.strftime('%Y-%m-%dT%H:%M:%S', time.gmtime())}.{int((time.time() % 1) * 1000):03d}Z {line}"
+        encoded = f"{line}\n".encode("utf-8")
+        if bytes_written + len(encoded) > max_bytes:
+          truncated = True
+          stop_reason = "max_bytes"
+          break
+        capture.write(f"{line}\n")
+        capture.flush()
+        bytes_written += len(encoded)
+        lines.append(line)
+        if "BENCHPILOT_ESP32S3_OK" in line:
+          marker = True
+          stop_reason = "marker"
+          break
   finally:
     connection.close()
 except (OSError, serial.SerialException) as error:
@@ -271,9 +292,14 @@ except (OSError, serial.SerialException) as error:
   raise SystemExit(2)
 
 print(f"capture.lines={len(lines)}")
-print(f"capture.marker={'true' if any('BENCHPILOT_ESP32S3_OK' in line for line in lines) else 'false'}")''' },
+print(f"capture.bytes={bytes_written}")
+print(f"capture.marker={'true' if marker else 'false'}")
+print(f"capture.truncated={'true' if truncated else 'false'}")
+print(f"capture.stop_reason={stop_reason}")''' },
   { kind = "value", value = "${device.port}" },
   { kind = "value", value = "${input.baud}" },
   { kind = "value", value = "${input.duration_seconds}" },
-  { kind = "value", value = "${input.max_lines}" }
+  { kind = "value", value = "${input.max_lines}" },
+  { kind = "value", value = "${input.max_bytes}" },
+  { kind = "value", value = "${input.timestamp}" }
 ]

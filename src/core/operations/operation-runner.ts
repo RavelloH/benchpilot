@@ -381,11 +381,18 @@ export class OperationRunner {
       }
       await atomicJson(path.join(run.dir, "resolved-config.json"), snapshot);
     }
+    const machineOutput =
+      this.s.flags.json === true || this.s.flags.jsonl === true;
     const logger = new Rlog({
       logFilePath: run && path.join(run.dir, "benchpilot.log"),
       jsonlFilePath: run && path.join(run.dir, "events.jsonl"),
       jsonlOutput: "none",
-      screenOutput: this.s.flags.quiet ? "none" : "stderr",
+      // Canonical command results own stdout. Keep routine lifecycle logs in
+      // the Run files, exposing them on the terminal only when requested.
+      screenOutput:
+        this.s.flags.quiet || machineOutput || this.s.flags.verbose !== true
+          ? "none"
+          : "stderr",
       enableColorfulOutput: this.s.flags.color !== false,
       screenLogLevel: this.s.flags.verbose ? "debug" : "info",
       context: {

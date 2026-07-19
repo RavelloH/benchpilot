@@ -83,7 +83,7 @@ target = "serial-capture"
 context = {}
 stdout_fixture = "fixtures/capture.txt"
 exit_code = 0
-expect = { success = true, result = { lines = 3, marker = true }, progress = [{ event = "esp-idf.capture.boot-marker", data = { marker = "BENCHPILOT_ESP32S3_OK" } }] }
+expect = { success = true, result = { lines = 3, marker = true, bytes = 65, truncated = false, stop_reason = "marker" } }
 
 [[cases]]
 id = "parse-esptool-v5-info"

@@ -460,13 +460,33 @@ target = "marker"
 group = "marker"
 cast = "boolean"
 required = true
-[[parsers.serial-capture.progress]]
-id = "boot-marker"
+[[parsers.serial-capture.extract]]
+id = "bytes"
 source = "stdout"
-pattern = "(?<marker>BENCHPILOT_ESP32S3_OK)"
-event = "esp-idf.capture.boot-marker"
-[parsers.serial-capture.progress.fields]
-marker = "string"
+type = "regex"
+pattern = "capture\\.bytes=(?<bytes>\\d+)"
+target = "bytes"
+group = "bytes"
+cast = "integer"
+required = true
+[[parsers.serial-capture.extract]]
+id = "truncated"
+source = "stdout"
+type = "regex"
+pattern = "capture\\.truncated=(?<truncated>true|false)"
+target = "truncated"
+group = "truncated"
+cast = "boolean"
+required = true
+[[parsers.serial-capture.extract]]
+id = "stop-reason"
+source = "stdout"
+type = "regex"
+pattern = "capture\\.stop_reason=(?<stop_reason>timeout|marker|max_lines|max_bytes)"
+target = "stop_reason"
+group = "stop_reason"
+cast = "string"
+required = true
 [[parsers.esptool-info.extract]]
 id = "chip"
 source = "both"
