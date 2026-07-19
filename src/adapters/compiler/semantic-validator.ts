@@ -455,6 +455,7 @@ export const validateSemantics = async (
           "path",
           "fixed",
           "glob",
+          "json-path",
         ].includes(String(item.type))
       )
         errors.push(

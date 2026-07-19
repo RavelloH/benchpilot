@@ -64,4 +64,6 @@ export interface OperationLifecycleFactories {
 export interface OperationExecutionOptions {
   eventScope?: "root" | "child";
   eventContext?: Json;
+  /** The CLI completed human safety and approval confirmation before execution. */
+  executionMode?: "interactive";
 }

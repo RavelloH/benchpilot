@@ -13,7 +13,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, sep } from "node:path";
+import { dirname, join, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
 import { AdapterBundleLoader } from "../dist/adapters/runtime/bundle-loader.js";
@@ -618,6 +618,96 @@ test("tool discovery honors priority and rejects an invalid explicit path", asyn
       { config: { tool_path: "" } },
     );
     assert.equal(fallback.candidateId, "fixed");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("tool discovery reads registered installations from a JSON path", async () => {
+  const root = await mkdtemp(join(tmpdir(), "benchpilot-runtime-json-path-"));
+  try {
+    const framework = join(root, "esp-idf");
+    const tool = join(framework, "tools", "idf.py");
+    const registry = join(root, "idf-env.json");
+    await mkdir(join(framework, "tools"), { recursive: true });
+    await writeFile(tool, "");
+    await writeFile(
+      registry,
+      JSON.stringify({
+        idfInstalled: {
+          missing: { path: join(root, "missing") },
+          installed: { path: framework },
+        },
+      }),
+    );
+    const resolver = new ToolResolver("windows", {});
+    const resolved = await resolver.resolveLaunch(
+      "idf",
+      { idf: { discovery: "idf", launch: { environment: "inherit" } } },
+      {
+        idf: {
+          validation: { path_type: "file", executable: false },
+          candidates: [
+            {
+              id: "registered-installation",
+              type: "json-path",
+              priority: 1,
+              file: registry,
+              collection: "idfInstalled",
+              path: "path",
+              append: ["tools", "idf.py"],
+            },
+          ],
+        },
+      },
+      {},
+    );
+    assert.equal(resolved.candidateId, "registered-installation");
+    assert.equal(resolved.executable, await realpath(tool));
+    assert.equal(resolved.discoveredRoot, framework);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("tool discovery expands the home path for managed Python environments", async () => {
+  const root = await mkdtemp(
+    join(tmpdir(), "benchpilot-runtime-managed-python-"),
+  );
+  try {
+    const python = join(
+      root,
+      ".espressif",
+      "python_env",
+      "idf6.0_py3.10_env",
+      "Scripts",
+      "python.exe",
+    );
+    await mkdir(dirname(python), { recursive: true });
+    await writeFile(python, "");
+    const resolver = new ToolResolver("windows", {});
+    const resolved = await resolver.resolveLaunch(
+      "python",
+      { python: { discovery: "python", launch: { environment: "inherit" } } },
+      {
+        python: {
+          validation: { path_type: "file", executable: false },
+          candidates: [
+            {
+              id: "managed-python",
+              type: "glob",
+              priority: 1,
+              patterns: [
+                "${home}/.espressif/python_env/idf*_py*_env/Scripts/python.exe",
+              ],
+            },
+          ],
+        },
+      },
+      { home: root },
+    );
+    assert.equal(resolved.candidateId, "managed-python");
+    assert.equal(resolved.executable, await realpath(python));
   } finally {
     await rm(root, { recursive: true, force: true });
   }

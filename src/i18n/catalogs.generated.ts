@@ -25,6 +25,8 @@ export const catalogs = {
     "approval.command.other": "Operation: {command}",
     "approval.command.system": "Multi-device system operation: {capability}",
     "approval.confirm.approve": "Approve this approval request?",
+    "approval.confirm.operation":
+      "This operation requires approval. Approve and continue?",
     "approval.confirm.reject": "Reject this approval request?",
     "approval.detail.adapter": "Adapter",
     "approval.detail.binding": "Operation binding",
@@ -53,6 +55,8 @@ export const catalogs = {
     "approval.list.none": "There are no approval requests.",
     "approval.list.status": "Status",
     "approval.list.title": "Human approval requests",
+    "approval.safetyConfirm":
+      "Execute this operation requiring safety confirmation?",
     "approval.status.approved": "Approved",
     "approval.status.claimed": "Claimed",
     "approval.status.consumed": "Consumed",
@@ -497,6 +501,7 @@ export const catalogs = {
     "approval.command.other": "操作：{command}",
     "approval.command.system": "多设备系统操作：{capability}",
     "approval.confirm.approve": "确认批准此审批请求？",
+    "approval.confirm.operation": "此操作需要审批。批准并继续执行？",
     "approval.confirm.reject": "确认拒绝此审批请求？",
     "approval.detail.adapter": "适配器",
     "approval.detail.binding": "操作绑定",
@@ -525,6 +530,7 @@ export const catalogs = {
     "approval.list.none": "当前没有审批请求。",
     "approval.list.status": "状态",
     "approval.list.title": "人工审批请求",
+    "approval.safetyConfirm": "确认执行此需要安全确认的操作？",
     "approval.status.approved": "已批准",
     "approval.status.claimed": "已认领",
     "approval.status.consumed": "已使用",

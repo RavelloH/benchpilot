@@ -267,12 +267,16 @@ export class OperationRunner {
         physicalId: runtime.identity.physicalId,
       });
     const safety = capability.safety;
-    const approvalRequired = requiresApproval(
-      approvalLevel(this.s.config.value),
-      safety.mode,
-    );
+    const interactiveExecution = options.executionMode === "interactive";
+    const approvalRequired =
+      !interactiveExecution &&
+      requiresApproval(approvalLevel(this.s.config.value), safety.mode);
     const approvals = this.lifecycle.approvals(project.root);
-    if (safety.mode !== "normal" && !this.s.flags[safety.flag!])
+    if (
+      !interactiveExecution &&
+      safety.mode !== "normal" &&
+      !this.s.flags[safety.flag!]
+    )
       fail(
         "DANGEROUS_CONFIRMATION_REQUIRED",
         7,

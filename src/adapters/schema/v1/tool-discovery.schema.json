@@ -179,6 +179,38 @@
         }
       ]
     },
+    "jsonPath": {
+      "allOf": [
+        { "$ref": "#/$defs/base" },
+        {
+          "type": "object",
+          "required": [
+            "id",
+            "type",
+            "priority",
+            "file",
+            "collection",
+            "path",
+            "append"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "id": { "$ref": "#/$defs/id" },
+            "type": { "const": "json-path" },
+            "priority": { "type": "integer" },
+            "platforms": { "$ref": "#/$defs/platforms" },
+            "file": { "type": "string", "minLength": 1 },
+            "collection": { "type": "string", "minLength": 1 },
+            "path": { "type": "string", "minLength": 1 },
+            "append": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "type": "string" }
+            }
+          }
+        }
+      ]
+    },
     "candidate": {
       "oneOf": [
         { "$ref": "#/$defs/config" },
@@ -187,7 +219,8 @@
         { "$ref": "#/$defs/environmentPath" },
         { "$ref": "#/$defs/path" },
         { "$ref": "#/$defs/fixed" },
-        { "$ref": "#/$defs/glob" }
+        { "$ref": "#/$defs/glob" },
+        { "$ref": "#/$defs/jsonPath" }
       ]
     },
     "discovery": {

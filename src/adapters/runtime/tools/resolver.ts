@@ -1,4 +1,4 @@
-import { access, glob, realpath, stat } from "node:fs/promises";
+import { access, glob, readFile, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import { constants } from "node:fs";
 import { runProcess } from "../../../core/process/process-runner.js";
@@ -20,6 +20,7 @@ export interface ResolvedToolLaunch {
   environmentId: string;
   discoveryId: string;
   discoveredPath: string;
+  discoveredRoot?: string;
   candidateId: string;
   discoveryResult: RuleObject;
   probeResult?: RuleObject;
@@ -29,6 +30,7 @@ export interface ResolvedToolLaunch {
 
 interface DiscoveryResolution {
   path: string;
+  root?: string;
   candidateId: string;
 }
 
@@ -36,6 +38,7 @@ interface CandidatePaths {
   /** Whether an explicitly configured candidate was actually configured. */
   configured: boolean;
   paths: string[];
+  roots?: Map<string, string>;
 }
 
 const platformEnabled = (candidate: RuleObject, platform: string) =>
@@ -329,6 +332,7 @@ export class ToolResolver {
         ),
         discoveryId,
         discoveredPath: resolved.path,
+        discoveredRoot: resolved.root,
         candidateId: resolved.candidateId,
         discoveryResult: {
           path: resolved.path,
@@ -368,7 +372,11 @@ export class ToolResolver {
           this.platform,
         );
         if (resolved)
-          return { path: resolved, candidateId: String(candidate.id) };
+          return {
+            path: resolved,
+            root: result.roots?.get(candidatePath),
+            candidateId: String(candidate.id),
+          };
       }
       if (explicit)
         throw new AdapterRuntimeError(
@@ -452,6 +460,38 @@ export class ToolResolver {
       return {
         configured: true,
         paths: matches.sort((left, right) => left.localeCompare(right)),
+      };
+    }
+    if (type === "json-path") {
+      const file = String(
+        renderRequiredTemplate(candidate.file, context, "JSON path") ?? "",
+      );
+      const document = await readFile(file, "utf8")
+        .then((source) => JSON.parse(source))
+        .catch(() => undefined);
+      const records = lookup(
+        object(document),
+        String(candidate.collection ?? ""),
+      );
+      const field = String(candidate.path ?? "");
+      const append = Array.isArray(candidate.append)
+        ? candidate.append.map(String)
+        : [];
+      const roots = new Map<string, string>();
+      const paths =
+        records && typeof records === "object" && !Array.isArray(records)
+          ? Object.values(records).flatMap((record) => {
+              const value = lookup(object(record), field);
+              if (typeof value !== "string" || !value.trim()) return [];
+              const resolved = path.resolve(value, ...append);
+              roots.set(resolved, value);
+              return [resolved];
+            })
+          : [];
+      return {
+        configured: true,
+        paths,
+        roots,
       };
     }
     return { configured: true, paths: [] };

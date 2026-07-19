@@ -158,7 +158,7 @@ const capabilityFor = (
             error.retryable,
             undefined,
             error.recovery,
-            error.details,
+            { adapterId: adapter.bundle.id, ...error.details },
           );
         throw error;
       }
@@ -349,9 +349,11 @@ export const createDeclarativeAdapter = (runtime: RuntimeAdapter): Adapter => {
               environmentId: current.environmentId,
               discoveryId: current.discoveryId,
               discoveredPath: current.discoveredPath,
+              discoveredRoot: current.discoveredRoot,
             };
             discoveryContext[current.discoveryId] = {
               path: current.discoveredPath,
+              root: current.discoveredRoot,
               candidateId: current.candidateId,
             };
           }

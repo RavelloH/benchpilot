@@ -6,6 +6,7 @@ platform = "windows"
 candidates = [
   { id = "config", type = "config", priority = 100, key = "python_path" },
   { id = "idf-python-env", type = "environment-path", priority = 90, variable = "IDF_PYTHON_ENV_PATH", append = ["Scripts", "python.exe"] },
+  { id = "windows-user-idf-python", type = "glob", priority = 70, patterns = ["${home}/.espressif/python_env/idf*_py*_env/Scripts/python.exe"] },
   { id = "path", type = "path", priority = 50, names = ["python.exe", "python"] },
   { id = "windows-idf-python", type = "glob", priority = 10, patterns = ["C:/Espressif/python_env/idf*_py*_env/Scripts/python.exe"], platforms = { windows = true, linux = false, macos = false } }
 ]
@@ -17,6 +18,16 @@ candidates = [
   { id = "path", type = "path", priority = 50, names = ["python.exe", "python"] }
 ]
 
+[overrides.discoveries.idf]
+candidates = [
+  { id = "config-idf-py", type = "config", priority = 100, key = "idf_py_path" },
+  { id = "config-idf-root", type = "config-path", priority = 90, key = "idf_path", append = ["tools", "idf.py"] },
+  { id = "idf-path", type = "environment-path", priority = 80, variable = "IDF_PATH", append = ["tools", "idf.py"] },
+  { id = "path", type = "path", priority = 50, names = ["idf.py"] },
+  { id = "esp-idf-installations", type = "json-path", priority = 20, file = "${home}/.espressif/idf-env.json", collection = "idfInstalled", path = "path", append = ["tools", "idf.py"] },
+  { id = "windows-idf", type = "glob", priority = 10, patterns = ["C:/Espressif/frameworks/esp-idf-v*/tools/idf.py"], platforms = { windows = true, linux = false, macos = false } }
+]
+
 [overrides.environments.idf]
 providers = [
   { id = "active", type = "active", priority = 100, required_variables = ["IDF_PATH", "IDF_PYTHON_ENV_PATH"] },
@@ -25,5 +36,6 @@ providers = [
   { id = "idf-export-ps1", type = "capture-script", priority = 70, script = "${config.idf_path}/export.ps1", shell = "powershell" },
   { id = "idf-export-bat", type = "capture-script", priority = 60, script = "${config.idf_path}/export.bat", shell = "cmd" },
   { id = "env-idf-export-ps1", type = "capture-script", priority = 50, script = "${env.IDF_PATH}/export.ps1", shell = "powershell" },
-  { id = "env-idf-export-bat", type = "capture-script", priority = 40, script = "${env.IDF_PATH}/export.bat", shell = "cmd" }
+  { id = "env-idf-export-bat", type = "capture-script", priority = 40, script = "${env.IDF_PATH}/export.bat", shell = "cmd" },
+  { id = "registered-idf-export-bat", type = "capture-script", priority = 30, script = "${discovery.idf.root}/export.bat", shell = "cmd" }
 ]

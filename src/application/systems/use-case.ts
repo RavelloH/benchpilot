@@ -83,7 +83,12 @@ export class SystemUseCases {
       .capability;
   }
 
-  async execute(name: string, capability: string, capabilityInput?: Json) {
+  async execute(
+    name: string,
+    capability: string,
+    capabilityInput?: Json,
+    options?: { executionMode?: "interactive" },
+  ) {
     const devices = this.members(name);
     this.dependencies.runner.emitSystemEvent("system.operation.started", {
       system: name,
@@ -96,6 +101,7 @@ export class SystemUseCases {
         devices,
         runner: this.dependencies.runner,
         capabilityInput,
+        executionMode: options?.executionMode,
       });
       if (result.results.some((item) => !item.ok))
         throw Object.assign(
@@ -177,6 +183,7 @@ export async function executeSystemCapability(input: {
   runner: OperationRunner;
   capabilityInput?: Json;
   policy?: SystemExecutionPolicy;
+  executionMode?: "interactive";
 }): Promise<SystemOperationResult> {
   const available = await systemCapabilityIntersection(input);
   if (!available.some((candidate) => candidate.id === input.capability))
@@ -230,6 +237,7 @@ export async function executeSystemCapability(input: {
       {
         eventScope: "child",
         eventContext: { system: input.system, device },
+        executionMode: input.executionMode,
       },
     );
   if (policy === "parallel") {

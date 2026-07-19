@@ -94,12 +94,14 @@ export class DeviceUseCases {
     device: string;
     capability: string;
     capabilityInput: Json;
+    executionMode?: "interactive";
   }) {
     await this.capability(input.device, input.capability);
     return this.dependencies.runner.execute(
       input.device,
       input.capability,
       input.capabilityInput,
+      input.executionMode ? { executionMode: input.executionMode } : undefined,
     );
   }
 }

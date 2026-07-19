@@ -74,9 +74,11 @@ export const executeDeviceCommandSource = async (
       environmentId: current.environmentId,
       discoveryId: current.discoveryId,
       discoveredPath: current.discoveredPath,
+      discoveredRoot: current.discoveredRoot,
     };
     (context.discovery as Record<string, RuleObject>)[current.discoveryId] = {
       path: current.discoveredPath,
+      root: current.discoveredRoot,
       candidateId: current.candidateId,
     };
   }

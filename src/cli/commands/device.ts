@@ -17,6 +17,11 @@ interface DeviceCommandContext {
   devices: DeviceUseCases;
   catalog: CommandCatalog;
   locale: Locale;
+  confirmSafety?: () => Promise<boolean>;
+  confirmApproval?: () => Promise<boolean>;
+  requiresApproval?: (
+    mode: "normal" | "caution" | "destructive" | "irreversible",
+  ) => boolean;
 }
 
 export async function handleDeviceCommand({
@@ -26,6 +31,9 @@ export async function handleDeviceCommand({
   devices,
   catalog,
   locale,
+  confirmSafety,
+  confirmApproval,
+  requiresApproval,
 }: DeviceCommandContext): Promise<boolean> {
   if (parts[0] === "device" && parts[1]) {
     const device = await devices.describe(parts[1], locale);
@@ -82,15 +90,28 @@ export async function handleDeviceCommand({
       definition.safety.flag,
       parts.slice(3),
     );
-    if (definition.safety.mode !== "normal" && definition.safety.flag)
-      flags[definition.safety.flag] = optionEnabled(
-        rawOptions,
-        definition.safety.flag,
-      );
+    const interactiveExecution =
+      definition.safety.mode !== "normal" && confirmSafety !== undefined;
+    if (definition.safety.mode !== "normal" && definition.safety.flag) {
+      if (confirmSafety) {
+        if (!(await confirmSafety())) return true;
+      } else
+        flags[definition.safety.flag] = optionEnabled(
+          rawOptions,
+          definition.safety.flag,
+        );
+    }
+    const approvalRequired =
+      requiresApproval?.(definition.safety.mode) === true;
+    if (approvalRequired && confirmApproval && !(await confirmApproval()))
+      return true;
     const result = await devices.execute({
       device: parts[1],
       capability,
       capabilityInput: input,
+      ...(interactiveExecution
+        ? { executionMode: "interactive" as const }
+        : {}),
     });
     const r = result as Json;
     write(

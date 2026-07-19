@@ -1,6 +1,14 @@
 #!/usr/bin/env node
 import { stdin, stdout } from "node:process";
-import { Adapter, BenchPilotError, EventWriter, fail, Json } from "../core.js";
+import {
+  Adapter,
+  approvalLevel,
+  BenchPilotError,
+  EventWriter,
+  fail,
+  Json,
+  requiresApproval,
+} from "../core.js";
 import { loadBuiltinAdapters } from "../adapters/runtime/builtin-adapters.js";
 import { createApplication } from "../application/application.js";
 import { openApplicationRequest } from "../application/request-scope.js";
@@ -153,6 +161,7 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
   let replay: Omit<MainResume, "path"> | undefined;
   let invokedPath: readonly string[] = [];
   let selectedCommandEmitted = false;
+  let renderAdapterDoctor: ((adapterId: string) => Promise<void>) | undefined;
   try {
     const parsed = resume ?? parse(process.argv.slice(2));
     let parts = [...parsed.path];
@@ -612,6 +621,13 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
       ?.locale;
     const locale = isLocale(configuredLocale) ? configuredLocale : "en";
     presentationLocale = locale;
+    const canConfirmOperationInteractively =
+      !flags.agent &&
+      !agent &&
+      !flags.json &&
+      !flags.jsonl &&
+      stdin.isTTY &&
+      stdout.isTTY;
     const commandChoice = (
       command: string,
       summary: string,
@@ -626,6 +642,20 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
         value: entry.value,
         label: commandChoice(entry.value, entry.summary, width),
       }));
+    };
+    renderAdapterDoctor = async (adapterId) => {
+      writeText(
+        `\n${terminalTheme(colorEnabled(flags, stdout.isTTY)).debug(`$ benchpilot adapter ${adapterId} doctor`)}\n\n`,
+      );
+      writeDataPage({
+        page: adapterDoctorDataPage(
+          await queries.adapterDoctor(adapterId, presentationLocale),
+        ),
+        flags,
+        locale: presentationLocale,
+        view: "normal",
+        color: colorEnabled(flags, stdout.isTTY),
+      });
     };
     if (parts[0] === "language") {
       const globalLayer = config.layers.find(
@@ -1603,6 +1633,20 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
         devices,
         catalog,
         locale,
+        ...(canConfirmOperationInteractively
+          ? {
+              confirmSafety: () =>
+                interactive(locale, parts).confirm(
+                  t(locale, "approval.safetyConfirm"),
+                ),
+              confirmApproval: () =>
+                interactive(locale, parts).confirm(
+                  t(locale, "approval.confirm.operation"),
+                ),
+              requiresApproval: (mode) =>
+                requiresApproval(approvalLevel(config.value), mode),
+            }
+          : {}),
       })
     )
       return;
@@ -1636,12 +1680,37 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
         definition.safety.flag,
         parts.slice(3),
       );
-      if (definition.safety.mode !== "normal" && definition.safety.flag)
-        flags[definition.safety.flag] = optionEnabled(
-          rawOptions,
-          definition.safety.flag,
-        );
-      const result = await systems.execute(parts[1], parts[2], input);
+      if (definition.safety.mode !== "normal" && definition.safety.flag) {
+        if (canConfirmOperationInteractively) {
+          if (
+            !(await interactive(locale, parts).confirm(
+              t(locale, "approval.safetyConfirm"),
+            ))
+          )
+            return;
+        } else
+          flags[definition.safety.flag] = optionEnabled(
+            rawOptions,
+            definition.safety.flag,
+          );
+      }
+      if (
+        canConfirmOperationInteractively &&
+        requiresApproval(approvalLevel(config.value), definition.safety.mode)
+      ) {
+        if (
+          !(await interactive(locale, parts).confirm(
+            t(locale, "approval.confirm.operation"),
+          ))
+        )
+          return;
+      }
+      const result = await systems.execute(parts[1], parts[2], input, {
+        ...(canConfirmOperationInteractively &&
+        definition.safety.mode !== "normal"
+          ? { executionMode: "interactive" as const }
+          : {}),
+      });
       if (!flags.jsonl) write(result, flags);
       return;
     }
@@ -1759,6 +1828,19 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
           }
         : {}),
     });
+    const adapterId =
+      typeof (err.details as { adapterId?: unknown }).adapterId === "string"
+        ? (err.details as { adapterId: string }).adapterId
+        : undefined;
+    if (
+      err.kind.startsWith("ADAPTER_") &&
+      adapterId &&
+      renderAdapterDoctor &&
+      !flags.agent &&
+      !flags.json &&
+      !flags.jsonl
+    )
+      await renderAdapterDoctor(adapterId).catch(() => undefined);
     process.exitCode = err.exitCode;
   } finally {
     interaction?.close();

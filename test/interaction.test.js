@@ -29,6 +29,7 @@ import {
   humanErrorMessage,
   writeFailure,
 } from "../dist/cli/output-renderer.js";
+import { handleDeviceCommand } from "../dist/cli/commands/device.js";
 import { t } from "../dist/i18n/index.js";
 import { shouldShowWordmark } from "../dist/cli/presentation/theme.js";
 import { renderVersion } from "../dist/cli/presentation/version.js";
@@ -206,6 +207,63 @@ test("interactive lock clear asks for confirmation before clearing a quarantined
     },
   ]);
   assert.deepEqual(calls, [{ action: "lock.show", id: "quarantined-lock" }]);
+});
+
+test("interactive device execution confirms safety and approval before running", async () => {
+  const originalWrite = process.stdout.write;
+  const flags = {};
+  const calls = [];
+  process.stdout.write = () => true;
+  try {
+    const handled = await handleDeviceCommand({
+      parts: ["device", "fixture", "flash"],
+      flags,
+      rawOptions: [],
+      locale: "en",
+      catalog: { executable: async () => ({}) },
+      devices: {
+        describe: async () => ({ capabilities: [] }),
+        capability: async () => ({
+          capability: {
+            id: "flash",
+            summary: "Flash firmware",
+            options: [],
+            safety: { mode: "destructive", flag: "approve-flash" },
+          },
+        }),
+        execute: async (input) => {
+          calls.push({ type: "execute", input });
+          return { ok: true };
+        },
+      },
+      confirmSafety: async () => {
+        calls.push({ type: "safety" });
+        return true;
+      },
+      confirmApproval: async () => {
+        calls.push({ type: "approval" });
+        return true;
+      },
+      requiresApproval: () => true,
+    });
+    assert.equal(handled, true);
+  } finally {
+    process.stdout.write = originalWrite;
+  }
+  assert.equal(flags["approve-flash"], undefined);
+  assert.deepEqual(calls, [
+    { type: "safety" },
+    { type: "approval" },
+    {
+      type: "execute",
+      input: {
+        device: "fixture",
+        capability: "flash",
+        capabilityInput: {},
+        executionMode: "interactive",
+      },
+    },
+  ]);
 });
 
 test("screen catalogs provide localized text and leave machine protocol out of translation", () => {
