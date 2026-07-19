@@ -4,7 +4,11 @@ import { Adapter, BenchPilotError, EventWriter, fail, Json } from "../core.js";
 import { loadBuiltinAdapters } from "../adapters/runtime/builtin-adapters.js";
 import { createApplication } from "../application/application.js";
 import { openApplicationRequest } from "../application/request-scope.js";
-import { readProjectLocale } from "../application/config/locale.js";
+import {
+  readGlobalLocale,
+  readGlobalLocaleSetting,
+  writeGlobalLocale,
+} from "../application/config/locale.js";
 import {
   brief,
   commandGroups,
@@ -59,6 +63,7 @@ import {
 } from "./upgrade.js";
 import { upgradeCheckDataPage, upgradeResultDataPage } from "./data/upgrade.js";
 import { doctorDataPage } from "./data/doctor.js";
+import { initDataPage } from "./data/init.js";
 
 const version = "0.0.0";
 const supportedLanguages = [
@@ -201,10 +206,7 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
         view,
       });
     const loadPresentationLocale = async () => {
-      const locale = await readProjectLocale({
-        cwd: process.cwd(),
-        configPath: flags.config as string | undefined,
-      });
+      const locale = await readGlobalLocale();
       presentationLocale = locale;
       return locale;
     };
@@ -437,30 +439,56 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
     }
     if (parts[0] === "init") {
       const suppliedLocale = commandFlags.locale;
-      const initLocale: Locale = isLocale(suppliedLocale)
+      if (commandFlags["project-id"] !== undefined)
+        fail(
+          "USAGE_ERROR",
+          2,
+          "init generates the project ID automatically; omit --project-id.",
+        );
+      const persistedLocale = await readGlobalLocaleSetting();
+      const requestedLocale = isLocale(suppliedLocale)
         ? suppliedLocale
-        : "en";
-      const projectId =
-        typeof commandFlags["project-id"] === "string"
-          ? String(commandFlags["project-id"])
-          : undefined;
+        : undefined;
+      const initLocale: Locale = persistedLocale ?? requestedLocale ?? "en";
       const projectName =
         typeof commandFlags["project-name"] === "string"
           ? String(commandFlags["project-name"])
           : undefined;
-      let input =
-        projectId && projectName && isLocale(suppliedLocale)
-          ? { projectId, projectName, locale: suppliedLocale }
-          : undefined;
-      if (!input) {
-        const decision = interactionDecision({
-          agent,
-          agentMode: flags.agent === true,
-          json: flags.json,
-          jsonl: flags.jsonl,
-          stdinIsTTY: stdin.isTTY,
-          stdoutIsTTY: stdout.isTTY,
+      const app = createApplication([]);
+      if (await app.hasProjectConfig(process.cwd())) {
+        presentationLocale = initLocale;
+        writeSelectedCommand();
+        const result = await app.initializeProject({
+          cwd: process.cwd(),
+          projectName: "",
+          enabledAdapters: [],
         });
+        writeDataPage({
+          page: initDataPage(result),
+          flags,
+          locale: initLocale,
+          view: currentPresentationView(),
+          color: colorEnabled(flags, stdout.isTTY),
+        });
+        return;
+      }
+      let input =
+        projectName && (persistedLocale || requestedLocale)
+          ? {
+              projectName,
+              locale: persistedLocale ?? requestedLocale!,
+              enabledAdapters: [] as string[],
+            }
+          : undefined;
+      const decision = interactionDecision({
+        agent,
+        agentMode: flags.agent === true,
+        json: flags.json,
+        jsonl: flags.jsonl,
+        stdinIsTTY: stdin.isTTY,
+        stdoutIsTTY: stdout.isTTY,
+      });
+      if (!input || decision.allowed) {
         if (!decision.allowed) {
           const kind =
             decision.reason === "agent"
@@ -481,14 +509,19 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
           });
         }
         try {
+          const session = interactive(initLocale, ["init"]);
+          const available = adapters ?? (await loadBuiltinAdapters());
+          const theme = terminalTheme(colorEnabled(flags, stdout.isTTY));
           input = await promptInit({
             locale: initLocale,
-            projectId,
             projectName,
+            adapters: available.map((adapter) => ({
+              value: adapter.id,
+              label: `${theme.command(adapter.id)}  ${adapter.summary}`,
+            })),
             color: colorEnabled(flags, stdout.isTTY),
-            selectedLocale: isLocale(suppliedLocale)
-              ? suppliedLocale
-              : undefined,
+            session,
+            selectedLocale: persistedLocale ?? requestedLocale,
           });
         } catch (error) {
           if ((error as Error).name === "INTERACTION_CANCELLED")
@@ -501,13 +534,20 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
         }
       }
       presentationLocale = input.locale;
-      const app = createApplication([]);
       writeSelectedCommand();
-      write(
-        await app.initializeProject({ cwd: process.cwd(), ...input }),
+      const result = await app.initializeProject({
+        cwd: process.cwd(),
+        projectName: input.projectName,
+        enabledAdapters: input.enabledAdapters,
+      });
+      if (!persistedLocale) await writeGlobalLocale({ locale: input.locale });
+      writeDataPage({
+        page: initDataPage(result),
         flags,
-        t(input.locale, "init.done"),
-      );
+        locale: input.locale,
+        view: currentPresentationView(),
+        color: colorEnabled(flags, stdout.isTTY),
+      });
       return;
     }
     const declared = adapters ?? (await loadBuiltinAdapters());
@@ -529,7 +569,9 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
       configurationCommands,
       catalog,
     } = scope;
-    const configuredLocale = (config.value.cli as Json | undefined)?.locale;
+    const globalLayer = config.layers.find((layer) => layer.scope === "global");
+    const configuredLocale = (globalLayer?.value.cli as Json | undefined)
+      ?.locale;
     const locale = isLocale(configuredLocale) ? configuredLocale : "en";
     presentationLocale = locale;
     const commandChoice = (

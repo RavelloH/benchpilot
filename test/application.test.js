@@ -284,42 +284,50 @@ test("runtime command use case owns administrative action dispatch", async () =>
   assert.deepEqual(calls.at(-1), ["approve", "a"]);
 });
 
-test("init creates the minimum project files and preserves them on repeat", async () => {
+test("init creates the minimum project files and applies an existing configuration on repeat", async () => {
   const cwd = await mkdtemp(path.join(os.tmpdir(), "benchpilot-init-"));
   try {
     const result = await initializeProject({
       cwd,
-      projectId: "demo",
       projectName: "Demo project",
-      locale: "zh-CN",
+      enabledAdapters: [],
     });
-    assert.deepEqual(result.project, { id: "demo", name: "Demo project" });
+    assert.equal(result.existing, false);
+    assert.match(result.project.id, /^project-[0-9a-f-]{36}$/);
+    assert.equal(result.project.name, "Demo project");
     const config = path.join(cwd, "benchpilot.toml");
     const local = path.join(cwd, ".benchpilot", "config.local.toml");
     const gitignore = path.join(cwd, ".benchpilot", ".gitignore");
-    assert.match(await readFile(config, "utf8"), /id = "demo"/);
-    assert.match(await readFile(local, "utf8"), /locale = "zh-CN"/);
+    assert.match(
+      await readFile(config, "utf8"),
+      /id = "project-[0-9a-f-]{36}"/,
+    );
+    assert.match(await readFile(config, "utf8"), /enabled = \[ ?\]/);
     assert.match(await readFile(local, "utf8"), /level = "default"/);
     assert.equal(await readFile(gitignore, "utf8"), "*\n!.gitignore\n");
-    const paths = new PathService({ TEMP: path.join(cwd, "runtime") }, "win32");
+    const paths = new PathService(
+      { TEMP: path.join(cwd, "runtime") },
+      "win32",
+      cwd,
+    );
     const resolved = await loadApplicationConfig(
       paths,
       await paths.project(cwd),
     );
-    assert.equal(resolved.value.cli.locale, "zh-CN");
     assert.equal(resolved.value.approval.level, "default");
-    assert.equal(resolved.origins.get("cli.locale")?.scope, "project-local");
+    assert.equal(resolved.value.cli, undefined);
     const before = await readFile(config, "utf8");
-    await assert.rejects(
-      initializeProject({
-        cwd,
-        projectId: "other",
-        projectName: "Other",
-        locale: "en",
-      }),
-      (error) =>
-        error instanceof BenchPilotError && error.kind === "CONFIG_EXISTS",
-    );
+    const repeated = await initializeProject({
+      cwd,
+      projectName: "Other",
+      enabledAdapters: [],
+    });
+    assert.equal(repeated.existing, true);
+    assert.deepEqual(repeated.config, {
+      version: 1,
+      project: { id: result.project.id, name: "Demo project" },
+      adapters: { enabled: [] },
+    });
     assert.equal(await readFile(config, "utf8"), before);
   } finally {
     await rm(cwd, { recursive: true, force: true });
@@ -335,15 +343,50 @@ test("init refuses to overwrite local initialization files before creating a pro
     await assert.rejects(
       initializeProject({
         cwd,
-        projectId: "demo",
         projectName: "Demo",
-        locale: "en",
+        enabledAdapters: [],
       }),
       (error) =>
         error instanceof BenchPilotError && error.kind === "INIT_TARGET_EXISTS",
     );
     await assert.rejects(access(path.join(cwd, "benchpilot.toml")));
     assert.match(await readFile(local, "utf8"), /locale = "en"/);
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
+
+test("init adopts an existing project file and creates its local directory", async () => {
+  const cwd = await mkdtemp(
+    path.join(os.tmpdir(), "benchpilot-init-existing-"),
+  );
+  try {
+    const config = path.join(cwd, "benchpilot.toml");
+    await writeFile(
+      config,
+      'version = 1\n[project]\nid = "legacy-project"\nname = "Legacy project"\n[adapters]\nenabled = ["esp-idf"]\n',
+    );
+    const before = await readFile(config, "utf8");
+    const result = await initializeProject({
+      cwd,
+      projectName: "Ignored",
+      enabledAdapters: [],
+    });
+    assert.equal(result.existing, true);
+    assert.equal(result.project.id, "legacy-project");
+    assert.deepEqual(result.adapters.enabled, ["esp-idf"]);
+    assert.equal(await readFile(config, "utf8"), before);
+    assert.match(
+      await readFile(
+        path.join(cwd, ".benchpilot", "config.local.toml"),
+        "utf8",
+      ),
+      /level = "default"/,
+    );
+    assert.equal(
+      await readFile(path.join(cwd, ".benchpilot", ".gitignore"), "utf8"),
+      "*\n!.gitignore\n",
+    );
   } finally {
     await rm(cwd, { recursive: true, force: true });
   }

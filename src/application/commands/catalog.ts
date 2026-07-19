@@ -162,9 +162,8 @@ export const commandRoots: readonly CommandNode[] = [
     path: ["init"],
     summaryKey: "command.init",
     fields: [
-      { name: "project-id", required: true },
       { name: "project-name", required: true },
-      { name: "locale", required: true },
+      { name: "locale", required: false },
     ],
     interaction: "when-incomplete",
   },

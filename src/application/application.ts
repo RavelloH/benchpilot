@@ -1,6 +1,7 @@
 import type { Adapter } from "../core.js";
 import { AdapterRegistry } from "../core.js";
 import {
+  hasProjectConfig,
   initializeProject,
   type InitializeProjectInput,
 } from "./init/use-case.js";
@@ -15,6 +16,7 @@ export function createApplication(adapters: Adapter[]) {
     registry,
     commandRoots: () => commandRoots,
     editConfiguration,
+    hasProjectConfig,
     initializeProject: (input: InitializeProjectInput) =>
       initializeProject(input),
   };

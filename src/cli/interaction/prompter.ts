@@ -1,4 +1,4 @@
-import { confirm, input, select } from "@inquirer/prompts";
+import { checkbox, confirm, input, select } from "@inquirer/prompts";
 import searchPrompt from "@inquirer/search";
 import { Separator } from "@inquirer/select";
 import {
@@ -68,6 +68,16 @@ export interface InteractionDriver {
     exitConfirmation?: boolean;
     ignoreInitialEscape?: boolean;
   }): Promise<string | undefined>;
+  chooseMany?(input: {
+    message: string;
+    choices: readonly PromptChoice[];
+    pageSize?: number;
+  }): Promise<
+    | readonly string[]
+    | typeof INTERACTION_BACK
+    | typeof INTERACTION_EXIT
+    | undefined
+  >;
   value(input: {
     message: string;
     validate: (value: string) => true | string;
@@ -401,6 +411,31 @@ const createInquirerDriver = (
       ),
     );
   },
+  chooseMany: async ({ message, choices, pageSize }) =>
+    withShortcuts((context) =>
+      checkbox(
+        {
+          message,
+          choices: choices.map((choice) => ({
+            name: choice.label || choice.value,
+            value: choice.value,
+            description: choice.description,
+          })),
+          pageSize,
+          theme: {
+            prefix: terminalTheme(color).argument("?"),
+            icon: {
+              checked: " ●",
+              unchecked: " ○",
+            },
+            style: {
+              keysHelpTip: () => t(locale, "menu.multiKeysHelp"),
+            },
+          },
+        },
+        context,
+      ),
+    ),
   value: async ({ message, validate }) => input({ message, validate }),
   confirm: async ({ message, default: defaultValue }) =>
     confirm({ message, default: defaultValue }),
@@ -441,7 +476,7 @@ export class InteractionSession {
   private readonly driver: InteractionDriver;
 
   constructor(
-    private readonly locale: Locale,
+    private locale: Locale,
     driver?: InteractionDriver,
     private readonly color = false,
     initialBackPaths: readonly (readonly string[])[] = [],
@@ -527,6 +562,37 @@ export class InteractionSession {
     return value.trim();
   }
 
+  async chooseMany(
+    message: string,
+    choices: readonly PromptChoice[],
+  ): Promise<string[]> {
+    if (!choices.length) return [];
+    const chooseMany = this.driver.chooseMany;
+    if (!chooseMany)
+      throw new Error(
+        "The interaction driver does not support multi-selection.",
+      );
+    let values:
+      | readonly string[]
+      | typeof INTERACTION_BACK
+      | typeof INTERACTION_EXIT
+      | undefined;
+    try {
+      values = await chooseMany({ message, choices, pageSize: 100 });
+    } catch (error) {
+      if (!isPromptCancellation(error)) throw error;
+      this.cancelled = true;
+    }
+    if (this.cancelled || !values) throw new InteractionCancelledError();
+    if (values === INTERACTION_EXIT) throw new InteractionExitedError();
+    if (values === INTERACTION_BACK) {
+      const path = this.backPaths.at(-1);
+      if (!path) throw new InteractionCancelledError();
+      throw new InteractionBackError(path, this.backPaths.slice(0, -1));
+    }
+    return [...values];
+  }
+
   async confirm(message: string): Promise<boolean> {
     try {
       return (
@@ -541,31 +607,43 @@ export class InteractionSession {
   }
 
   close() {}
+
+  /**
+   * Init selects its locale inside the session. Subsequent field prompts must
+   * immediately use that choice without creating a disconnected session.
+   */
+  setLocale(locale: Locale) {
+    this.locale = locale;
+  }
 }
 
 export async function promptInit(input: {
   locale: Locale;
-  projectId?: string;
   projectName?: string;
+  adapters?: readonly PromptChoice[];
   selectedLocale?: Locale;
+  session?: InteractionSession;
   driver?: InteractionDriver;
   color?: boolean;
-}): Promise<{ projectId: string; projectName: string; locale: Locale }> {
-  const bootstrap = new InteractionSession(
-    input.locale,
-    input.driver,
-    input.color,
-  );
+}): Promise<{
+  projectName: string;
+  locale: Locale;
+  enabledAdapters: string[];
+}> {
+  const session =
+    input.session ??
+    new InteractionSession(input.locale, input.driver, input.color);
   const locale =
     input.selectedLocale ??
-    ((await bootstrap.choose([
+    ((await session.choose([
       { value: "en", label: "English" },
       { value: "zh-CN", label: "简体中文" },
     ])) as Locale);
-  const session = new InteractionSession(locale, input.driver, input.color);
-  const projectId =
-    input.projectId ?? (await session.value(t(locale, "init.projectId")));
+  session.setLocale(locale);
   const projectName =
     input.projectName ?? (await session.value(t(locale, "init.projectName")));
-  return { projectId, projectName, locale };
+  const enabledAdapters = input.adapters
+    ? await session.chooseMany(t(locale, "init.adapters"), input.adapters)
+    : [];
+  return { projectName, locale, enabledAdapters };
 }

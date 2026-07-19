@@ -9,6 +9,7 @@ import {
   type PathService,
   type ResolvedConfig,
 } from "../../core.js";
+import { t, type Locale } from "../../i18n/index.js";
 
 export interface QueryUseCaseDependencies {
   registry: AdapterRegistry;
@@ -87,7 +88,12 @@ export class QueryUseCases {
     return { valid: true as const };
   }
 
-  async doctor(locale = "en") {
+  async doctor(locale: Locale = "en") {
+    const hasProject = this.dependencies.project !== undefined;
+    const hasProjectLocal = this.dependencies.config.layers.some(
+      (layer) => layer.scope === "project-local",
+    );
+    const adapterCount = this.dependencies.registry.list().length;
     const checks: Json[] = [
       {
         id: "node",
@@ -98,7 +104,7 @@ export class QueryUseCases {
       },
       {
         id: "project",
-        status: this.dependencies.project ? "pass" : "warn",
+        status: hasProject ? "pass" : "warn",
         message: this.dependencies.project
           ? this.dependencies.project.root
           : "No project discovered",
@@ -106,7 +112,25 @@ export class QueryUseCases {
       {
         id: "config",
         status: "pass",
-        message: "TOML and configuration schema valid",
+        message: t(locale, "doctor.configValid"),
+      },
+      {
+        id: "project-local",
+        status: !hasProject ? "unknown" : hasProjectLocal ? "pass" : "warn",
+        message: !hasProject
+          ? t(locale, "doctor.projectLocalUnavailable")
+          : hasProjectLocal
+            ? t(locale, "doctor.projectLocalReady")
+            : t(locale, "doctor.projectLocalMissing"),
+      },
+      {
+        id: "adapters",
+        status: adapterCount ? "pass" : "warn",
+        message: t(
+          locale,
+          adapterCount ? "doctor.adaptersEnabled" : "doctor.adaptersNone",
+          { count: adapterCount },
+        ),
       },
     ];
     for (const adapter of this.dependencies.registry.list())

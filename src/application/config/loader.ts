@@ -81,6 +81,7 @@ export async function loadApplicationConfig(
       value: {
         version: 1,
         defaults: { timeout: "30s" },
+        adapters: { enabled: [] },
         approval: { level: "default" },
       },
     },

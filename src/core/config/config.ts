@@ -22,6 +22,7 @@ export interface ResolvedConfig {
 }
 
 const approvalLevels = new Set<ApprovalLevel>(["strict", "default", "bypass"]);
+const adapterId = /^[a-z][a-z0-9-]*$/;
 
 /**
  * Per-person, per-project policy for deciding which declared safety classes
@@ -43,6 +44,31 @@ export function requiresApproval(
   if (level === "bypass" || safetyMode === "normal") return false;
   if (level === "strict") return safetyMode === "human-approval";
   return safetyMode === "danger-flag";
+}
+
+/** Returns the project's explicit adapter allowlist. */
+export function enabledAdapterIds(config: Json): string[] {
+  const adapters = object(config.adapters) ? config.adapters : undefined;
+  const enabled = adapters?.enabled;
+  if (
+    !Array.isArray(enabled) ||
+    !enabled.every((id) => typeof id === "string")
+  ) {
+    fail(
+      "INVALID_ADAPTER_SELECTION",
+      3,
+      "adapters.enabled must be an array of adapter IDs.",
+    );
+    return [];
+  }
+  const ids = enabled as string[];
+  if (ids.some((id) => !adapterId.test(id)) || new Set(ids).size !== ids.length)
+    fail(
+      "INVALID_ADAPTER_SELECTION",
+      3,
+      "adapters.enabled must contain unique, valid adapter IDs.",
+    );
+  return [...ids];
 }
 
 const unsafeKey = (key: string) =>
@@ -134,6 +160,10 @@ export function validateConfig(c: Json) {
     );
   if (c.devices !== undefined && !object(c.devices))
     fail("INVALID_CONFIG", 3, "devices must be a table.");
+  if (c.adapters !== undefined && !object(c.adapters))
+    fail("INVALID_CONFIG", 3, "adapters must be a table.");
+  if (object(c.adapters) && c.adapters.enabled !== undefined)
+    enabledAdapterIds(c);
   if (c.approval !== undefined && !object(c.approval))
     fail("INVALID_CONFIG", 3, "approval must be a table.");
   const configuredApproval = c.approval as Json | undefined;

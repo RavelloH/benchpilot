@@ -101,6 +101,7 @@ export {
   approvalLevel,
   deleteKey,
   duration,
+  enabledAdapterIds,
   getKey,
   merge,
   redactResolvedConfig,

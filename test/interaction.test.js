@@ -567,26 +567,63 @@ test("interactive exit uses the localized error color on human terminals", async
   assert.match(exit.label, /\u001B\[38;5;203m退出/);
 });
 
-test("init selects a locale before collecting required project fields", async () => {
+test("init selects a locale before collecting the project name", async () => {
   assert.deepEqual(
     await promptInit({
       locale: "en",
-      driver: scriptedDriver("zh-CN", "demo", "演示项目"),
+      driver: scriptedDriver("zh-CN", "演示项目"),
     }),
     {
       locale: "zh-CN",
-      projectId: "demo",
       projectName: "演示项目",
+      enabledAdapters: [],
     },
   );
   assert.deepEqual(
     await promptInit({
       locale: "en",
       selectedLocale: "en",
-      driver: scriptedDriver("demo", "Demo"),
+      driver: scriptedDriver("Demo"),
     }),
-    { locale: "en", projectId: "demo", projectName: "Demo" },
+    { locale: "en", projectName: "Demo", enabledAdapters: [] },
   );
+});
+
+test("init records every adapter selected in its multi-select step", async () => {
+  const result = await promptInit({
+    locale: "en",
+    selectedLocale: "en",
+    adapters: [
+      { value: "esp-idf", label: "esp-idf  ESP-IDF" },
+      { value: "probe", label: "probe  Probe" },
+    ],
+    driver: {
+      choose: async () => "en",
+      value: async () => "Demo",
+      chooseMany: async () => ["esp-idf", "probe"],
+    },
+  });
+  assert.deepEqual(result, {
+    locale: "en",
+    projectName: "Demo",
+    enabledAdapters: ["esp-idf", "probe"],
+  });
+});
+
+test("init can continue an existing interaction session", async () => {
+  const session = new InteractionSession(
+    "en",
+    scriptedDriver("zh-CN", "演示项目"),
+  );
+  try {
+    assert.deepEqual(await promptInit({ locale: "en", session }), {
+      locale: "zh-CN",
+      projectName: "演示项目",
+      enabledAdapters: [],
+    });
+  } finally {
+    session.close();
+  }
 });
 
 test("presenter keeps machine failures on stdout and human failures on stderr", () => {

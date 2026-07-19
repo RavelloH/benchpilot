@@ -52,16 +52,7 @@ async function runAgent(dir, ...args) {
   });
 }
 async function initDemo(dir) {
-  await run(
-    dir,
-    "init",
-    "--project-id",
-    "demo",
-    "--project-name",
-    "Demo",
-    "--locale",
-    "en",
-  );
+  await run(dir, "init", "--project-name", "Demo", "--locale", "en");
   await writeFile(
     path.join(dir, "benchpilot.toml"),
     `version = 1
@@ -75,6 +66,9 @@ adapter = "demo"
 
 [systems.demo]
 devices = ["demo"]
+
+[adapters]
+enabled = ["demo"]
 
 [adapters.demo]
 connected = true
@@ -150,6 +144,75 @@ test("language persists the global CLI locale", async () => {
     );
     assert.equal((await run(dir, "language", "get")).stdout, "zh-CN\n");
     assert.match((await run(dir)).stdout, /面向 Agent 的设备生命周期 CLI/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("init bootstraps the global language and ignores legacy project locales", async () => {
+  const dir = await mkdtemp(
+    path.join(os.tmpdir(), "benchpilot-init-language-"),
+  );
+  try {
+    const initialized = await run(
+      dir,
+      "init",
+      "--project-name",
+      "Demo",
+      "--locale",
+      "zh-CN",
+    );
+    assert.match(initialized.stdout, /BenchPilot 项目已初始化。/);
+    assert.match(initialized.stdout, /项目 ID\s+project-[0-9a-f-]{36}/);
+    assert.match(initialized.stdout, /已启用适配器\s+无/);
+    assert.match(
+      await readFile(path.join(dir, ".benchpilot", "config.toml"), "utf8"),
+      /locale = "zh-CN"/,
+    );
+    const local = path.join(dir, ".benchpilot", "config.local.toml");
+    assert.doesNotMatch(await readFile(local, "utf8"), /locale/);
+
+    await writeFile(local, '[cli]\nlocale = "en"\n');
+    assert.match((await run(dir)).stdout, /面向 Agent 的设备生命周期 CLI/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("init applies an existing project configuration without prompting", async () => {
+  const dir = await mkdtemp(
+    path.join(os.tmpdir(), "benchpilot-init-existing-cli-"),
+  );
+  try {
+    await writeFile(
+      path.join(dir, "benchpilot.toml"),
+      'version = 1\n[project]\nid = "existing-project"\nname = "Existing project"\n[adapters]\nenabled = []\n',
+    );
+    const result = await run(dir, "init");
+    assert.match(
+      result.stdout,
+      /Applied existing BenchPilot project configuration/,
+    );
+    assert.match(result.stdout, /Existing project/);
+    await access(path.join(dir, ".benchpilot", "config.local.toml"));
+    const machine = JSON.parse((await run(dir, "init", "--json")).stdout);
+    assert.equal(machine.existing, true);
+    assert.equal(machine.config.project.id, "existing-project");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("doctor reports project-local configuration and enabled adapter readiness", async () => {
+  const dir = await mkdtemp(
+    path.join(os.tmpdir(), "benchpilot-doctor-readiness-"),
+  );
+  try {
+    await run(dir, "init", "--project-name", "Doctor", "--locale", "en");
+    const doctor = JSON.parse((await run(dir, "doctor", "--json")).stdout);
+    const checks = new Map(doctor.checks.map((check) => [check.id, check]));
+    assert.equal(checks.get("project-local").status, "pass");
+    assert.equal(checks.get("adapters").status, "warn");
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -631,10 +694,8 @@ test("init switches human error presentation to the selected locale", async () =
     const error = await run(
       dir,
       "init",
-      "--project-id",
-      "1invalid",
       "--project-name",
-      "项目",
+      " ",
       "--locale",
       "zh-CN",
     ).catch((failure) => failure);
@@ -645,19 +706,31 @@ test("init switches human error presentation to the selected locale", async () =
   }
 });
 
-test("human command help uses the project-local locale", async () => {
-  const dir = await mkdtemp(path.join(os.tmpdir(), "benchpilot-help-locale-"));
+test("init rejects a user-supplied project ID", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "benchpilot-init-id-"));
   try {
-    await run(
+    const error = await run(
       dir,
       "init",
       "--project-id",
-      "demo",
+      "manual-id",
       "--project-name",
-      "演示",
+      "Demo",
       "--locale",
-      "zh-CN",
-    );
+      "en",
+    ).catch((failure) => failure);
+    assert.equal(error.code, 2);
+    assert.match(error.stderr, /Usage error/);
+    await assert.rejects(access(path.join(dir, "benchpilot.toml")));
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("human command help uses the global locale", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "benchpilot-help-locale-"));
+  try {
+    await run(dir, "init", "--project-name", "演示", "--locale", "zh-CN");
     assert.match((await run(dir)).stdout, /面向 Agent 的设备生命周期 CLI/);
     assert.match((await run(dir, "help", "config")).stdout, /名称/);
     assert.match(
@@ -679,10 +752,7 @@ test("dynamic device help localizes its presentation labels", async () => {
   );
   try {
     await initDemo(dir);
-    await writeFile(
-      path.join(dir, ".benchpilot", "config.local.toml"),
-      '[cli]\nlocale = "zh-CN"\n',
-    );
+    await run(dir, "language", "set", "zh-CN");
     const result = await run(dir, "device", "demo", "--help");
     assert.match(result.stdout, /命令:/);
   } finally {
@@ -791,7 +861,7 @@ test("declarative demo executes build, deploy, and capture", async () => {
     );
     assert.deepEqual(
       adapters.data.adapters.map((adapter) => adapter.id),
-      ["demo", "esp-idf"],
+      ["demo"],
     );
     const built = JSON.parse(
       (await run(dir, "device", "demo", "build", "--json")).stdout,
@@ -973,6 +1043,8 @@ test("jsonl streams operation events before a delayed operation finishes", async
       path.join(dir, "benchpilot.toml"),
       [
         "version = 1",
+        "[adapters]",
+        'enabled = ["demo"]',
         "[devices.demo]",
         'adapter = "demo"',
         "[adapters.demo]",
@@ -1022,6 +1094,8 @@ test("jsonl emits one failed terminal event after cleanup", async () => {
       path.join(dir, "benchpilot.toml"),
       [
         "version = 1",
+        "[adapters]",
+        'enabled = ["demo"]',
         "[devices.demo]",
         'adapter = "demo"',
         "[adapters.demo]",
@@ -1057,6 +1131,8 @@ test("declarative demo aborts an action when the operation times out", async () 
       path.join(dir, "benchpilot.toml"),
       [
         "version = 1",
+        "[adapters]",
+        'enabled = ["demo"]',
         "[devices.demo]",
         'adapter = "demo"',
         "[adapters.demo]",
@@ -1093,6 +1169,8 @@ test("system JSONL emits child device events and one system terminal event", asy
       path.join(dir, "benchpilot.toml"),
       [
         "version = 1",
+        "[adapters]",
+        'enabled = ["demo"]',
         "[devices.left]",
         'adapter = "demo"',
         'device_id = "left"',
@@ -1140,6 +1218,8 @@ test("a failed system status waits for every child before its terminal event", a
       path.join(dir, "benchpilot.toml"),
       [
         "version = 1",
+        "[adapters]",
+        'enabled = ["test"]',
         "[devices.fast]",
         'adapter = "test"',
         "[devices.slow]",
@@ -1192,7 +1272,7 @@ test("injected adapter executes through the dynamic CLI route", async () => {
       await import("node:fs/promises")
     ).writeFile(
       path.join(dir, "benchpilot.toml"),
-      'version = 1\n[devices.test-device]\nadapter = "test"\n',
+      'version = 1\n[adapters]\nenabled = ["test"]\n[devices.test-device]\nadapter = "test"\n',
     );
     const module = path.resolve("dist/cli/index.js").replaceAll("\\", "/");
     const script = `import { main } from ${JSON.stringify(`file:///${module}`)}; const adapter = { id: "test", apiVersion: 1, version: "1", summary: "test adapter", configSchema: { parse: (value) => value, describe: () => ({ type: "object" }) }, discover: async () => [{ adapter: "test", id: "candidate" }], doctor: async () => [], createDevice: async (instance) => ({ identity: { instance, physicalId: "test-physical", adapter: "test" }, capabilities: () => [{ id: "echo", summary: "echo", defaultTimeoutMs: 1000, lockMode: "none", createsRun: false, safety: { mode: "normal" }, execute: async (_ctx, input) => ({ echoed: input.duration ?? "ok" }) }] }) }; process.argv = [process.execPath, "benchpilot", "device", "test-device", "echo", "--json"]; await main([adapter]);`;

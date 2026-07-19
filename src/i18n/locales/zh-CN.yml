@@ -5,6 +5,11 @@ cli:
     machine: "此命令需要交互式输入，不能与机器输出模式一起使用。"
     cancelled: "交互已取消。"
 init:
+  adapters: "选择要启用的适配器"
+  applied: "已套用现有 BenchPilot 项目配置。"
+  enabledAdapters: "已启用适配器"
+  none: "无"
+  project: "项目"
   projectId: "项目 ID"
   projectName: "项目名称"
   done: "BenchPilot 项目已初始化。"
@@ -13,6 +18,12 @@ command:
 doctor:
   local: "本地环境"
   adapter: "适配器：{adapter}"
+  configValid: "TOML 和配置架构有效"
+  projectLocalReady: "项目本地配置已就绪。"
+  projectLocalMissing: "缺少项目本地配置；请运行 benchpilot init 创建。"
+  projectLocalUnavailable: "项目外没有可用的项目本地配置。"
+  adaptersEnabled: "已安装 {count} 个已启用适配器。"
+  adaptersNone: "当前项目未启用任何已安装适配器。"
   id: "检查项"
   result: "结果"
   message: "详情"
@@ -152,6 +163,7 @@ approval:
     approved: "审批请求已批准"
     rejected: "审批请求已拒绝"
 menu:
+  multiKeysHelp: "Space 切换 · ↑↓ 选择 · Enter 确认"
   choose: "选择下一步操作"
   back: "上一步"
   exit: "退出"

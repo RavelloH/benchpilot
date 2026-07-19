@@ -1,7 +1,9 @@
 import {
   type Adapter,
+  BenchPilotError,
   type BenchPilotEventWriter,
   type Json,
+  enabledAdapterIds,
   LockManager,
   OperationRunner,
   PathService,
@@ -74,7 +76,18 @@ export async function openApplicationRequest(
     project,
     request.configPath,
   );
-  const application = createApplication(request.adapters);
+  const enabled = enabledAdapterIds(config.value);
+  const available = new Set(request.adapters.map((adapter) => adapter.id));
+  const missing = enabled.filter((adapter) => !available.has(adapter));
+  if (missing.length)
+    throw new BenchPilotError(
+      "UNKNOWN_ADAPTER",
+      3,
+      `Enabled adapter is not installed: ${missing[0]}.`,
+    );
+  const application = createApplication(
+    request.adapters.filter((adapter) => enabled.includes(adapter.id)),
+  );
   const lifecycle = {
     locks: new LockManager(paths),
     approvals: (projectRoot: string) => new ApprovalManager(paths, projectRoot),

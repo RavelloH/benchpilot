@@ -88,7 +88,7 @@ export const agentHelpSections: readonly AgentHelpSection[] = [
         command: "init",
         summaryKey: "help.command.init",
         syntax:
-          "benchpilot init --project-id <project-id> --project-name <project-name> --locale <locale> [options]",
+          "benchpilot init --project-name <project-name> [--locale <locale>] [options]",
       },
       {
         command: "setup",

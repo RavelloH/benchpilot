@@ -5,6 +5,11 @@ cli:
     machine: "This command requires interactive input and cannot be used with machine output."
     cancelled: "Interaction cancelled."
 init:
+  adapters: "Select adapters to enable"
+  applied: "Applied existing BenchPilot project configuration."
+  enabledAdapters: "Enabled adapters"
+  none: "None"
+  project: "Project"
   projectId: "Project ID"
   projectName: "Project name"
   done: "Initialized BenchPilot project."
@@ -13,6 +18,12 @@ command:
 doctor:
   local: "Local environment"
   adapter: "Adapter: {adapter}"
+  configValid: "TOML and configuration schema valid"
+  projectLocalReady: "Project-local configuration is available."
+  projectLocalMissing: "Project-local configuration is missing; run benchpilot init to create it."
+  projectLocalUnavailable: "No project-local configuration applies outside a project."
+  adaptersEnabled: "{count} enabled adapter(s) are installed."
+  adaptersNone: "No enabled adapters are installed for this project."
   id: "Check"
   result: "Result"
   message: "Details"
@@ -152,6 +163,7 @@ approval:
     approved: "Approval request approved"
     rejected: "Approval request rejected"
 menu:
+  multiKeysHelp: "Space toggle · ↑↓ navigate · Enter confirm"
   choose: "Choose the next action"
   back: "Back"
   exit: "Exit"

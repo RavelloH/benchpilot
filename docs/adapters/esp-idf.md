@@ -18,6 +18,9 @@ script path through argv rather than an interpolated shell command.
 On Windows, configure only the paths that discovery cannot find:
 
 ```toml
+[adapters]
+enabled = ["esp-idf"]
+
 [adapters.esp-idf]
 idf_path = "C:\\path\\to\\esp-idf"
 python_path = "C:\\path\\to\\python.exe"
@@ -36,6 +39,9 @@ chip = "esp32s3"
 Linux and macOS use the same schema, with POSIX paths and `export.sh`:
 
 ```toml
+[adapters]
+enabled = ["esp-idf"]
+
 [adapters.esp-idf]
 idf_path = "/opt/esp-idf"
 python_path = "/path/to/python"

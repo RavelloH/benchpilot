@@ -84,15 +84,7 @@ try {
       "index.json",
     ),
   );
-  run(
-    "init",
-    "--project-id",
-    "demo",
-    "--project-name",
-    "Demo",
-    "--locale",
-    "en",
-  );
+  run("init", "--project-name", "Demo", "--locale", "en");
   const commands = [
     ["help", "--json"],
     ["doctor", "--json"],

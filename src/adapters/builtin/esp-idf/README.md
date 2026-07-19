@@ -23,6 +23,9 @@ Configure paths only when automatic discovery or an already activated ESP-IDF
 environment is insufficient:
 
 ```toml
+[adapters]
+enabled = ["esp-idf"]
+
 [adapters.esp-idf]
 idf_path = "C:\\path\\to\\esp-idf"
 python_path = "C:\\path\\to\\python.exe"
