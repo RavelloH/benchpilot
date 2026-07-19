@@ -1046,6 +1046,23 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
                 : "approval.confirm.reject",
             ),
           ),
+        confirmLockClear:
+          !flags.agent &&
+          !flags.json &&
+          !flags.jsonl &&
+          !agent &&
+          stdin.isTTY &&
+          stdout.isTTY
+            ? ({ state }) =>
+                interactive(locale, parts).confirm(
+                  t(
+                    locale,
+                    state === "quarantined" || state === "quarantine-failed"
+                      ? "lock.clear.confirmQuarantined"
+                      : "lock.clear.confirmActive",
+                  ),
+                )
+            : undefined,
       })
     )
       return;

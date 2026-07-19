@@ -23,6 +23,8 @@ lock:
       unknown: "Unknown"
   clear:
     title: "Lock cleared"
+    confirmActive: "Clear this active lock? This may interrupt its holder."
+    confirmQuarantined: "Clear this quarantined lock? Verify the physical resource is safe first."
   clearStale:
     none: "No stale locks were cleared."
     heading: "Cleared stale locks:"
@@ -32,6 +34,10 @@ lock:
     id: "Lock ID"
     liveness: "Current status"
     recordState: "Record state"
+    state:
+      active: "Active"
+      quarantined: "Quarantined"
+      quarantineFailed: "Quarantine failed"
     resource: "Resource"
     adapter: "Adapter"
     kind: "Kind"

@@ -196,6 +196,10 @@ export const catalogs = {
     "init.done": "Initialized BenchPilot project.",
     "init.projectId": "Project ID",
     "init.projectName": "Project name",
+    "lock.clear.confirmActive":
+      "Clear this active lock? This may interrupt its holder.",
+    "lock.clear.confirmQuarantined":
+      "Clear this quarantined lock? Verify the physical resource is safe first.",
     "lock.clear.title": "Lock cleared",
     "lock.clearStale.heading": "Cleared stale locks:",
     "lock.clearStale.none": "No stale locks were cleared.",
@@ -216,6 +220,9 @@ export const catalogs = {
     "lock.detail.resource": "Resource",
     "lock.detail.run": "Run",
     "lock.detail.session": "Session",
+    "lock.detail.state.active": "Active",
+    "lock.detail.state.quarantineFailed": "Quarantine failed",
+    "lock.detail.state.quarantined": "Quarantined",
     "lock.detail.timing": "Timing",
     "lock.detail.title": "Lock details",
     "lock.list.contents": "Directory contents",
@@ -469,6 +476,10 @@ export const catalogs = {
     "init.done": "BenchPilot 项目已初始化。",
     "init.projectId": "项目 ID",
     "init.projectName": "项目名称",
+    "lock.clear.confirmActive":
+      "确认清除这个活跃锁？这可能会中断其当前持有者。",
+    "lock.clear.confirmQuarantined":
+      "确认清除这个隔离锁？请先确认对应物理资源已处于安全状态。",
     "lock.clear.title": "已清除资源锁",
     "lock.clearStale.heading": "已清除过期锁：",
     "lock.clearStale.none": "没有可清除的过期锁。",
@@ -489,6 +500,9 @@ export const catalogs = {
     "lock.detail.resource": "资源",
     "lock.detail.run": "操作记录",
     "lock.detail.session": "会话",
+    "lock.detail.state.active": "活跃",
+    "lock.detail.state.quarantineFailed": "隔离失败",
+    "lock.detail.state.quarantined": "已隔离",
     "lock.detail.timing": "时间",
     "lock.detail.title": "锁详情",
     "lock.list.contents": "目录内容",

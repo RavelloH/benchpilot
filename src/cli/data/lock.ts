@@ -78,12 +78,25 @@ const displayWidth = (value: string) =>
 const padLabel = (value: string, width = 12) =>
   `${value}${" ".repeat(Math.max(1, width - displayWidth(value)))}`;
 
-const stateText = (state: LockDetailData["state"], theme: TerminalTheme) =>
-  state === "active"
-    ? theme.success(state)
+const stateText = (
+  state: LockDetailData["state"],
+  locale: DataScreenContext["locale"],
+  theme: TerminalTheme,
+) => {
+  const label = t(
+    locale,
+    state === "active"
+      ? "lock.detail.state.active"
+      : state === "quarantined"
+        ? "lock.detail.state.quarantined"
+        : "lock.detail.state.quarantineFailed",
+  );
+  return state === "active"
+    ? theme.success(label)
     : state === "quarantined"
-      ? theme.warning(state)
-      : theme.error(state);
+      ? theme.warning(label)
+      : theme.error(label);
+};
 
 const row = (
   label: string,
@@ -192,7 +205,8 @@ export function lockDetailScreen(
           t(context.locale, "lock.detail.recordState"),
           data.state,
           theme,
-          (value) => stateText(value as LockDetailData["state"], theme),
+          (value) =>
+            stateText(value as LockDetailData["state"], context.locale, theme),
         ),
       ],
       theme,

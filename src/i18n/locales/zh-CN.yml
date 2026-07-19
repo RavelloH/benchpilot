@@ -23,6 +23,8 @@ lock:
       unknown: "未知"
   clear:
     title: "已清除资源锁"
+    confirmActive: "确认清除这个活跃锁？这可能会中断其当前持有者。"
+    confirmQuarantined: "确认清除这个隔离锁？请先确认对应物理资源已处于安全状态。"
   clearStale:
     none: "没有可清除的过期锁。"
     heading: "已清除过期锁："
@@ -32,6 +34,10 @@ lock:
     id: "锁 ID"
     liveness: "当前状态"
     recordState: "记录状态"
+    state:
+      active: "活跃"
+      quarantined: "已隔离"
+      quarantineFailed: "隔离失败"
     resource: "资源"
     adapter: "适配器"
     kind: "类型"

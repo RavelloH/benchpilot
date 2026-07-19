@@ -38,6 +38,7 @@ import {
   presentationView,
   screenPresentation,
 } from "../dist/cli/presentation/page.js";
+import { handleRuntimeCommand } from "../dist/cli/commands/runtime.js";
 
 const scriptedDriver = (...answers) => {
   let position = 0;
@@ -144,6 +145,62 @@ test("interactive answers use compact spacing after selection", () => {
     compactPromptAnswer("lock      查看和管理物理资源锁"),
     "lock 查看和管理物理资源锁",
   );
+});
+
+test("interactive lock clear asks for confirmation before clearing a quarantined lock", async () => {
+  const calls = [];
+  const confirmations = [];
+  const originalWrite = process.stdout.write;
+  process.stdout.write = () => true;
+  try {
+    const handled = await handleRuntimeCommand({
+      parts: ["lock", "quarantined-lock", "clear"],
+      flags: {},
+      commandFlags: {},
+      locale: "en",
+      color: false,
+      presentationView: "normal",
+      runtimeCommands: {
+        execute: async (request) => {
+          calls.push(request);
+          return {
+            data: {
+              lockId: "quarantined-lock",
+              state: "quarantined",
+              liveness: "active",
+              identity: {
+                adapter: "fixture",
+                kind: "device",
+                physicalId: "fixture-device",
+              },
+              hostname: "fixture-host",
+              pid: 1234,
+              command: "fixture-command",
+              acquiredAt: "2026-01-01T00:00:00.000Z",
+              heartbeatAt: "2026-01-01T00:00:00.000Z",
+              expiresAt: "2026-01-01T00:00:30.000Z",
+            },
+          };
+        },
+      },
+      confirmApproval: async () => false,
+      confirmLockClear: async (input) => {
+        confirmations.push(input);
+        return false;
+      },
+    });
+    assert.equal(handled, true);
+  } finally {
+    process.stdout.write = originalWrite;
+  }
+  assert.deepEqual(confirmations, [
+    {
+      lockId: "quarantined-lock",
+      state: "quarantined",
+      liveness: "active",
+    },
+  ]);
+  assert.deepEqual(calls, [{ action: "lock.show", id: "quarantined-lock" }]);
 });
 
 test("screen catalogs provide localized text and leave machine protocol out of translation", () => {

@@ -420,7 +420,7 @@ test("lock show renders grouped details on screen", async () => {
     const result = await run(dir, "lock", lockId, "show");
     assert.match(
       result.stdout,
-      /^Lock details\n  Lock ID\s+visible-lock\n  Current status\s+Stale\n  Record state\s+active/m,
+      /^Lock details\n  Lock ID\s+visible-lock\n  Current status\s+Stale\n  Record state\s+Active/m,
     );
     assert.match(result.stdout, /\nResource\n  Adapter\s+fixture-adapter/m);
     assert.match(result.stdout, /\nOwner\n  Host\s+fixture-host/m);

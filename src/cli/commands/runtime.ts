@@ -38,6 +38,11 @@ interface RuntimeCommandContext {
     approvalId: string;
     action: "approve" | "reject";
   }) => Promise<boolean>;
+  confirmLockClear?: (input: {
+    lockId: string;
+    state: LockRecord["state"];
+    liveness: LockLiveness;
+  }) => Promise<boolean>;
 }
 
 export async function handleRuntimeCommand({
@@ -50,6 +55,7 @@ export async function handleRuntimeCommand({
   runtimeCommands,
   approvalPresentation,
   confirmApproval,
+  confirmLockClear,
 }: RuntimeCommandContext): Promise<boolean> {
   if (parts[0] === "run" && parts[1] === "list") {
     if (parts.length !== 2)
@@ -187,16 +193,51 @@ export async function handleRuntimeCommand({
         color,
       });
     } else if (parts[2] === "clear") {
+      let dangerouslyClearActiveLock = Boolean(
+        commandFlags["dangerously-clear-active-lock"],
+      );
+      let dangerouslyClearQuarantinedLock = Boolean(
+        commandFlags["dangerously-clear-quarantined-lock"],
+      );
+      if (!dangerouslyClearActiveLock && !dangerouslyClearQuarantinedLock) {
+        const inspected = (
+          await runtimeCommands.execute({
+            action: "lock.show",
+            id: parts[1],
+          })
+        ).data as unknown as LockRecord & { liveness: LockLiveness };
+        const needsConfirmation =
+          inspected.state === "quarantined" ||
+          inspected.state === "quarantine-failed" ||
+          inspected.liveness !== "stale";
+        if (needsConfirmation && confirmLockClear) {
+          writeDataPage({
+            page: lockDetailDataPage(inspected),
+            flags,
+            locale,
+            view: presentationView,
+            color,
+          });
+          if (
+            !(await confirmLockClear({
+              lockId: parts[1],
+              state: inspected.state,
+              liveness: inspected.liveness,
+            }))
+          )
+            return true;
+          dangerouslyClearQuarantinedLock =
+            inspected.state === "quarantined" ||
+            inspected.state === "quarantine-failed";
+          dangerouslyClearActiveLock = !dangerouslyClearQuarantinedLock;
+        }
+      }
       const result = (
         await runtimeCommands.execute({
           action: "lock.clear",
           id: parts[1],
-          dangerouslyClearActiveLock: Boolean(
-            commandFlags["dangerously-clear-active-lock"],
-          ),
-          dangerouslyClearQuarantinedLock: Boolean(
-            commandFlags["dangerously-clear-quarantined-lock"],
-          ),
+          dangerouslyClearActiveLock,
+          dangerouslyClearQuarantinedLock,
         })
       ).data as unknown as { cleared: LockRecord };
       writeDataPage({
