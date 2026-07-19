@@ -58,6 +58,21 @@ const supportedLanguages = [
   { value: "zh-CN", label: "简体中文" },
 ] as const;
 
+const displayWidth = (value: string) =>
+  [...value].reduce(
+    (width, character) => width + (character.codePointAt(0)! > 0xff ? 2 : 1),
+    0,
+  );
+
+const padDisplay = (value: string, width: number) =>
+  `${value}${" ".repeat(Math.max(1, width - displayWidth(value)))}`;
+
+const recordChoiceWidth = (ids: readonly string[]) =>
+  Math.max(1, ...ids.map((id) => displayWidth(id) + 2));
+
+const recordChoiceLabel = (id: string, status: string, width: number) =>
+  `${padDisplay(id, width)}— ${status}`;
+
 const approvalStatusLabel = (locale: Locale, status: string) => {
   if (status === "pending") return t(locale, "approval.status.pending");
   if (status === "approved") return t(locale, "approval.status.approved");
@@ -65,6 +80,25 @@ const approvalStatusLabel = (locale: Locale, status: string) => {
   if (status === "claimed") return t(locale, "approval.status.claimed");
   if (status === "consumed") return t(locale, "approval.status.consumed");
   return status;
+};
+
+const runStatusLabel = (locale: Locale, status: unknown) => {
+  if (status === "running") return t(locale, "run.status.running");
+  if (status === "succeeded") return t(locale, "run.status.succeeded");
+  if (status === "failed") return t(locale, "run.status.failed");
+  if (status === "aborted") return t(locale, "run.status.aborted");
+  return t(locale, "run.status.unknown");
+};
+
+const lockStatusLabel = (locale: Locale, state: unknown, liveness: unknown) => {
+  if (state === "quarantined")
+    return t(locale, "lock.detail.state.quarantined");
+  if (state === "quarantine-failed")
+    return t(locale, "lock.detail.state.quarantineFailed");
+  const status = liveness;
+  if (status === "active") return t(locale, "lock.list.liveness.active");
+  if (status === "stale") return t(locale, "lock.list.liveness.stale");
+  return t(locale, "lock.list.liveness.unknown");
 };
 
 interface MainResume {
@@ -575,33 +609,67 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
         if (sub === "set")
           parts.push(...(await completeConfigSet(session, parts)));
       } else if (group === "run") {
-        const sub = await session.choose(menuChoices(["list", "prune"]), {
-          commandPath: ["run"],
-          nextBackPath: ["run"],
-        });
-        parts.push(sub);
-        if (sub === "prune") {
-          const mode = await session.choose(
-            [
-              { value: "keep", label: t(locale, "menu.runs.keep") },
-              {
-                value: "older-than",
-                label: t(locale, "menu.runs.older-than"),
-              },
-              { value: "all", label: t(locale, "menu.runs.all") },
-            ],
-            { commandPath: ["run", "prune"] },
+        const runRecords = await runtime.listRuns();
+        const runChoiceWidth = recordChoiceWidth(
+          runRecords.runs.map((run) => run.id),
+        );
+        const selected = await session.choose(
+          [
+            ...menuChoices(["list", "prune"]),
+            ...(runRecords.runs.length
+              ? [
+                  {
+                    separator: menuDivider(colorEnabled(flags, stdout.isTTY)),
+                  },
+                  ...runRecords.runs.map((run) => ({
+                    value: run.id,
+                    label: recordChoiceLabel(
+                      run.id,
+                      runStatusLabel(locale, run.manifest?.status),
+                      runChoiceWidth,
+                    ),
+                  })),
+                ]
+              : []),
+          ],
+          {
+            commandPath: ["run"],
+            nextBackPath: ["run"],
+          },
+        );
+        if (selected !== "list" && selected !== "prune") {
+          parts.push(
+            selected,
+            await session.choose(menuChoices(["show", "logs", "artifacts"]), {
+              commandPath: ["run", selected],
+            }),
           );
-          if (mode === "all")
-            commandFlags = {
-              ...commandFlags,
-              "dangerously-remove-all-runs": true,
-            };
-          else
-            commandFlags = {
-              ...commandFlags,
-              [mode]: await session.value(mode),
-            };
+        } else {
+          const sub = selected;
+          parts.push(sub);
+          if (sub === "prune") {
+            const mode = await session.choose(
+              [
+                { value: "keep", label: t(locale, "menu.runs.keep") },
+                {
+                  value: "older-than",
+                  label: t(locale, "menu.runs.older-than"),
+                },
+                { value: "all", label: t(locale, "menu.runs.all") },
+              ],
+              { commandPath: ["run", "prune"] },
+            );
+            if (mode === "all")
+              commandFlags = {
+                ...commandFlags,
+                "dangerously-remove-all-runs": true,
+              };
+            else
+              commandFlags = {
+                ...commandFlags,
+                [mode]: await session.value(mode),
+              };
+          }
         }
       } else if (group === "adapter") {
         const adapters = queries.listAdapters().adapters;
@@ -670,6 +738,9 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
         );
       } else if (group === "lock") {
         const locks = await runtime.listLocks();
+        const lockChoiceWidth = recordChoiceWidth(
+          locks.locks.map((lock) => lock.lockId),
+        );
         const lockActions = [
           { value: "list", summary: t(locale, "menu.lock.listAll") },
           {
@@ -685,7 +756,11 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
                   { separator: menuDivider(colorEnabled(flags, stdout.isTTY)) },
                   ...locks.locks.map((lock) => ({
                     value: lock.lockId,
-                    label: lock.lockId,
+                    label: recordChoiceLabel(
+                      lock.lockId,
+                      lockStatusLabel(locale, lock.state, lock.liveness),
+                      lockChoiceWidth,
+                    ),
                   })),
                 ]
               : []),
@@ -703,6 +778,9 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
           );
       } else if (group === "approval") {
         const approvals = await runtime.listApprovals();
+        const approvalChoiceWidth = recordChoiceWidth(
+          approvals.approvals.map((approval) => approval.id),
+        );
         const selected = await session.choose(
           [
             ...commandChoices([
@@ -718,7 +796,11 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
                   },
                   ...approvals.approvals.map((approval) => ({
                     value: approval.id,
-                    label: `${approval.id} — ${approvalStatusLabel(locale, approval.status)}`,
+                    label: recordChoiceLabel(
+                      approval.id,
+                      approvalStatusLabel(locale, approval.status),
+                      approvalChoiceWidth,
+                    ),
                   })),
                 ]
               : []),

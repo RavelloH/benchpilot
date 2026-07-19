@@ -17,6 +17,12 @@ import {
   lockDetailDataPage,
   lockListDataPage,
 } from "../data/lock.js";
+import {
+  runArtifactsDataPage,
+  runDetailDataPage,
+  runListDataPage,
+  runLogDataPage,
+} from "../data/run.js";
 import { brief, fullHelp } from "../help-renderer.js";
 import type { Flags } from "../parser.js";
 import { write, writeDataPage } from "../output-renderer.js";
@@ -60,16 +66,20 @@ export async function handleRuntimeCommand({
   if (parts[0] === "run" && parts[1] === "list") {
     if (parts.length !== 2)
       fail("USAGE_ERROR", 2, "run list takes no arguments.");
-    write(
-      (
-        await runtimeCommands.execute({
-          action: "runs.list",
-          status: commandFlags.status as Json | undefined,
-          limit: commandFlags.limit as Json | undefined,
-        })
-      ).data,
+    const result = (
+      await runtimeCommands.execute({
+        action: "runs.list",
+        status: commandFlags.status as Json | undefined,
+        limit: commandFlags.limit as Json | undefined,
+      })
+    ).data as unknown as { runs: readonly { id: string; manifest?: Json }[] };
+    writeDataPage({
+      page: runListDataPage(result),
       flags,
-    );
+      locale,
+      view: presentationView,
+      color,
+    });
     return true;
   }
   if (parts[0] === "run" && parts[1] === "prune") {
@@ -103,28 +113,43 @@ export async function handleRuntimeCommand({
       );
       return true;
     }
-    if (parts[2] === "show")
-      write(
-        (await runtimeCommands.execute({ action: "run.show", id: parts[1] }))
-          .data,
+    if (parts[2] === "show") {
+      const result = (
+        await runtimeCommands.execute({ action: "run.show", id: parts[1] })
+      ).data as unknown as { manifest?: Json; result?: Json };
+      writeDataPage({
+        page: runDetailDataPage(result),
         flags,
-      );
-    else if (parts[2] === "logs") {
+        locale,
+        view: presentationView,
+        color,
+      });
+    } else if (parts[2] === "logs") {
       const result = (
         await runtimeCommands.execute({ action: "run.logs", id: parts[1] })
-      ).data as { log: string };
-      write(result, flags, result.log);
-    } else if (parts[2] === "artifacts")
-      write(
-        (
-          await runtimeCommands.execute({
-            action: "run.artifacts",
-            id: parts[1],
-          })
-        ).data,
+      ).data as { runId: string; log: string };
+      writeDataPage({
+        page: runLogDataPage(result),
         flags,
-      );
-    else fail("USAGE_ERROR", 2, "Unknown run command.");
+        locale,
+        view: presentationView,
+        color,
+      });
+    } else if (parts[2] === "artifacts") {
+      const result = (
+        await runtimeCommands.execute({
+          action: "run.artifacts",
+          id: parts[1],
+        })
+      ).data as { runId: string; artifacts: readonly string[] };
+      writeDataPage({
+        page: runArtifactsDataPage(result),
+        flags,
+        locale,
+        view: presentationView,
+        color,
+      });
+    } else fail("USAGE_ERROR", 2, "Unknown run command.");
     return true;
   }
   if (parts[0] === "lock" && parts[1] === "list") {

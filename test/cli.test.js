@@ -821,6 +821,24 @@ test("declarative demo executes build, deploy, and capture", async () => {
       1,
     );
     assert.equal(lines.at(-1).data.result.data.telemetry, 42);
+    const runList = JSON.parse(
+      (await run(dir, "run", "list", "--json")).stdout,
+    );
+    assert.equal(runList.schema, "benchpilot.run-list");
+    assert.equal(runList.runs[0].status, "succeeded");
+    assert.equal(runList.runs[0].command, "device.capture");
+    const runId = runList.runs[0].id;
+    const runDetail = JSON.parse(
+      (await run(dir, "run", runId, "show", "--json")).stdout,
+    );
+    assert.equal(runDetail.schema, "benchpilot.run-detail");
+    assert.equal(runDetail.run.id, runId);
+    const runFrames = (await run(dir, "run", "list", "--jsonl")).stdout
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    assert.equal(runFrames[0].schema, "benchpilot.run-list");
+    assert.match(runFrames[1].key, /^runs\./);
     const inspection = JSON.parse(
       (await run(dir, "device", "demo", "inspect", "--json")).stdout,
     );
@@ -1216,7 +1234,7 @@ test("dry-run creates no run, lock, approval, or artifact state", async () => {
     );
     assert.deepEqual(dryRunEvents[0].data.result, plan);
     assert.deepEqual(
-      JSON.parse((await run(dir, "run", "list", "--json")).stdout).data.runs,
+      JSON.parse((await run(dir, "run", "list", "--json")).stdout).runs,
       [],
     );
     assert.deepEqual(

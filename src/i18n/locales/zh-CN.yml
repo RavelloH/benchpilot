@@ -8,6 +8,35 @@ init:
   projectId: "项目 ID"
   projectName: "项目名称"
   done: "BenchPilot 项目已初始化。"
+run:
+  status:
+    unknown: "未知"
+    running: "进行中"
+    succeeded: "已成功"
+    failed: "已失败"
+    aborted: "已中止"
+  list:
+    title: "操作记录"
+    none: "当前没有操作记录。"
+    id: "记录 ID"
+    status: "状态"
+    command: "命令"
+  detail:
+    title: "操作记录详情"
+    id: "记录 ID"
+    status: "状态"
+    command: "命令"
+    timing: "时间"
+    startedAt: "开始时间"
+    endedAt: "结束时间"
+    duration: "耗时"
+    environment: "运行环境"
+    host: "主机"
+    process: "进程"
+    platform: "平台"
+  artifacts:
+    title: "执行产物"
+    none: "没有产生执行产物。"
 lock:
   list:
     title: "物理资源锁"

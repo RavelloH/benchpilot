@@ -59,6 +59,13 @@ export class RuntimeUseCases {
 
   async listRuns(input: { status?: Json; limit?: number } = {}) {
     let runs = await this.runs().list();
+    runs = runs.sort((left, right) => {
+      const leftStarted = Date.parse(String(left.manifest?.startedAt || ""));
+      const rightStarted = Date.parse(String(right.manifest?.startedAt || ""));
+      if (Number.isFinite(leftStarted) && Number.isFinite(rightStarted))
+        return rightStarted - leftStarted || right.id.localeCompare(left.id);
+      return right.id.localeCompare(left.id);
+    });
     if (input.status !== undefined)
       runs = runs.filter((run) => run.manifest?.status === input.status);
     if (input.limit !== undefined) {
@@ -122,6 +129,7 @@ export class RuntimeUseCases {
   async runLog(id: string) {
     const record = await this.runs().get(id);
     return {
+      runId: id,
       log: await fs.readFile(path.join(record.dir, "benchpilot.log"), "utf8"),
     };
   }
@@ -129,6 +137,7 @@ export class RuntimeUseCases {
   async runArtifacts(id: string) {
     const record = await this.runs().get(id);
     return {
+      runId: id,
       artifacts: await fs
         .readdir(path.join(record.dir, "artifacts"))
         .catch(() => []),

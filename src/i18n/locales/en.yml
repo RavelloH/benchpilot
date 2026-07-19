@@ -8,6 +8,35 @@ init:
   projectId: "Project ID"
   projectName: "Project name"
   done: "Initialized BenchPilot project."
+run:
+  status:
+    unknown: "Unknown"
+    running: "Running"
+    succeeded: "Succeeded"
+    failed: "Failed"
+    aborted: "Aborted"
+  list:
+    title: "Operation records"
+    none: "No operation records are available."
+    id: "Run ID"
+    status: "Status"
+    command: "Command"
+  detail:
+    title: "Operation record details"
+    id: "Run ID"
+    status: "Status"
+    command: "Command"
+    timing: "Timing"
+    startedAt: "Started"
+    endedAt: "Ended"
+    duration: "Duration"
+    environment: "Environment"
+    host: "Host"
+    process: "Process"
+    platform: "Platform"
+  artifacts:
+    title: "Artifacts"
+    none: "No artifacts were produced."
 lock:
   list:
     title: "Physical resource locks"
