@@ -64,6 +64,18 @@ import {
 import { upgradeCheckDataPage, upgradeResultDataPage } from "./data/upgrade.js";
 import { doctorDataPage } from "./data/doctor.js";
 import {
+  adapterDoctorDataPage,
+  adapterInfoDataPage,
+  adapterListDataPage,
+} from "./data/adapter.js";
+import {
+  deviceAddedDataPage,
+  deviceListDataPage,
+  deviceRemovedDataPage,
+  deviceScanDataPage,
+  systemListDataPage,
+} from "./data/resource.js";
+import {
   configExplainDataPage,
   configGetDataPage,
   configMutationDataPage,
@@ -204,8 +216,15 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
               (scope) => commandFlags[scope] === true,
             )
           : undefined;
+      const deviceAddOptions =
+        parts[0] === "device" &&
+        parts[1] === "add" &&
+        typeof commandFlags.adapter === "string" &&
+        typeof commandFlags.identity === "string"
+          ? ` --adapter ${commandFlags.adapter} --identity ${commandFlags.identity}${typeof commandFlags.port === "string" ? ` --port ${commandFlags.port}` : ""}${typeof commandFlags.name === "string" ? ` --name ${commandFlags.name}` : ""}`
+          : "";
       writeText(
-        `${terminalTheme(colorEnabled(flags, stdout.isTTY)).debug(`$ benchpilot ${parts.join(" ")}${configScope ? ` --${configScope}` : ""}`)}\n\n`,
+        `${terminalTheme(colorEnabled(flags, stdout.isTTY)).debug(`$ benchpilot ${parts.join(" ")}${configScope ? ` --${configScope}` : ""}${deviceAddOptions}`)}\n\n`,
       );
     };
     const currentPresentationView = (help = flags.help === true) =>
@@ -670,6 +689,8 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
     }
     const menuActionKeys = {
       get: "menu.action.get",
+      add: "menu.action.add",
+      remove: "menu.action.remove",
       set: "menu.action.set",
       unset: "menu.action.unset",
       resolved: "menu.action.resolved",
@@ -780,6 +801,57 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
       }
       return [key, await session.value(t(locale, "menu.field.value"))];
     };
+    const chooseDiscoveredDevice = async (session: InteractionSession) => {
+      const discovered = await queries.scanDevices();
+      if (!discovered.devices.length)
+        fail("DEVICE_NOT_FOUND", 3, "No discoverable devices are available.");
+      const candidates = discovered.devices.map((device, index) => {
+        const value = device as Record<string, unknown>;
+        const fields = value.fields as Record<string, unknown> | undefined;
+        const identity = String(value.identity || `device-${index + 1}`);
+        const adapter = String(value.adapter || "unknown");
+        return {
+          index,
+          adapter,
+          identity,
+          port: typeof fields?.port === "string" ? fields.port : "-",
+        };
+      });
+      const adapterWidth = Math.max(
+        displayWidth(t(locale, "resourceResult.scan.adapter")),
+        ...candidates.map((candidate) => displayWidth(candidate.adapter)),
+      );
+      const identityWidth = Math.max(
+        displayWidth(t(locale, "resourceResult.scan.identity")),
+        ...candidates.map((candidate) => displayWidth(candidate.identity)),
+      );
+      const padColumn = (value: string, width: number) =>
+        `${value}${" ".repeat(Math.max(0, width - displayWidth(value)))}`;
+      const theme = terminalTheme(colorEnabled(flags, stdout.isTTY));
+      const selected = await session.choose(
+        candidates.map((candidate) => {
+          const { index, adapter, identity, port } = candidate;
+          return {
+            value: String(index),
+            label: `${theme.command(padColumn(adapter, adapterWidth))}  ${theme.argument(padColumn(identity, identityWidth))}  ${port}`,
+            description: `${theme.debug(`$ benchpilot device add --adapter ${adapter} --identity ${identity}${port === "-" ? "" : ` --port ${port}`} --name <name>`)}\n`,
+          };
+        }),
+        { commandPath: ["device", "add"] },
+      );
+      const candidate = discovered.devices[Number(selected)] as Record<
+        string,
+        unknown
+      >;
+      const fields = candidate.fields as Record<string, unknown> | undefined;
+      const adapter = String(candidate.adapter);
+      const identity = String(candidate.identity || `device-${selected}`);
+      return {
+        identity,
+        adapter,
+        ...(typeof fields?.port === "string" ? { port: fields.port } : {}),
+      };
+    };
     if (isCommandGroup(parts[0]) && parts.length === 1) {
       const session = interactive(locale, parts);
       const group = parts[0];
@@ -871,69 +943,121 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
         }
       } else if (group === "adapter") {
         const adapters = queries.listAdapters().adapters;
-        if (!adapters.length)
-          fail("ADAPTER_NOT_FOUND", 3, "No adapters are available.");
         const id = await session.choose(
-          adapters.map((adapter) => ({
-            value: adapter.id,
-            label: `${adapter.id} — ${adapter.summary}`,
-          })),
+          [
+            ...menuChoices(["list"]),
+            ...(adapters.length
+              ? [
+                  { separator: menuDivider(colorEnabled(flags, stdout.isTTY)) },
+                  ...adapters.map((adapter) => ({
+                    value: adapter.id,
+                    label: `${adapter.id} — ${adapter.summary}`,
+                  })),
+                ]
+              : []),
+          ],
           { commandPath: ["adapter"], nextBackPath: ["adapter"] },
         );
-        parts.push(
-          id,
-          await session.choose(menuChoices(["show", "doctor"]), {
-            commandPath: ["adapter", id],
-          }),
-        );
+        parts.push(id);
+        if (id !== "list")
+          parts.push(
+            await session.choose(menuChoices(["show", "doctor"]), {
+              commandPath: ["adapter", id],
+            }),
+          );
       } else if (group === "device") {
         const deviceNodes = await catalog.children(["device"]);
-        if (!deviceNodes.length)
-          fail("DEVICE_NOT_FOUND", 3, "No configured devices are available.");
         const id = await session.choose(
-          deviceNodes.map((device) => ({
-            value: String(device.path[1]),
-            label: String(device.summaryKey),
-          })),
+          [
+            ...menuChoices(["list", "scan", "add", "remove"]),
+            ...(deviceNodes.length
+              ? [
+                  { separator: menuDivider(colorEnabled(flags, stdout.isTTY)) },
+                  ...deviceNodes.map((device) => ({
+                    value: String(device.path[1]),
+                    label: String(device.summaryKey),
+                  })),
+                ]
+              : []),
+          ],
           { commandPath: ["device"], nextBackPath: ["device"] },
         );
-        const capabilities = await catalog.children(["device", id]);
-        parts.push(
-          id,
-          await session.choose(
-            commandChoices(
-              capabilities.map((capability) => ({
-                value: String(capability.path[2]),
-                summary: String(capability.summaryKey),
+        if (id === "list" || id === "scan") {
+          parts.push(id);
+        } else if (id === "add") {
+          const device = await chooseDiscoveredDevice(session);
+          parts.push(id);
+          commandFlags = {
+            ...commandFlags,
+            adapter: device.adapter,
+            identity: device.identity,
+            name: await session.value(t(locale, "menu.field.deviceName")),
+            ...(device.port !== undefined ? { port: device.port } : {}),
+          };
+        } else if (id === "remove") {
+          const devices = queries.listConfiguredDevices().devices;
+          if (!devices.length)
+            fail("DEVICE_NOT_FOUND", 3, "No configured devices are available.");
+          parts.push(
+            id,
+            await session.choose(
+              devices.map((device) => ({
+                value: String((device as Record<string, unknown>).id),
+                label: String((device as Record<string, unknown>).id),
               })),
+              { commandPath: ["device", "remove"] },
             ),
-            { commandPath: ["device", id] },
-          ),
-        );
+          );
+        } else {
+          const capabilities = (await devices.describe(id, locale))
+            .capabilities;
+          parts.push(
+            id,
+            await session.choose(
+              commandChoices(
+                capabilities.map((capability) => ({
+                  value: capability.id,
+                  summary: capability.summary,
+                })),
+              ),
+              { commandPath: ["device", id] },
+            ),
+          );
+        }
       } else if (group === "system") {
         const systemNodes = await catalog.children(["system"]);
-        if (!systemNodes.length)
-          fail("SYSTEM_NOT_FOUND", 3, "No configured systems are available.");
         const id = await session.choose(
-          systemNodes.map((system) => ({
-            value: String(system.path[1]),
-            label: String(system.summaryKey),
-          })),
+          [
+            ...menuChoices(["list"]),
+            ...(systemNodes.length
+              ? [
+                  { separator: menuDivider(colorEnabled(flags, stdout.isTTY)) },
+                  ...systemNodes.map((system) => ({
+                    value: String(system.path[1]),
+                    label: String(system.summaryKey),
+                  })),
+                ]
+              : []),
+          ],
           { commandPath: ["system"], nextBackPath: ["system"] },
         );
-        const capabilities = await catalog.children(["system", id]);
-        parts.push(
-          id,
-          await session.choose(
-            commandChoices(
-              capabilities.map((capability) => ({
-                value: String(capability.path[2]),
-                summary: String(capability.summaryKey),
-              })),
+        if (id === "list") {
+          parts.push(id);
+        } else {
+          const capabilities = await catalog.children(["system", id]);
+          parts.push(
+            id,
+            await session.choose(
+              commandChoices(
+                capabilities.map((capability) => ({
+                  value: String(capability.path[2]),
+                  summary: String(capability.summaryKey),
+                })),
+              ),
+              { commandPath: ["system", id] },
             ),
-            { commandPath: ["system", id] },
-          ),
-        );
+          );
+        }
       } else if (group === "lock") {
         const locks = await runtime.listLocks();
         const lockChoiceWidth = recordChoiceWidth(
@@ -1084,27 +1208,53 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
       !flags.help &&
       parts[0] === "device" &&
       parts.length === 2 &&
-      !["list", "scan"].includes(parts[1]!)
+      !["list", "scan"].includes(parts[1]!) &&
+      !(parts[1] === "add" && typeof commandFlags.identity === "string")
     ) {
       const session = interactive(locale, parts);
-      const capabilities = await catalog.children(["device", parts[1]!]);
-      if (!capabilities.length)
-        fail(
-          "UNSUPPORTED_CAPABILITY",
-          3,
-          "No device capabilities are available.",
-        );
-      parts.push(
-        await session.choose(
-          commandChoices(
-            capabilities.map((capability) => ({
-              value: String(capability.path[2]),
-              summary: String(capability.summaryKey),
+      if (parts[1] === "add") {
+        const device = await chooseDiscoveredDevice(session);
+        commandFlags = {
+          ...commandFlags,
+          adapter: device.adapter,
+          identity: device.identity,
+          name: await session.value(t(locale, "menu.field.deviceName")),
+          ...(device.port !== undefined ? { port: device.port } : {}),
+        };
+      } else if (parts[1] === "remove") {
+        const devices = queries.listConfiguredDevices().devices;
+        if (!devices.length)
+          fail("DEVICE_NOT_FOUND", 3, "No configured devices are available.");
+        parts.push(
+          await session.choose(
+            devices.map((device) => ({
+              value: String((device as Record<string, unknown>).id),
+              label: String((device as Record<string, unknown>).id),
             })),
+            { commandPath: parts },
           ),
-          { commandPath: parts },
-        ),
-      );
+        );
+      } else {
+        const capabilities = (await devices.describe(parts[1]!, locale))
+          .capabilities;
+        if (!capabilities.length)
+          fail(
+            "UNSUPPORTED_CAPABILITY",
+            3,
+            "No device capabilities are available.",
+          );
+        parts.push(
+          await session.choose(
+            commandChoices(
+              capabilities.map((capability) => ({
+                value: capability.id,
+                summary: capability.summary,
+              })),
+            ),
+            { commandPath: parts },
+          ),
+        );
+      }
     }
     if (
       !flags.help &&
@@ -1302,7 +1452,13 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
       return;
     }
     if (parts[0] === "adapter" && parts[1] === "list") {
-      write(queries.listAdapters(), flags);
+      writeDataPage({
+        page: adapterListDataPage(queries.listAdapters()),
+        flags,
+        locale,
+        view: currentPresentationView(),
+        color: colorEnabled(flags, stdout.isTTY),
+      });
       return;
     }
     if (parts[0] === "adapter" && parts[1] && parts[1] !== "list") {
@@ -1315,9 +1471,24 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
         );
         return;
       }
-      if (parts[2] === "show") write(adapter, flags);
+      if (parts[2] === "show")
+        writeDataPage({
+          page: adapterInfoDataPage(adapter),
+          flags,
+          locale,
+          view: currentPresentationView(),
+          color: colorEnabled(flags, stdout.isTTY),
+        });
       else if (parts[2] === "doctor")
-        write(await queries.adapterDoctor(parts[1]), flags);
+        writeDataPage({
+          page: adapterDoctorDataPage(
+            await queries.adapterDoctor(parts[1], locale),
+          ),
+          flags,
+          locale,
+          view: currentPresentationView(),
+          color: colorEnabled(flags, stdout.isTTY),
+        });
       else fail("USAGE_ERROR", 2, "Unknown adapter command.");
       return;
     }
@@ -1325,22 +1496,104 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
       if (parts.length !== 2)
         fail("USAGE_ERROR", 2, `device ${parts[1]} takes no arguments.`);
       if (parts[1] === "list") {
-        write(queries.listConfiguredDevices(), flags);
+        writeDataPage({
+          page: deviceListDataPage(queries.listConfiguredDevices()),
+          flags,
+          locale,
+          view: currentPresentationView(),
+          color: colorEnabled(flags, stdout.isTTY),
+        });
         return;
       }
       if (parts[1] === "scan") {
-        write(
-          await queries.scanDevices(
-            commandFlags.adapter === undefined
-              ? undefined
-              : String(commandFlags.adapter),
-            commandFlags.probe === true ||
-              commandFlags["confirm-device-probe"] === true,
+        writeDataPage({
+          page: deviceScanDataPage(
+            await queries.scanDevices(
+              commandFlags.adapter === undefined
+                ? undefined
+                : String(commandFlags.adapter),
+              commandFlags.probe === true ||
+                commandFlags["confirm-device-probe"] === true,
+            ),
           ),
           flags,
-        );
+          locale,
+          view: currentPresentationView(),
+          color: colorEnabled(flags, stdout.isTTY),
+        });
         return;
       }
+    }
+    if (parts[0] === "device" && parts[1] === "add") {
+      if (parts.length !== 2 && parts.length !== 3)
+        fail("USAGE_ERROR", 2, "device add accepts one optional <instance>.");
+      if (commandFlags.adapter === undefined)
+        fail("USAGE_ERROR", 2, "device add requires --adapter <adapter-id>.");
+      const adapter = String(commandFlags.adapter);
+      const identity =
+        typeof commandFlags.identity === "string"
+          ? commandFlags.identity
+          : undefined;
+      const instance =
+        typeof commandFlags.name === "string" ? commandFlags.name : parts[2];
+      if (!instance)
+        fail(
+          "USAGE_ERROR",
+          2,
+          "device add requires <instance> or --name <name>.",
+        );
+      const deviceInstance = instance as string;
+      queries.adapterInfo(adapter);
+      const outcome = await configurationCommands.execute({
+        action: "set",
+        key: `devices.${deviceInstance}.adapter`,
+        value: adapter,
+        scopes: ["project"],
+      });
+      if (typeof commandFlags.port === "string")
+        await configurationCommands.execute({
+          action: "set",
+          key: `devices.${deviceInstance}.port`,
+          value: commandFlags.port,
+          scopes: ["project"],
+        });
+      const result = outcome.data as { path: string };
+      writeDataPage({
+        page: deviceAddedDataPage({
+          instance: deviceInstance,
+          adapter,
+          ...(identity ? { identity } : {}),
+          ...(typeof commandFlags.port === "string"
+            ? { port: commandFlags.port }
+            : {}),
+          path: result.path,
+        }),
+        flags,
+        locale,
+        view: currentPresentationView(),
+        color: colorEnabled(flags, stdout.isTTY),
+      });
+      return;
+    }
+    if (parts[0] === "device" && parts[1] === "remove") {
+      if (parts.length !== 3)
+        fail("USAGE_ERROR", 2, "device remove requires <instance>.");
+      const outcome = await configurationCommands.execute({
+        action: "unset",
+        key: `devices.${parts[2]}`,
+        scopes: ["project"],
+      });
+      writeDataPage({
+        page: deviceRemovedDataPage({
+          instance: parts[2]!,
+          path: (outcome.data as { path: string }).path,
+        }),
+        flags,
+        locale,
+        view: currentPresentationView(),
+        color: colorEnabled(flags, stdout.isTTY),
+      });
+      return;
     }
     if (
       await handleDeviceCommand({
@@ -1356,7 +1609,13 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
     if (parts[0] === "system" && parts[1] === "list") {
       if (parts.length !== 2)
         fail("USAGE_ERROR", 2, "system list takes no arguments.");
-      write(queries.listSystems(), flags);
+      writeDataPage({
+        page: systemListDataPage(queries.listSystems()),
+        flags,
+        locale,
+        view: currentPresentationView(),
+        color: colorEnabled(flags, stdout.isTTY),
+      });
       return;
     }
     if (parts[0] === "system" && parts[1] && parts[1] !== "list") {

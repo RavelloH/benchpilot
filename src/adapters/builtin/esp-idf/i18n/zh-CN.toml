@@ -10,3 +10,24 @@ discoveryDisabled = "设备发现已禁用。"
 discoverySourceFailed = "一个或多个设备发现来源失败。"
 discoveryAvailable = "被动设备发现可用。"
 discoveryUnavailable = "无法初始化被动设备发现。"
+
+[capability.build]
+summary = "构建固件或应用产物。"
+[capability.capture]
+summary = "采集设备日志或诊断输出。"
+[capability.clean]
+summary = "清理常规构建产物。"
+[capability.deploy]
+summary = "构建并部署到设备。"
+[capability.flash]
+summary = "烧录固件到设备。"
+[capability.fullclean]
+summary = "清理全部生成的构建状态。"
+[capability.info]
+summary = "查看项目、设备和工具链信息。"
+[capability.reset]
+summary = "复位设备。"
+[capability.size]
+summary = "查看固件或应用大小。"
+[capability.status]
+summary = "查看当前设备状态。"

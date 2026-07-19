@@ -28,7 +28,7 @@ export async function handleDeviceCommand({
   locale,
 }: DeviceCommandContext): Promise<boolean> {
   if (parts[0] === "device" && parts[1]) {
-    const device = await devices.describe(parts[1]);
+    const device = await devices.describe(parts[1], locale);
     if (parts.length === 2) {
       const help = {
         schema: "benchpilot.help" as const,
@@ -54,6 +54,7 @@ export async function handleDeviceCommand({
     const { capability: definition } = await devices.capability(
       parts[1],
       capability,
+      locale,
     );
     if (flags.help) {
       const help = {

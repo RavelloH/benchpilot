@@ -176,14 +176,26 @@ export class QueryUseCases {
     };
   }
 
-  async adapterDoctor(id: string) {
+  async adapterDoctor(id: string, locale: Locale = "en") {
     const adapter = this.dependencies.registry.get(id);
     return {
-      checks: await this.dependencies.registry.doctor(
-        adapter,
-        this.dependencies.config.value,
-        this.dependencies.paths,
-      ),
+      checks: (
+        await this.dependencies.registry.doctor(
+          adapter,
+          this.dependencies.config.value,
+          this.dependencies.paths,
+        )
+      ).map((check) => {
+        const value = check as Record<string, unknown>;
+        const message =
+          typeof value.messageKey === "string"
+            ? (adapter.translate?.(locale, value.messageKey) ?? value.message)
+            : value.message;
+        return {
+          ...value,
+          ...(typeof message === "string" ? { message } : {}),
+        };
+      }),
     };
   }
 

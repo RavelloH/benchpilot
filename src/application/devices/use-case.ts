@@ -38,19 +38,49 @@ export class DeviceUseCases {
     return { adapter, runtime };
   }
 
-  async describe(instance: string) {
+  private localizeCapabilities(
+    adapter: Awaited<ReturnType<DeviceUseCases["resolve"]>>["adapter"],
+    capabilities: ReturnType<
+      Awaited<ReturnType<DeviceUseCases["resolve"]>>["runtime"]["capabilities"]
+    >,
+    locale?: string,
+  ) {
+    const translate = adapter.translate;
+    if (!locale || !translate) return capabilities;
+    return capabilities.map((capability) => ({
+      ...capability,
+      summary:
+        translate(locale, `capability.${capability.id}.summary`) ??
+        capability.summary,
+      ...(capability.description
+        ? {
+            description:
+              translate(locale, `capability.${capability.id}.description`) ??
+              capability.description,
+          }
+        : {}),
+    }));
+  }
+
+  async describe(instance: string, locale?: string) {
     const { adapter, runtime } = await this.resolve(instance);
     return {
       adapter: { id: adapter.id, summary: adapter.summary },
-      capabilities: runtime.capabilities(),
+      capabilities: this.localizeCapabilities(
+        adapter,
+        runtime.capabilities(),
+        locale,
+      ),
     };
   }
 
-  async capability(instance: string, capabilityId: string) {
+  async capability(instance: string, capabilityId: string, locale?: string) {
     const { adapter, runtime } = await this.resolve(instance);
-    const capability = runtime
-      .capabilities()
-      .find((item) => item.id === capabilityId);
+    const capability = this.localizeCapabilities(
+      adapter,
+      runtime.capabilities(),
+      locale,
+    ).find((item) => item.id === capabilityId);
     if (!capability)
       fail(
         "UNSUPPORTED_CAPABILITY",

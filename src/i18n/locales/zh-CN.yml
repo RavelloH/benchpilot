@@ -102,6 +102,41 @@ doctor:
     warn: "警告"
     fail: "失败"
     unknown: "未知"
+adapterResult:
+  id: "适配器 ID"
+  version: "版本"
+  summary: "说明"
+  list:
+    title: "已安装适配器"
+    empty: "当前未安装适配器。"
+  info:
+    title: "适配器详情"
+  doctor:
+    title: "适配器诊断"
+resourceResult:
+  devices:
+    title: "已配置设备"
+    empty: "当前未配置设备。"
+  systems:
+    title: "已配置系统"
+    empty: "当前未配置系统。"
+  scan:
+    title: "发现的设备"
+    empty: "未发现设备。"
+    identity: "标识"
+    adapter: "适配器"
+    port: "端口"
+  added:
+    title: "设备已添加"
+    instance: "设备实例"
+    adapter: "适配器"
+    identity: "标识"
+    port: "端口"
+    path: "配置路径"
+  removed:
+    title: "设备已移除"
+    instance: "设备实例"
+    path: "配置路径"
 run:
   status:
     unknown: "未知"
@@ -246,6 +281,8 @@ menu:
   value: "请输入{name}"
   invalid: "请选择列出的选项之一。"
   action:
+    add: "添加设备"
+    remove: "移除设备"
     get: "读取配置"
     set: "写入配置"
     unset: "删除配置"
@@ -274,6 +311,7 @@ menu:
     all: "删除全部操作记录"
   field:
     value: "配置值"
+    deviceName: "设备名称"
 screen:
   root:
     interactive: "交互模式"
@@ -327,6 +365,8 @@ help:
     validate: "校验配置"
     list: "列出资源"
     scan: "发现注册适配器的设备"
+    add: "添加设备"
+    remove: "移除设备"
     init: "在当前目录初始化 BenchPilot 项目"
     doctor: "检查本地环境、依赖和外部工具"
     language: "查看或设置 CLI 的全局语言"

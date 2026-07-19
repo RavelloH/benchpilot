@@ -154,10 +154,12 @@ export const agentHelpSections: readonly AgentHelpSection[] = [
         command: "device",
         summaryKey: "screen.root.device",
         syntax:
-          "benchpilot device <list|scan|device-instance> [capability] [arguments] [options]",
+          "benchpilot device <list|scan|add|remove|device-instance> [arguments] [options]",
         usages: [
           "benchpilot device list [options]",
           "benchpilot device scan [options]",
+          "benchpilot device add --adapter <adapter-id> --identity <identity> --name <name> [--port <port>]",
+          "benchpilot device remove <device-instance>",
           "benchpilot device <device-instance> <capability> [arguments] [options]",
         ],
       },

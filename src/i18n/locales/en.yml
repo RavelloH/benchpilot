@@ -102,6 +102,41 @@ doctor:
     warn: "Warning"
     fail: "Failed"
     unknown: "Unknown"
+adapterResult:
+  id: "Adapter ID"
+  version: "Version"
+  summary: "Description"
+  list:
+    title: "Installed adapters"
+    empty: "No adapters are installed."
+  info:
+    title: "Adapter details"
+  doctor:
+    title: "Adapter diagnostics"
+resourceResult:
+  devices:
+    title: "Configured devices"
+    empty: "No devices are configured."
+  systems:
+    title: "Configured systems"
+    empty: "No systems are configured."
+  scan:
+    title: "Discovered devices"
+    empty: "No devices were discovered."
+    identity: "Identity"
+    adapter: "Adapter"
+    port: "Port"
+  added:
+    title: "Device added"
+    instance: "Device instance"
+    adapter: "Adapter"
+    identity: "Identity"
+    port: "Port"
+    path: "Configuration path"
+  removed:
+    title: "Device removed"
+    instance: "Device instance"
+    path: "Configuration path"
 run:
   status:
     unknown: "Unknown"
@@ -246,6 +281,8 @@ menu:
   value: "Enter {name}"
   invalid: "Choose one of the listed options."
   action:
+    add: "Add device"
+    remove: "Remove device"
     get: "Read configuration"
     set: "Write configuration"
     unset: "Delete configuration"
@@ -274,6 +311,7 @@ menu:
     all: "Remove all run records"
   field:
     value: "configuration value"
+    deviceName: "device name"
 screen:
   root:
     interactive: "Interactive mode"
@@ -327,6 +365,8 @@ help:
     validate: "Validate configuration"
     list: "List resources"
     scan: "Discover registered adapter devices"
+    add: "Add a device"
+    remove: "Remove a device"
     init: "Initialize a BenchPilot project in the current directory"
     doctor: "Check the local environment, dependencies, and external tools"
     language: "View or set the global CLI language"

@@ -959,8 +959,9 @@ test("declarative demo executes build, deploy, and capture", async () => {
     const adapters = JSON.parse(
       (await run(dir, "adapter", "list", "--json")).stdout,
     );
+    assert.equal(adapters.schema, "benchpilot.adapter-list");
     assert.deepEqual(
-      adapters.data.adapters.map((adapter) => adapter.id),
+      adapters.adapters.map((adapter) => adapter.id),
       ["demo"],
     );
     const built = JSON.parse(
@@ -1062,8 +1063,9 @@ test("declarative demo executes build, deploy, and capture", async () => {
     const doctor = JSON.parse(
       (await run(dir, "adapter", "demo", "doctor", "--json")).stdout,
     );
+    assert.equal(doctor.schema, "benchpilot.adapter-doctor");
     assert.ok(
-      doctor.data.checks.some(
+      doctor.checks.some(
         (check) => check.id === "demo-tool-node" && check.status === "pass",
       ),
     );

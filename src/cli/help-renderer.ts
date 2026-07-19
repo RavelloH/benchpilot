@@ -52,7 +52,7 @@ const groups = {
   },
   device: {
     summaryKey: "help.group.device",
-    children: ["list", "scan", "<device-instance>"],
+    children: ["list", "scan", "add", "remove", "<device-instance>"],
   },
   system: {
     summaryKey: "help.group.system",
@@ -105,6 +105,8 @@ const commandSummaryKeys = {
   validate: "help.command.validate",
   list: "help.command.list",
   scan: "help.command.scan",
+  add: "help.command.add",
+  remove: "help.command.remove",
   init: "help.command.init",
   doctor: "help.command.doctor",
   language: "help.command.language",
