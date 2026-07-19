@@ -1,8 +1,17 @@
-import { benchPilotWordmarkLarge as largeWordmark } from "./brand.js";
+import {
+  benchPilotWordmark as smallWordmark,
+  benchPilotWordmarkLarge as largeWordmark,
+} from "./brand.js";
 import { screenPresentation, type CliNode } from "./page.js";
 import { terminalTheme } from "./theme.js";
 
 const visibleEverywhere = ["screen", "json", "jsonl"] as const;
+const LARGE_WORDMARK_COLUMNS = Math.max(
+  ...largeWordmark
+    .trim()
+    .split("\n")
+    .map((line) => line.length),
+);
 
 export type VersionPresentation = {
   readonly cliVersion: string;
@@ -14,15 +23,22 @@ export function versionPage(
   input: VersionPresentation,
   color = false,
   showWordmark = true,
+  columns?: number,
 ): readonly CliNode[] {
   const theme = terminalTheme(color);
+  const wordmark =
+    columns === undefined || columns >= LARGE_WORDMARK_COLUMNS
+      ? largeWordmark
+      : smallWordmark;
   return [
     ...(showWordmark
       ? [
           {
             name: "logo",
             visibility: ["screen"] as const,
-            text: theme.brand(largeWordmark.trimStart()),
+            // Keep the source wordmark intact: its leading newline and spaces
+            // are part of the alignment shared with the interactive home.
+            text: theme.brand(wordmark),
           },
         ]
       : []),
@@ -49,6 +65,7 @@ export function renderVersion(
   input: VersionPresentation,
   color = false,
   showWordmark = true,
+  columns?: number,
 ) {
-  return screenPresentation(versionPage(input, color, showWordmark));
+  return screenPresentation(versionPage(input, color, showWordmark, columns));
 }

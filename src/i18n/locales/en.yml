@@ -8,14 +8,54 @@ init:
   projectId: "Project ID"
   projectName: "Project name"
   done: "Initialized BenchPilot project."
+lock:
+  list:
+    title: "Physical resource locks"
+    none: "No locks are currently held."
+    corrupt: "Corrupt lock directories"
+    id: "Lock ID"
+    status: "Current status"
+    resource: "Resource"
+    contents: "Directory contents"
+    liveness:
+      active: "Active"
+      stale: "Stale"
+      unknown: "Unknown"
+  clear:
+    title: "Lock cleared"
+  clearStale:
+    none: "No stale locks were cleared."
+    heading: "Cleared stale locks:"
+    remaining: "… and {count} stale locks in total."
+  detail:
+    title: "Lock details"
+    id: "Lock ID"
+    liveness: "Current status"
+    recordState: "Record state"
+    resource: "Resource"
+    adapter: "Adapter"
+    kind: "Kind"
+    physicalId: "Physical ID"
+    owner: "Owner"
+    host: "Host"
+    process: "Process"
+    command: "Command"
+    session: "Session"
+    run: "Run"
+    timing: "Timing"
+    acquiredAt: "Acquired"
+    heartbeatAt: "Last heartbeat"
+    expiresAt: "Expires"
 menu:
   choose: "Choose the next action"
-  homeGuideTitle: "Interactive guide"
-  homeGuide: "Type to filter commands; use ↑↓ to navigate and Enter to select."
   back: "Back"
   exit: "Exit"
+  exitConfirm: "Press Esc again to exit"
   keysHelp: "↑↓ navigate · Enter select"
   searchKeysHelp: "Type to search · ↑↓ navigate · Enter select"
+  shortcut:
+    back: "Esc Back"
+    exit: "Ctrl+X Exit"
   value: "Enter {name}"
   invalid: "Choose one of the listed options."
   action:
@@ -40,6 +80,8 @@ menu:
   config:
     existing: "Select an existing key"
     new: "Enter a new key"
+  lock:
+    listAll: "List all locks"
   runs:
     keep: "Keep newest runs"
     older-than: "Remove runs older than a duration"
@@ -56,6 +98,8 @@ screen:
     records: "Audit and safety"
     help: "Help"
     setup: "Set up the project and local environment"
+    alias: "View and manage CLI command aliases"
+    upgrade: "Check for and upgrade the BenchPilot CLI"
     skill: "View skills for agents to invoke BenchPilot"
     docs: "Open BenchPilot documentation for users"
     adapter: "Inspect, manage, and diagnose device adapters"

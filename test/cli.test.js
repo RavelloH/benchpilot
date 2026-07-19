@@ -1,7 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFile, spawn } from "node:child_process";
-import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  access,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -293,6 +300,29 @@ test("root and version help pages take precedence over agent presentation", asyn
   }
 });
 
+test("static command help endpoints share the presentation protocol", async () => {
+  const dir = await mkdtemp(
+    path.join(os.tmpdir(), "benchpilot-command-presentation-help-"),
+  );
+  try {
+    const fromHelp = JSON.parse(
+      (await run(dir, "help", "config", "--json")).stdout,
+    );
+    const fromFlag = JSON.parse(
+      (await run(dir, "config", "--help", "--json")).stdout,
+    );
+    assert.deepEqual(fromHelp, fromFlag);
+    assert.deepEqual(
+      fromHelp.slice(0, 2).map((node) => node.name),
+      ["name", "synopsis"],
+    );
+    assert.match(JSON.stringify(fromHelp), /benchpilot config get <key>/);
+    assert.doesNotMatch(JSON.stringify(fromHelp), /visibility|lineBreak/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("nested device help never starts an interactive session", async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "benchpilot-device-help-"));
   try {
@@ -300,6 +330,214 @@ test("nested device help never starts an interactive session", async () => {
     const result = await run(dir, "device", "demo", "--help");
     assert.match(result.stdout, /benchpilot device demo/);
     assert.equal(result.stderr, "");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("lock list reports corrupt lock records without failing the whole listing", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "benchpilot-lock-list-"));
+  try {
+    const corrupt = path.join(
+      dir,
+      "runtime",
+      "benchpilot",
+      "locks",
+      "invalid-owner",
+    );
+    await mkdir(corrupt, { recursive: true });
+    await writeFile(path.join(corrupt, "owner.json"), "not-json");
+    const result = JSON.parse(
+      (await run(dir, "lock", "list", "--json")).stdout,
+    );
+    assert.equal(result.schema, "benchpilot.lock-list");
+    assert.deepEqual(result.locks, []);
+    assert.deepEqual(
+      result.corrupt.map((entry) => entry.id),
+      ["invalid-owner"],
+    );
+    const inspection = await run(
+      dir,
+      "lock",
+      "invalid-owner",
+      "show",
+      "--json",
+    ).catch((error) => error);
+    assert.equal(JSON.parse(inspection.stdout).kind, "LOCK_CORRUPT");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("lock show renders grouped details on screen", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "benchpilot-lock-show-"));
+  try {
+    const lockId = "visible-lock";
+    const lock = path.join(dir, "runtime", "benchpilot", "locks", lockId);
+    await mkdir(lock, { recursive: true });
+    await writeFile(
+      path.join(lock, "owner.json"),
+      JSON.stringify({
+        schema: "benchpilot.lock",
+        version: 2,
+        state: "active",
+        lockId,
+        identity: {
+          adapter: "fixture-adapter",
+          kind: "device",
+          physicalId: "fixture-device",
+        },
+        ownerToken: "fixture-owner",
+        pid: 1234,
+        hostname: "fixture-host",
+        command: "fixture-command",
+        acquiredAt: "2026-01-01T00:00:00.000Z",
+        heartbeatAt: "2026-01-01T00:00:05.000Z",
+        expiresAt: "2026-01-01T00:00:35.000Z",
+      }),
+    );
+    const list = await run(dir, "lock", "list");
+    assert.match(
+      list.stdout,
+      /^Physical resource locks\n  Lock ID\s+Current status\s+Resource\n  visible-lock\s+Stale\s+fixture-adapter \/ device/m,
+    );
+    const listMachine = JSON.parse(
+      (await run(dir, "lock", "list", "--json")).stdout,
+    );
+    assert.equal(listMachine.locks[0].liveness, "stale");
+    assert.equal(listMachine.locks[0].state, "active");
+    const listFrames = (await run(dir, "lock", "list", "--jsonl")).stdout
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    assert.deepEqual(listFrames[1], {
+      op: "snapshot",
+      index: 0,
+      key: `locks.${lockId}`,
+      value: listMachine.locks[0],
+    });
+    assert.deepEqual(listFrames.at(-1), { op: "complete", count: 1 });
+    const result = await run(dir, "lock", lockId, "show");
+    assert.match(
+      result.stdout,
+      /^Lock details\n  Lock ID\s+visible-lock\n  Current status\s+Stale\n  Record state\s+active/m,
+    );
+    assert.match(result.stdout, /\nResource\n  Adapter\s+fixture-adapter/m);
+    assert.match(result.stdout, /\nOwner\n  Host\s+fixture-host/m);
+    assert.match(
+      result.stdout,
+      /\nTiming\n  Acquired\s+2026-01-01T00:00:00.000Z/m,
+    );
+    assert.doesNotMatch(result.stdout, /"ownerToken"/);
+    const machine = JSON.parse(
+      (await run(dir, "lock", lockId, "show", "--json")).stdout,
+    );
+    assert.deepEqual(machine, {
+      schema: "benchpilot.lock-detail",
+      version: 1,
+      id: lockId,
+      liveness: "stale",
+      state: "active",
+      resource: {
+        adapter: "fixture-adapter",
+        kind: "device",
+        physicalId: "fixture-device",
+      },
+      owner: {
+        hostname: "fixture-host",
+        pid: 1234,
+        command: "fixture-command",
+      },
+      timing: {
+        acquiredAt: "2026-01-01T00:00:00.000Z",
+        heartbeatAt: "2026-01-01T00:00:05.000Z",
+        expiresAt: "2026-01-01T00:00:35.000Z",
+      },
+    });
+    assert.doesNotMatch(JSON.stringify(machine), /ownerToken|\u001B\[/);
+    const frames = (await run(dir, "lock", lockId, "show", "--jsonl")).stdout
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    assert.equal(frames[0].protocol, "benchpilot.data");
+    assert.equal(frames[0].schema, "benchpilot.lock-detail");
+    assert.deepEqual(frames[1], {
+      op: "snapshot",
+      index: 0,
+      key: "result",
+      value: machine,
+    });
+    const cleared = JSON.parse(
+      (await run(dir, "lock", lockId, "clear", "--json")).stdout,
+    );
+    assert.deepEqual(cleared, {
+      schema: "benchpilot.lock-clear",
+      version: 1,
+      lock: {
+        id: lockId,
+        state: "active",
+        resource: {
+          adapter: "fixture-adapter",
+          kind: "device",
+          physicalId: "fixture-device",
+        },
+        owner: {
+          hostname: "fixture-host",
+          pid: 1234,
+          command: "fixture-command",
+        },
+        timing: {
+          acquiredAt: "2026-01-01T00:00:00.000Z",
+          heartbeatAt: "2026-01-01T00:00:05.000Z",
+          expiresAt: "2026-01-01T00:00:35.000Z",
+        },
+      },
+    });
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("lock clear-stale summarizes at most five cleared locks on screen", async () => {
+  const dir = await mkdtemp(
+    path.join(os.tmpdir(), "benchpilot-lock-clear-stale-"),
+  );
+  try {
+    const root = path.join(dir, "runtime", "benchpilot", "locks");
+    const expired = "1970-01-01T00:00:00.000Z";
+    const ids = Array.from({ length: 6 }, (_, index) => `stale-${index + 1}`);
+    for (const lockId of ids) {
+      const lock = path.join(root, lockId);
+      await mkdir(lock, { recursive: true });
+      await writeFile(
+        path.join(lock, "owner.json"),
+        JSON.stringify({
+          schema: "benchpilot.lock",
+          version: 2,
+          state: "active",
+          lockId,
+          identity: {
+            adapter: "fixture",
+            kind: "device",
+            physicalId: lockId,
+          },
+          ownerToken: "fixture-owner",
+          pid: 999999,
+          hostname: "fixture-host",
+          command: "fixture",
+          acquiredAt: expired,
+          heartbeatAt: expired,
+          expiresAt: expired,
+        }),
+      );
+    }
+    const result = await run(dir, "lock", "clear-stale");
+    assert.match(result.stdout, /^Cleared stale locks:/);
+    for (const id of ids.slice(0, 5))
+      assert.match(result.stdout, new RegExp(`^  ${id}$`, "m"));
+    assert.doesNotMatch(result.stdout, /^  stale-6$/m);
+    assert.match(result.stdout, /… and 6 stale locks in total\./);
+    assert.doesNotMatch(result.stdout, /"cleared"/);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -798,7 +1036,7 @@ test("declarative demo aborts an action when the operation times out", async () 
       "core.operation-timeout",
     );
     assert.deepEqual(
-      JSON.parse((await run(dir, "lock", "list", "--json")).stdout).data.locks,
+      JSON.parse((await run(dir, "lock", "list", "--json")).stdout).locks,
       [],
     );
   } finally {
@@ -959,7 +1197,7 @@ test("dry-run creates no run, lock, approval, or artifact state", async () => {
       [],
     );
     assert.deepEqual(
-      JSON.parse((await run(dir, "lock", "list", "--json")).stdout).data.locks,
+      JSON.parse((await run(dir, "lock", "list", "--json")).stdout).locks,
       [],
     );
     assert.deepEqual(

@@ -1,6 +1,8 @@
 import { stdout } from "node:process";
 import type { Json } from "../core.js";
 import { t, type Locale, type MessageKey } from "../i18n/index.js";
+import { renderDataPage } from "./data-renderer.js";
+import type { CliDataPage } from "./data/page.js";
 import type { Flags } from "./parser.js";
 import {
   jsonlPresentation,
@@ -67,6 +69,18 @@ export function write(
 
 export function writeText(value: string, sink: OutputSink = processOutputSink) {
   sink.stdout.write(value);
+}
+
+/** The only stdout writer for canonical command data. */
+export function writeDataPage<T extends object>(input: {
+  readonly page: CliDataPage<T>;
+  readonly flags: Flags;
+  readonly locale: Locale;
+  readonly view: PresentationView;
+  readonly color: boolean;
+  readonly sink?: OutputSink;
+}) {
+  (input.sink ?? processOutputSink).stdout.write(renderDataPage(input));
 }
 
 /** The only stdout writer for presentation pages. */

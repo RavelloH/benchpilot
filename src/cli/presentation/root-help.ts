@@ -36,6 +36,7 @@ export const rootHelpSections: readonly RootHelpSection[] = [
       { command: "setup", summaryKey: "screen.root.setup" },
       { command: "doctor", summaryKey: "help.command.doctor" },
       { command: "language", summaryKey: "screen.root.language" },
+      { command: "alias", summaryKey: "screen.root.alias" },
     ],
   },
   {
@@ -72,6 +73,7 @@ export const rootHelpSections: readonly RootHelpSection[] = [
     entries: [
       { command: "skill", summaryKey: "screen.root.skill" },
       { command: "docs", summaryKey: "screen.root.docs" },
+      { command: "upgrade", summaryKey: "screen.root.upgrade" },
       { command: "help", summaryKey: "help.command.help" },
       { command: "version", summaryKey: "help.command.version" },
     ],
@@ -107,6 +109,11 @@ export const agentHelpSections: readonly AgentHelpSection[] = [
           "benchpilot language get [options]",
           "benchpilot language set <locale> [options]",
         ],
+      },
+      {
+        command: "alias",
+        summaryKey: "screen.root.alias",
+        syntax: "benchpilot alias [arguments] [options]",
       },
     ],
   },
@@ -230,6 +237,11 @@ export const agentHelpSections: readonly AgentHelpSection[] = [
         syntax: "benchpilot docs [arguments] [options]",
       },
       {
+        command: "upgrade",
+        summaryKey: "screen.root.upgrade",
+        syntax: "benchpilot upgrade [options]",
+      },
+      {
         command: "help",
         summaryKey: "help.command.help",
         syntax: "benchpilot help [command] [options]",
@@ -268,7 +280,7 @@ export function renderInteractiveHomeHeader(
 ) {
   const theme = terminalTheme(color);
   const benchPilotWordmark = showWordmark ? rootWordmark : "";
-  return `${theme.brand(benchPilotWordmark)}\n\n${theme.muted(t(locale, "help.group.root"))}\n\n${theme.heading(t(locale, "menu.homeGuideTitle"))}\n  ${theme.muted(t(locale, "menu.homeGuide"))}\n\n`;
+  return `${theme.brand(benchPilotWordmark)}\n\n${theme.muted(t(locale, "help.group.root"))}\n\n`;
 }
 
 const sections = rootHelpSections;

@@ -6,7 +6,6 @@ import {
   type Json,
   type OperationLifecycleFactories,
   type PathService,
-  readJson,
   type ResolvedConfig,
 } from "../../core.js";
 
@@ -137,7 +136,16 @@ export class RuntimeUseCases {
   }
 
   async listLocks() {
-    return { locks: await this.locks().list() };
+    const listed = await this.locks().listWithCorrupt();
+    return {
+      locks: await Promise.all(
+        listed.locks.map(async (lock) => ({
+          ...lock,
+          liveness: await this.locks().liveness(lock),
+        })),
+      ),
+      corrupt: listed.corrupt,
+    };
   }
 
   async clearStaleLocks() {
@@ -145,7 +153,8 @@ export class RuntimeUseCases {
   }
 
   async inspectLock(id: string) {
-    return readJson(this.locks().file(id));
+    const lock = await this.locks().inspect(id);
+    return { ...lock, liveness: await this.locks().liveness(lock) };
   }
 
   async clearLock(id: string, input: ClearLockInput) {

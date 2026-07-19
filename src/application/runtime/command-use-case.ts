@@ -92,13 +92,16 @@ export class RuntimeCommandUseCases {
           await this.runtime.runArtifacts(request.id!),
         );
       case "locks.list":
-        return this.outcome(action, await this.runtime.listLocks());
+        return this.outcome(
+          action,
+          (await this.runtime.listLocks()) as unknown as Json,
+        );
       case "locks.clear-stale":
         return this.outcome(action, await this.runtime.clearStaleLocks());
       case "lock.show":
         return this.outcome(
           action,
-          (await this.runtime.inspectLock(request.id!)) as Json,
+          (await this.runtime.inspectLock(request.id!)) as unknown as Json,
         );
       case "lock.clear":
         return this.outcome(

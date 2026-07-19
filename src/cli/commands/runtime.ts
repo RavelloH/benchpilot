@@ -1,13 +1,29 @@
-import { fail, type Json } from "../../core.js";
+import {
+  fail,
+  type Json,
+  type LockLiveness,
+  type LockRecord,
+} from "../../core.js";
 import type { RuntimeCommandUseCases } from "../../application/runtime/command-use-case.js";
+import type { Locale } from "../../i18n/index.js";
+import {
+  lockClearDataPage,
+  lockClearStaleDataPage,
+  lockDetailDataPage,
+  lockListDataPage,
+} from "../data/lock.js";
 import { brief, fullHelp } from "../help-renderer.js";
 import type { Flags } from "../parser.js";
-import { write } from "../output-renderer.js";
+import { write, writeDataPage } from "../output-renderer.js";
+import type { PresentationView } from "../presentation/page.js";
 
 interface RuntimeCommandContext {
   parts: string[];
   flags: Flags;
   commandFlags: Json;
+  locale: Locale;
+  color: boolean;
+  presentationView: PresentationView;
   runtimeCommands: RuntimeCommandUseCases;
   readApprovalChallenge: (input: {
     approvalId: string;
@@ -19,6 +35,9 @@ export async function handleRuntimeCommand({
   parts,
   flags,
   commandFlags,
+  locale,
+  color,
+  presentationView,
   runtimeCommands,
   readApprovalChallenge,
 }: RuntimeCommandContext): Promise<boolean> {
@@ -95,19 +114,38 @@ export async function handleRuntimeCommand({
   if (parts[0] === "lock" && parts[1] === "list") {
     if (parts.length !== 2)
       fail("USAGE_ERROR", 2, "lock list takes no arguments.");
-    write(
-      (await runtimeCommands.execute({ action: "locks.list" })).data,
+    const result = (
+      await runtimeCommands.execute({
+        action: "locks.list",
+      })
+    ).data as unknown as {
+      locks: (LockRecord & { liveness: LockLiveness })[];
+      corrupt: { lockId: string; directory: string; entries: string[] }[];
+    };
+    writeDataPage({
+      page: lockListDataPage(result),
       flags,
-    );
+      locale,
+      view: presentationView,
+      color,
+    });
     return true;
   }
   if (parts[0] === "lock" && parts[1] === "clear-stale") {
     if (parts.length !== 2)
       fail("USAGE_ERROR", 2, "lock clear-stale takes no arguments.");
-    write(
-      (await runtimeCommands.execute({ action: "locks.clear-stale" })).data,
+    const result = (
+      await runtimeCommands.execute({
+        action: "locks.clear-stale",
+      })
+    ).data as { cleared: string[] };
+    writeDataPage({
+      page: lockClearStaleDataPage(result.cleared),
       flags,
-    );
+      locale,
+      view: presentationView,
+      color,
+    });
     return true;
   }
   if (parts[0] === "lock") {
@@ -124,29 +162,41 @@ export async function handleRuntimeCommand({
       );
       return true;
     }
-    if (parts[2] === "show" || parts[2] === "inspect")
-      write(
-        (await runtimeCommands.execute({ action: "lock.show", id: parts[1] }))
-          .data,
+    if (parts[2] === "show" || parts[2] === "inspect") {
+      const record = (
+        await runtimeCommands.execute({
+          action: "lock.show",
+          id: parts[1],
+        })
+      ).data as unknown as LockRecord & { liveness: LockLiveness };
+      writeDataPage({
+        page: lockDetailDataPage(record),
         flags,
-      );
-    else if (parts[2] === "clear")
-      write(
-        (
-          await runtimeCommands.execute({
-            action: "lock.clear",
-            id: parts[1],
-            dangerouslyClearActiveLock: Boolean(
-              commandFlags["dangerously-clear-active-lock"],
-            ),
-            dangerouslyClearQuarantinedLock: Boolean(
-              commandFlags["dangerously-clear-quarantined-lock"],
-            ),
-          })
-        ).data,
+        locale,
+        view: presentationView,
+        color,
+      });
+    } else if (parts[2] === "clear") {
+      const result = (
+        await runtimeCommands.execute({
+          action: "lock.clear",
+          id: parts[1],
+          dangerouslyClearActiveLock: Boolean(
+            commandFlags["dangerously-clear-active-lock"],
+          ),
+          dangerouslyClearQuarantinedLock: Boolean(
+            commandFlags["dangerously-clear-quarantined-lock"],
+          ),
+        })
+      ).data as unknown as { cleared: LockRecord };
+      writeDataPage({
+        page: lockClearDataPage(result.cleared),
         flags,
-      );
-    else fail("USAGE_ERROR", 2, "Unknown lock command.");
+        locale,
+        view: presentationView,
+        color,
+      });
+    } else fail("USAGE_ERROR", 2, "Unknown lock command.");
     return true;
   }
   if (parts[0] === "approval" && parts[1] === "list") {

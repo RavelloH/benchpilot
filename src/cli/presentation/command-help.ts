@@ -65,6 +65,28 @@ function rootCommandReference(
   };
 }
 
+function nestedCommandReference(
+  path: readonly string[],
+  locale: Locale,
+  theme: ReturnType<typeof terminalTheme>,
+): CliNode | undefined {
+  const command = path[0];
+  if (!command) return undefined;
+  const entry = agentHelpSections
+    .flatMap((section) => section.entries)
+    .find((candidate) => candidate.command === command);
+  if (!entry?.usages?.length) return undefined;
+  return section(
+    "commands",
+    theme.heading(t(locale, "help.commands")),
+    entry.usages.map((usage, index) => ({
+      name: `usage-${index + 1}`,
+      visibility: visibleEverywhere,
+      text: theme.command(usage),
+    })),
+  );
+}
+
 /** Detailed, audience-neutral command reference for --help and help <command>. */
 export function commandHelpPage(
   path: readonly string[],
@@ -74,6 +96,7 @@ export function commandHelpPage(
   const help = fullHelp([...path]);
   const command = ["benchpilot", ...path].join(" ");
   const theme = terminalTheme(color);
+  const nestedReference = nestedCommandReference(path, locale, theme);
   return [
     section("name", theme.heading(t(locale, "help.name")), [
       {
@@ -90,6 +113,7 @@ export function commandHelpPage(
       },
     ]),
     ...(path.length === 0 ? [rootCommandReference(locale, theme)] : []),
+    ...(nestedReference ? [nestedReference] : []),
     section("description", theme.heading(t(locale, "help.description")), [
       {
         name: "text",

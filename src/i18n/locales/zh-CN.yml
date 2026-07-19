@@ -8,14 +8,54 @@ init:
   projectId: "项目 ID"
   projectName: "项目名称"
   done: "BenchPilot 项目已初始化。"
+lock:
+  list:
+    title: "物理资源锁"
+    none: "当前没有持有的锁。"
+    corrupt: "损坏的锁目录"
+    id: "锁 ID"
+    status: "当前状态"
+    resource: "资源"
+    contents: "目录内容"
+    liveness:
+      active: "活跃"
+      stale: "已过期"
+      unknown: "未知"
+  clear:
+    title: "已清除资源锁"
+  clearStale:
+    none: "没有可清除的过期锁。"
+    heading: "已清除过期锁："
+    remaining: "……等总共 {count} 个过期锁。"
+  detail:
+    title: "锁详情"
+    id: "锁 ID"
+    liveness: "当前状态"
+    recordState: "记录状态"
+    resource: "资源"
+    adapter: "适配器"
+    kind: "类型"
+    physicalId: "物理 ID"
+    owner: "持有者"
+    host: "主机"
+    process: "进程"
+    command: "命令"
+    session: "会话"
+    run: "操作记录"
+    timing: "时间"
+    acquiredAt: "获取时间"
+    heartbeatAt: "最近心跳"
+    expiresAt: "过期时间"
 menu:
   choose: "选择下一步操作"
-  homeGuideTitle: "操作指引"
-  homeGuide: "输入以筛选命令；使用 ↑↓ 选择，Enter 确认。"
   back: "上一步"
   exit: "退出"
+  exitConfirm: "再次按下 ESC 退出"
   keysHelp: "↑↓ 选择 · Enter 确认"
   searchKeysHelp: "输入以搜索 · ↑↓ 选择 · Enter 确认"
+  shortcut:
+    back: "Esc 上一步"
+    exit: "Ctrl+X 退出"
   value: "请输入{name}"
   invalid: "请选择列出的选项之一。"
   action:
@@ -40,6 +80,8 @@ menu:
   config:
     existing: "选择已有配置键"
     new: "输入新配置键"
+  lock:
+    listAll: "列出所有锁"
   runs:
     keep: "保留最新操作记录"
     older-than: "删除早于指定时长的操作记录"
@@ -56,6 +98,8 @@ screen:
     records: "审计与安全"
     help: "帮助"
     setup: "配置项目和本地环境"
+    alias: "查看和管理 CLI 命令别名"
+    upgrade: "检查并升级 BenchPilot CLI"
     skill: "查看供 Agent 调用 BenchPilot 的技能说明"
     docs: "打开面向用户的 BenchPilot 文档"
     adapter: "查看、管理和诊断设备适配器"

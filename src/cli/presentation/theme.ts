@@ -9,6 +9,7 @@ export interface TerminalTheme {
   success(value: string): string;
   warning(value: string): string;
   error(value: string): string;
+  danger(value: string): string;
   debug(value: string): string;
   muted(value: string): string;
 }
@@ -28,6 +29,7 @@ const plainTheme: TerminalTheme = {
   success: (value) => value,
   warning: (value) => value,
   error: (value) => value,
+  danger: (value) => value,
   debug: (value) => value,
   muted: (value) => value,
 };
@@ -43,6 +45,7 @@ const colorTheme: TerminalTheme = {
   success: (value) => paint("38;5;114", value),
   warning: (value) => paint("38;5;220", value),
   error: (value) => paint("38;5;203", value),
+  danger: (value) => paint("1;97;48;5;203", value),
   debug: (value) => paint("38;5;244", value),
   muted: (value) => paint("2", value),
 };

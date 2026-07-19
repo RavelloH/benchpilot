@@ -14,6 +14,9 @@ import {
   InteractionSession,
   INTERACTION_BACK,
   INTERACTION_EXIT,
+  compactPromptAnswer,
+  interactionShortcut,
+  menuDivider,
   promptInit,
 } from "../dist/cli/interaction/prompter.js";
 import { brief, fullHelp, humanFull } from "../dist/cli/help-renderer.js";
@@ -128,6 +131,21 @@ test("interaction policy keeps agent identity separate from terminal availabilit
   if (!agentMode.allowed) assert.equal(agentMode.agent.marker, "--agent");
 });
 
+test("interactive shortcut keys do not overlap with searchable text input", () => {
+  assert.equal(interactionShortcut("q"), undefined);
+  assert.equal(interactionShortcut("query"), undefined);
+  assert.equal(interactionShortcut("\u001b"), INTERACTION_BACK);
+  assert.equal(interactionShortcut("\u001b[A"), undefined);
+  assert.equal(interactionShortcut("\u0018"), INTERACTION_EXIT);
+});
+
+test("interactive answers use compact spacing after selection", () => {
+  assert.equal(
+    compactPromptAnswer("lock      查看和管理物理资源锁"),
+    "lock 查看和管理物理资源锁",
+  );
+});
+
 test("screen catalogs provide localized text and leave machine protocol out of translation", () => {
   assert.equal(t("zh-CN", "init.done"), "BenchPilot 项目已初始化。");
   assert.equal(t("zh-CN", "menu.action.set"), "写入配置");
@@ -155,6 +173,7 @@ test("root help does not repeat the executable name", () => {
     "setup",
     "doctor",
     "language",
+    "alias",
     "config",
     "adapter",
     "device",
@@ -165,6 +184,7 @@ test("root help does not repeat the executable name", () => {
     "approval",
     "skill",
     "docs",
+    "upgrade",
     "help",
     "home",
     "version",
@@ -187,6 +207,7 @@ test("interactive home flattens commands under non-selectable categories", () =>
       "setup",
       "doctor",
       "language",
+      "alias",
       "config",
       "adapter",
       "device",
@@ -197,6 +218,7 @@ test("interactive home flattens commands under non-selectable categories", () =>
       "lock",
       "skill",
       "docs",
+      "upgrade",
       "help",
       "version",
     ],
@@ -212,15 +234,23 @@ test("interactive sessions append navigation and distinguish back from exit", as
     },
     value: async () => undefined,
   });
-  await session.choose([{ value: "list" }]);
-  await assert.rejects(
-    session.choose([{ value: "show" }]),
-    (error) => error instanceof InteractionBackError,
-  );
+  await session.choose([{ value: "list" }], {
+    nextBackPath: ["home"],
+  });
+  await assert.rejects(session.choose([{ value: "show" }]), (error) => {
+    assert.ok(error instanceof InteractionBackError);
+    assert.deepEqual(error.path, ["home"]);
+    assert.deepEqual(error.remainingPaths, []);
+    return true;
+  });
   assert.deepEqual(
     requests[0].choices.slice(-2).map((choice) => choice.value),
     [undefined, INTERACTION_EXIT],
   );
+  assert.equal(requests[0].choices.at(-2).separator, menuDivider());
+  assert.equal(requests[1].choices.at(-3).separator, menuDivider());
+  assert.equal(requests[1].choices.at(-2).description, "Esc Back\n");
+  assert.equal(requests[1].choices.at(-1).description, "Ctrl+X Exit\n");
   assert.deepEqual(
     requests[1].choices.slice(-3).map((choice) => choice.value),
     [undefined, INTERACTION_BACK, INTERACTION_EXIT],
@@ -237,11 +267,60 @@ test("interactive sessions append navigation and distinguish back from exit", as
   );
 });
 
+test("home enables the native double-Esc exit confirmation", async () => {
+  const requests = [];
+  const session = new InteractionSession("zh-CN", {
+    choose: async (request) => {
+      requests.push(request);
+      return "lock";
+    },
+    value: async () => undefined,
+  });
+  await session.choose([{ value: "lock" }], {
+    commandPath: [],
+    ignoreInitialEscape: true,
+  });
+  assert.equal(requests[0].exitConfirmation, true);
+  assert.equal(requests[0].ignoreInitialEscape, true);
+});
+
+test("interactive sessions retain the full back stack across a resumed menu", async () => {
+  const session = new InteractionSession(
+    "en",
+    scriptedDriver("lock", "visible-lock", INTERACTION_BACK),
+  );
+  await session.choose([{ value: "lock" }], { nextBackPath: ["home"] });
+  await session.choose([{ value: "visible-lock" }], {
+    nextBackPath: ["lock"],
+  });
+  let firstBack;
+  await assert.rejects(session.choose([{ value: "show" }]), (error) => {
+    assert.ok(error instanceof InteractionBackError);
+    firstBack = error;
+    return true;
+  });
+  assert.deepEqual(firstBack.path, ["lock"]);
+  assert.deepEqual(firstBack.remainingPaths, [["home"]]);
+
+  const resumed = new InteractionSession(
+    "en",
+    scriptedDriver(INTERACTION_BACK),
+    false,
+    firstBack.remainingPaths,
+  );
+  await assert.rejects(resumed.choose([{ value: "visible-lock" }]), (error) => {
+    assert.ok(error instanceof InteractionBackError);
+    assert.deepEqual(error.path, ["home"]);
+    assert.deepEqual(error.remainingPaths, []);
+    return true;
+  });
+});
+
 test("interactive home header keeps the human root identity above the menu", () => {
   const header = renderInteractiveHomeHeader("zh-CN", false, true);
   assert.match(header, /面向 Agent 的设备生命周期 CLI/);
-  assert.match(header, /操作指引/);
-  assert.match(header, /输入以筛选命令/);
+  assert.doesNotMatch(header, /操作指引/);
+  assert.doesNotMatch(header, /输入以筛选命令/);
   assert.match(header, /___/);
 });
 
@@ -281,6 +360,15 @@ test("wordmarks are limited to human terminal screens", () => {
   assert.match(
     renderVersion({ cliVersion: "0.0.0", nodeVersion: "v24.0.0" }, false, true),
     /________/,
+  );
+  assert.match(
+    renderVersion(
+      { cliVersion: "0.0.0", nodeVersion: "v24.0.0" },
+      false,
+      true,
+      80,
+    ),
+    /\/ __\\/,
   );
   assert.doesNotMatch(
     renderVersion(
@@ -396,10 +484,11 @@ test("interactive sessions pass searchable prompt options to their driver", asyn
   });
   await session.choose([{ value: "init" }], {
     pageSize: 100,
-    searchable: true,
+    commandPath: [],
   });
   assert.equal(received.pageSize, 100);
   assert.equal(received.searchable, true);
+  assert.equal(received.choices[0].description, "$ benchpilot init\n");
 });
 
 test("interactive exit uses the localized error color on human terminals", async () => {

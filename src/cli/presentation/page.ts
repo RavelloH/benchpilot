@@ -3,6 +3,13 @@ import type { Locale } from "../../i18n/index.js";
 /** Internal visibility controls. They are never part of machine output. */
 export type CliVisibility = "screen" | "json" | "jsonl";
 
+/** A screen-only tree shared by document and data renderers. */
+export interface CliScreenNode {
+  readonly text?: string;
+  readonly children?: readonly CliScreenNode[];
+  readonly lineBreak?: boolean;
+}
+
 /**
  * The presentation tree emitted by CLI text-generation code.
  *
@@ -99,9 +106,11 @@ function projectNodes(
   });
 }
 
-export function screenPresentation(nodes: readonly CliNode[]) {
-  const renderNode = (node: CliNode, depth: number): string | undefined => {
-    if (!node.visibility.includes("screen")) return undefined;
+export function renderScreenNodes(nodes: readonly CliScreenNode[]) {
+  const renderNode = (
+    node: CliScreenNode,
+    depth: number,
+  ): string | undefined => {
     const hasText = node.text !== undefined;
     const children = (node.children ?? [])
       .flatMap((child) => [renderNode(child, hasText ? depth + 1 : depth)])
@@ -118,6 +127,23 @@ export function screenPresentation(nodes: readonly CliNode[]) {
     .filter((value): value is string => value !== undefined)
     .join("\n\n");
   return page ? `${page}\n` : "";
+}
+
+function screenNodes(nodes: readonly CliNode[]): CliScreenNode[] {
+  return nodes.flatMap((node) => {
+    if (!node.visibility.includes("screen")) return [];
+    return [
+      {
+        ...(node.text === undefined ? {} : { text: node.text }),
+        ...(node.children ? { children: screenNodes(node.children) } : {}),
+        ...(node.lineBreak ? { lineBreak: true } : {}),
+      },
+    ];
+  });
+}
+
+export function screenPresentation(nodes: readonly CliNode[]) {
+  return renderScreenNodes(screenNodes(nodes));
 }
 
 export function jsonPresentation(nodes: readonly CliNode[]) {

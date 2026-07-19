@@ -90,6 +90,32 @@ export class LockManager {
     });
   }
 
+  private async readRecord(id: string): Promise<LockRecord> {
+    let record: LockRecord | undefined;
+    try {
+      record = await readJson<LockRecord>(this.file(id));
+    } catch (error: unknown) {
+      if (error instanceof SyntaxError) return this.corrupt(id);
+      throw error;
+    }
+    if (!record) {
+      try {
+        await fs.access(this.directory(id));
+      } catch (error: unknown) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT")
+          throw new BenchPilotError(
+            "LOCK_NOT_FOUND",
+            3,
+            `Lock not found: ${id}`,
+          );
+        throw error;
+      }
+      return this.corrupt(id);
+    }
+    if (!this.isRecord(record)) return this.corrupt(id);
+    return record;
+  }
+
   private isRecord(value: unknown): value is LockRecord {
     if (!value || typeof value !== "object") return false;
     const record = value as Partial<LockRecord>;
@@ -424,12 +450,16 @@ export class LockManager {
     if (tombstone) await fs.rm(tombstone, { recursive: true, force: true });
   }
 
-  async list(): Promise<LockRecord[]> {
+  async inspect(id: string) {
+    return this.readRecord(id);
+  }
+
+  async listWithCorrupt() {
     try {
       const entries = await fs.readdir(this.paths.runtimeRoot(), {
         withFileTypes: true,
       });
-      const records = await Promise.all(
+      const listed = await Promise.all(
         entries
           .filter(
             (entry) =>
@@ -438,13 +468,32 @@ export class LockManager {
               !entry.name.includes(".creating-") &&
               !entry.name.includes(".released-"),
           )
-          .map((entry) => readJson<LockRecord>(this.file(entry.name))),
+          .map(async (entry) => {
+            const lockId = entry.name;
+            const directory = this.directory(lockId);
+            const entries = await fs.readdir(directory).catch(() => []);
+            try {
+              const record = await readJson<LockRecord>(this.file(lockId));
+              if (record && this.isRecord(record)) return { record };
+            } catch (error: unknown) {
+              if (!(error instanceof SyntaxError)) throw error;
+            }
+            return { corrupt: { lockId, directory, entries } };
+          }),
       );
-      return records.filter((record): record is LockRecord => Boolean(record));
+      return {
+        locks: listed.flatMap(({ record }) => (record ? [record] : [])),
+        corrupt: listed.flatMap(({ corrupt }) => (corrupt ? [corrupt] : [])),
+      };
     } catch (error: unknown) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
+      if ((error as NodeJS.ErrnoException).code === "ENOENT")
+        return { locks: [], corrupt: [] };
       throw error;
     }
+  }
+
+  async list(): Promise<LockRecord[]> {
+    return (await this.listWithCorrupt()).locks;
   }
 
   async clearStale() {
@@ -475,9 +524,7 @@ export class LockManager {
     let cleared!: LockRecord;
     let tombstone: string | undefined;
     await this.withGuard(id, async () => {
-      const record = await readJson<LockRecord>(this.file(id));
-      if (!record)
-        throw new BenchPilotError("LOCK_NOT_FOUND", 3, `Lock not found: ${id}`);
+      const record = await this.readRecord(id);
       if (
         (record.state === "quarantined" ||
           record.state === "quarantine-failed") &&
@@ -500,9 +547,8 @@ export class LockManager {
           "Active lock requires --dangerously-clear-active-lock.",
         );
       await this.hooks.clearRead?.(record);
-      const current = await readJson<LockRecord>(this.file(id));
-      if (!current || current.ownerToken !== record.ownerToken)
-        ownershipLost(id);
+      const current = await this.readRecord(id);
+      if (current.ownerToken !== record.ownerToken) ownershipLost(id);
       tombstone = `${this.directory(id)}.released-${randomBytes(8).toString("hex")}`;
       await fs.rename(this.directory(id), tombstone);
       cleared = record;
