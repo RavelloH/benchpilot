@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import { resolve, basename } from "node:path";
 import { parse } from "@iarna/toml";
 import { fixedFiles } from "./layout.js";
@@ -17,6 +17,7 @@ const jsonFiles = new Set([
 export const loadAdapter = async (root: string): Promise<LoadedAdapter> => {
   const files: Record<string, JsonObject> = {};
   const schemas: Record<string, JsonObject> = {};
+  const i18n: Record<string, JsonObject> = {};
   for (const file of fixedFiles.filter((item) => item !== "README.md")) {
     const text = await readFile(resolve(root, file), "utf8");
     const value = object(jsonFiles.has(file) ? JSON.parse(text) : parse(text));
@@ -24,10 +25,19 @@ export const loadAdapter = async (root: string): Promise<LoadedAdapter> => {
     else files[file] = value;
   }
   const directoryId = basename(root);
+  const localeFiles = await readdir(resolve(root, "i18n"), {
+    withFileTypes: true,
+  }).catch(() => []);
+  for (const file of localeFiles)
+    if (file.isFile() && file.name.endsWith(".toml"))
+      i18n[basename(file.name, ".toml")] = object(
+        parse(await readFile(resolve(root, "i18n", file.name), "utf8")),
+      );
   return {
     id: directoryId === "_template" ? "template" : directoryId,
     root,
     files,
     schemas,
+    i18n,
   };
 };

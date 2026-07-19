@@ -653,6 +653,7 @@ test("command catalog is the CLI root-menu source", () => {
       "help",
       "home",
       "version",
+      "upgrade",
     ],
   );
 });

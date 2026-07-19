@@ -41,7 +41,9 @@ const filesUnder = async (root: string): Promise<string[]> => {
 };
 
 const allowedExtra = (path: string) =>
-  path.startsWith("tests/fixtures/") || path.startsWith("docs/");
+  path.startsWith("tests/fixtures/") ||
+  path.startsWith("docs/") ||
+  /^i18n\/[A-Za-z0-9-]+\.toml$/.test(path);
 
 export const validateAdapterLayout = async (
   root: string,

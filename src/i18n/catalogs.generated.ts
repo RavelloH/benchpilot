@@ -58,6 +58,16 @@ export const catalogs = {
       "This command requires interactive input and cannot be used with machine output.",
     "cli.interaction.terminal":
       "This command requires an interactive terminal.",
+    "command.upgrade": "Check for and upgrade the BenchPilot CLI",
+    "doctor.adapter": "Adapter: {adapter}",
+    "doctor.id": "Check",
+    "doctor.local": "Local environment",
+    "doctor.message": "Details",
+    "doctor.result": "Result",
+    "doctor.status.fail": "Failed",
+    "doctor.status.pass": "Pass",
+    "doctor.status.unknown": "Unknown",
+    "doctor.status.warn": "Warning",
     "error.approval": "Approval error: {message}",
     "error.configuration": "Configuration error: {message}",
     "error.device": "Device error: {message}",
@@ -92,6 +102,8 @@ export const catalogs = {
     "error.reason.deviceNotFound": "The requested device was not found.",
     "error.reason.deviceQuarantined":
       "The device is quarantined and cannot be operated.",
+    "error.reason.duplicateAdapter":
+      "An adapter with this identifier is already registered.",
     "error.reason.humanApprovalRequired":
       "Human approval is required before this operation can run.",
     "error.reason.interactionCancelled": "The interaction was cancelled.",
@@ -99,8 +111,24 @@ export const catalogs = {
       "Interactive mode cannot be used with machine output.",
     "error.reason.interactiveTerminalRequired":
       "This operation requires an interactive terminal.",
+    "error.reason.internalError": "An unexpected internal error occurred.",
+    "error.reason.invalidAdapterDefinition":
+      "The adapter definition is invalid or incompatible.",
+    "error.reason.invalidApprovalId": "The approval identifier is invalid.",
+    "error.reason.invalidArtifact":
+      "The artifact is invalid, unavailable, or outside the permitted run directory.",
     "error.reason.invalidConfig": "The configuration is invalid.",
+    "error.reason.invalidDeviceConfig": "The device configuration is invalid.",
+    "error.reason.invalidDuration": "The duration value is invalid.",
+    "error.reason.invalidLockId":
+      "The physical resource lock identifier is invalid.",
+    "error.reason.invalidPath":
+      "The requested path is invalid or outside the permitted directory.",
+    "error.reason.invalidProjectName": "The project name is invalid.",
+    "error.reason.invalidRunId": "The operation record identifier is invalid.",
     "error.reason.invalidToml": "The configuration file is not valid TOML.",
+    "error.reason.lockCorrupt":
+      "The physical resource lock record is corrupted.",
     "error.reason.lockNotFound":
       "The requested physical resource lock was not found.",
     "error.reason.lockOwnershipLost": "Resource lock ownership was lost.",
@@ -120,8 +148,20 @@ export const catalogs = {
     "error.reason.unsupportedConfigVersion":
       "This configuration version is not supported.",
     "error.reason.untranslated": "The operation failed (error code: {kind}).",
+    "error.reason.upgradeFailed":
+      "The package manager could not complete the BenchPilot upgrade.",
+    "error.reason.upgradeInstallationNotFound":
+      "The BenchPilot installation could not be located.",
+    "error.reason.upgradePackageManagerNotFound":
+      "The package manager used to install BenchPilot could not be identified. Install it globally with npm, pnpm, Yarn, or Bun, then try again.",
+    "error.reason.upgradeRegistryUnavailable":
+      "The package registry could not be reached. Check your network and registry configuration, then try again.",
+    "error.reason.upgradeVersionNotFound":
+      "The requested BenchPilot version is not available in the package registry.",
+    "error.reason.usageError": "The command arguments or options are invalid.",
     "error.system": "System error: {message}",
     "error.unknown": "Command failed: {message}",
+    "error.upgrade": "Upgrade error: {message}",
     "error.usage": "Usage error: {message}",
     "help.arguments": "ARGUMENTS",
     "help.argumentsText": "See command path.",
@@ -384,6 +424,16 @@ export const catalogs = {
     "cli.interaction.machine":
       "此命令需要交互式输入，不能与机器输出模式一起使用。",
     "cli.interaction.terminal": "此命令需要可交互的终端。",
+    "command.upgrade": "检查并升级 BenchPilot CLI",
+    "doctor.adapter": "适配器：{adapter}",
+    "doctor.id": "检查项",
+    "doctor.local": "本地环境",
+    "doctor.message": "详情",
+    "doctor.result": "结果",
+    "doctor.status.fail": "失败",
+    "doctor.status.pass": "通过",
+    "doctor.status.unknown": "未知",
+    "doctor.status.warn": "警告",
     "error.approval": "审批错误：{message}",
     "error.configuration": "配置错误：{message}",
     "error.device": "设备错误：{message}",
@@ -412,13 +462,26 @@ export const catalogs = {
       "无法取得可安全加锁的稳定物理设备标识。",
     "error.reason.deviceNotFound": "找不到指定设备。",
     "error.reason.deviceQuarantined": "设备已被隔离，暂时不能执行操作。",
+    "error.reason.duplicateAdapter": "已存在使用相同标识符的适配器。",
     "error.reason.humanApprovalRequired": "该操作需要人工审批后才能执行。",
     "error.reason.interactionCancelled": "交互已取消。",
     "error.reason.interactiveMachineOutputUnsupported":
       "交互模式不能与机器输出格式一起使用。",
     "error.reason.interactiveTerminalRequired": "该操作需要可交互的终端。",
+    "error.reason.internalError": "发生了未预期的内部错误。",
+    "error.reason.invalidAdapterDefinition": "适配器定义无效或不兼容。",
+    "error.reason.invalidApprovalId": "审批标识符无效。",
+    "error.reason.invalidArtifact":
+      "执行产物无效、不可用，或不在允许的操作记录目录中。",
     "error.reason.invalidConfig": "配置内容无效。",
+    "error.reason.invalidDeviceConfig": "设备配置无效。",
+    "error.reason.invalidDuration": "时长值无效。",
+    "error.reason.invalidLockId": "物理资源锁标识符无效。",
+    "error.reason.invalidPath": "请求的路径无效，或不在允许的目录中。",
+    "error.reason.invalidProjectName": "项目名称无效。",
+    "error.reason.invalidRunId": "操作记录标识符无效。",
     "error.reason.invalidToml": "配置文件不是有效的 TOML。",
+    "error.reason.lockCorrupt": "物理资源锁记录已损坏。",
     "error.reason.lockNotFound": "找不到指定的物理资源锁。",
     "error.reason.lockOwnershipLost": "已失去资源锁的所有权。",
     "error.reason.lockQuarantined": "该资源锁已被隔离。",
@@ -434,8 +497,19 @@ export const catalogs = {
     "error.reason.unsupportedCapability": "该设备不支持指定操作。",
     "error.reason.unsupportedConfigVersion": "不支持该配置文件版本。",
     "error.reason.untranslated": "操作失败（错误代码：{kind}）。",
+    "error.reason.upgradeFailed": "包管理器未能完成 BenchPilot 升级。",
+    "error.reason.upgradeInstallationNotFound":
+      "找不到当前 BenchPilot 的安装位置。",
+    "error.reason.upgradePackageManagerNotFound":
+      "无法识别安装当前 BenchPilot 时使用的包管理器。请通过 npm、pnpm、Yarn 或 Bun 全局安装后再试。",
+    "error.reason.upgradeRegistryUnavailable":
+      "无法连接到包注册表。请检查网络和注册表配置后重试。",
+    "error.reason.upgradeVersionNotFound":
+      "包注册表中不存在请求的 BenchPilot 版本。",
+    "error.reason.usageError": "命令参数或选项无效。",
     "error.system": "系统错误：{message}",
     "error.unknown": "命令失败：{message}",
+    "error.upgrade": "升级错误：{message}",
     "error.usage": "用法错误：{message}",
     "help.arguments": "参数",
     "help.argumentsText": "请参阅命令路径。",

@@ -12,7 +12,8 @@
     "capabilityCatalogVersion",
     "capabilityCatalogHash",
     "schemas",
-    "platforms"
+    "platforms",
+    "i18n"
   ],
   "additionalProperties": false,
   "properties": {
@@ -36,6 +37,7 @@
         "outputs": { "type": "object" }
       }
     },
+    "i18n": { "type": "object" },
     "platforms": {
       "type": "object",
       "required": ["windows", "linux", "macos"],

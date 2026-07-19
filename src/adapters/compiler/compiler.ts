@@ -48,7 +48,7 @@ export const validateAdapter = async (
   );
   if (hasErrors(layout))
     return {
-      adapter: { id: basename(root), root, files: {}, schemas: {} },
+      adapter: { id: basename(root), root, files: {}, schemas: {}, i18n: {} },
       diagnostics: layout,
     };
   let adapter: LoadedAdapter;
@@ -56,7 +56,7 @@ export const validateAdapter = async (
     adapter = await loadAdapter(root);
   } catch (error) {
     return {
-      adapter: { id: basename(root), root, files: {}, schemas: {} },
+      adapter: { id: basename(root), root, files: {}, schemas: {}, i18n: {} },
       diagnostics: [
         ...layout,
         diagnostic(
@@ -214,12 +214,13 @@ export const compileAdapter = async (
     schema: "benchpilot.adapter-bundle",
     schemaVersion: 2,
     id: adapter.id,
-    sourceHash: sha([source, catalogContent, 1]),
+    sourceHash: sha([source, catalogContent, adapter.i18n, 1]),
     manifest: adapter.files["manifest.toml"],
     capabilityCatalog,
     capabilityCatalogVersion: 1,
     capabilityCatalogHash: sha(catalogContent),
     schemas: adapter.schemas,
+    i18n: adapter.i18n,
     platforms,
   };
   const bundle: CompiledAdapterBundleV2 = {

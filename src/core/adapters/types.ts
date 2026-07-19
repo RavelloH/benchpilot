@@ -26,6 +26,11 @@ export interface Adapter {
     diagnostics?: Json[];
   }>;
   doctor(context: AdapterContext): Promise<Json[]>;
+  translate?(
+    locale: string,
+    key: string,
+    variables?: Record<string, string>,
+  ): string | undefined;
   createDevice(
     instance: string,
     deviceConfig: Json,

@@ -8,6 +8,19 @@ init:
   projectId: "项目 ID"
   projectName: "项目名称"
   done: "BenchPilot 项目已初始化。"
+command:
+  upgrade: "检查并升级 BenchPilot CLI"
+doctor:
+  local: "本地环境"
+  adapter: "适配器：{adapter}"
+  id: "检查项"
+  result: "结果"
+  message: "详情"
+  status:
+    pass: "通过"
+    warn: "警告"
+    fail: "失败"
+    unknown: "未知"
 run:
   status:
     unknown: "未知"
@@ -274,6 +287,7 @@ help:
   examples: "示例"
   seeAlso: "另请参阅"
 error:
+  upgrade: "升级错误：{message}"
   unknown: "命令失败：{message}"
   usage: "用法错误：{message}"
   configuration: "配置错误：{message}"
@@ -285,6 +299,24 @@ error:
   interaction: "交互错误：{message}"
   internal: "内部错误：{message}"
   reason:
+    duplicateAdapter: "已存在使用相同标识符的适配器。"
+    internalError: "发生了未预期的内部错误。"
+    invalidAdapterDefinition: "适配器定义无效或不兼容。"
+    invalidApprovalId: "审批标识符无效。"
+    invalidArtifact: "执行产物无效、不可用，或不在允许的操作记录目录中。"
+    invalidDeviceConfig: "设备配置无效。"
+    invalidDuration: "时长值无效。"
+    invalidLockId: "物理资源锁标识符无效。"
+    invalidPath: "请求的路径无效，或不在允许的目录中。"
+    invalidProjectName: "项目名称无效。"
+    invalidRunId: "操作记录标识符无效。"
+    lockCorrupt: "物理资源锁记录已损坏。"
+    usageError: "命令参数或选项无效。"
+    upgradeInstallationNotFound: "找不到当前 BenchPilot 的安装位置。"
+    upgradePackageManagerNotFound: "无法识别安装当前 BenchPilot 时使用的包管理器。请通过 npm、pnpm、Yarn 或 Bun 全局安装后再试。"
+    upgradeRegistryUnavailable: "无法连接到包注册表。请检查网络和注册表配置后重试。"
+    upgradeVersionNotFound: "包注册表中不存在请求的 BenchPilot 版本。"
+    upgradeFailed: "包管理器未能完成 BenchPilot 升级。"
     projectNotFound: "项目状态命令需要在 BenchPilot 项目中执行。"
     configExists: "配置文件已存在，无法覆盖。"
     configKeyNotFound: "找不到指定的配置项。"

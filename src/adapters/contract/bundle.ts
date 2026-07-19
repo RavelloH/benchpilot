@@ -14,6 +14,7 @@ export interface CompiledAdapterBundleV2 {
   capabilityCatalog: JsonObject;
   schemas: Record<string, JsonObject>;
   platforms: Record<string, JsonObject>;
+  i18n: Record<string, JsonObject>;
 }
 
 export type UnsignedAdapterBundleV2 = Omit<

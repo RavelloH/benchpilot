@@ -156,6 +156,7 @@ const errorMessageKey = (kind: string): MessageKey => {
     return "error.approval";
   if (/^(OPERATION|CLEANUP|INVALID_ARTIFACT)/.test(kind))
     return "error.operation";
+  if (/^UPGRADE/.test(kind)) return "error.upgrade";
   if (/^(INTERACTION|AGENT_INTERACTION|INTERACTIVE_)/.test(kind))
     return "error.interaction";
   if (kind === "INTERNAL_ERROR") return "error.internal";
@@ -199,6 +200,25 @@ const errorReasonKeys: Partial<Record<string, MessageKey>> = {
   INTERACTIVE_TERMINAL_REQUIRED: "error.reason.interactiveTerminalRequired",
   INTERACTIVE_MACHINE_OUTPUT_UNSUPPORTED:
     "error.reason.interactiveMachineOutputUnsupported",
+  UPGRADE_INSTALLATION_NOT_FOUND: "error.reason.upgradeInstallationNotFound",
+  UPGRADE_PACKAGE_MANAGER_NOT_FOUND:
+    "error.reason.upgradePackageManagerNotFound",
+  UPGRADE_REGISTRY_UNAVAILABLE: "error.reason.upgradeRegistryUnavailable",
+  UPGRADE_VERSION_NOT_FOUND: "error.reason.upgradeVersionNotFound",
+  UPGRADE_FAILED: "error.reason.upgradeFailed",
+  DUPLICATE_ADAPTER: "error.reason.duplicateAdapter",
+  INTERNAL_ERROR: "error.reason.internalError",
+  INVALID_ADAPTER_DEFINITION: "error.reason.invalidAdapterDefinition",
+  INVALID_APPROVAL_ID: "error.reason.invalidApprovalId",
+  INVALID_ARTIFACT: "error.reason.invalidArtifact",
+  INVALID_DEVICE_CONFIG: "error.reason.invalidDeviceConfig",
+  INVALID_DURATION: "error.reason.invalidDuration",
+  INVALID_LOCK_ID: "error.reason.invalidLockId",
+  INVALID_PATH: "error.reason.invalidPath",
+  INVALID_PROJECT_NAME: "error.reason.invalidProjectName",
+  INVALID_RUN_ID: "error.reason.invalidRunId",
+  LOCK_CORRUPT: "error.reason.lockCorrupt",
+  USAGE_ERROR: "error.reason.usageError",
 };
 
 const localizedErrorReason = (

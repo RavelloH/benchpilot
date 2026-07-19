@@ -8,6 +8,19 @@ init:
   projectId: "Project ID"
   projectName: "Project name"
   done: "Initialized BenchPilot project."
+command:
+  upgrade: "Check for and upgrade the BenchPilot CLI"
+doctor:
+  local: "Local environment"
+  adapter: "Adapter: {adapter}"
+  id: "Check"
+  result: "Result"
+  message: "Details"
+  status:
+    pass: "Pass"
+    warn: "Warning"
+    fail: "Failed"
+    unknown: "Unknown"
 run:
   status:
     unknown: "Unknown"
@@ -274,6 +287,7 @@ help:
   examples: "EXAMPLES"
   seeAlso: "SEE ALSO"
 error:
+  upgrade: "Upgrade error: {message}"
   unknown: "Command failed: {message}"
   usage: "Usage error: {message}"
   configuration: "Configuration error: {message}"
@@ -285,6 +299,24 @@ error:
   interaction: "Interaction error: {message}"
   internal: "Internal error: {message}"
   reason:
+    duplicateAdapter: "An adapter with this identifier is already registered."
+    internalError: "An unexpected internal error occurred."
+    invalidAdapterDefinition: "The adapter definition is invalid or incompatible."
+    invalidApprovalId: "The approval identifier is invalid."
+    invalidArtifact: "The artifact is invalid, unavailable, or outside the permitted run directory."
+    invalidDeviceConfig: "The device configuration is invalid."
+    invalidDuration: "The duration value is invalid."
+    invalidLockId: "The physical resource lock identifier is invalid."
+    invalidPath: "The requested path is invalid or outside the permitted directory."
+    invalidProjectName: "The project name is invalid."
+    invalidRunId: "The operation record identifier is invalid."
+    lockCorrupt: "The physical resource lock record is corrupted."
+    usageError: "The command arguments or options are invalid."
+    upgradeInstallationNotFound: "The BenchPilot installation could not be located."
+    upgradePackageManagerNotFound: "The package manager used to install BenchPilot could not be identified. Install it globally with npm, pnpm, Yarn, or Bun, then try again."
+    upgradeRegistryUnavailable: "The package registry could not be reached. Check your network and registry configuration, then try again."
+    upgradeVersionNotFound: "The requested BenchPilot version is not available in the package registry."
+    upgradeFailed: "The package manager could not complete the BenchPilot upgrade."
     projectNotFound: "A BenchPilot project is required for project state commands."
     configExists: "The configuration file already exists and cannot be overwritten."
     configKeyNotFound: "The requested configuration key was not found."

@@ -1,0 +1,12 @@
+[doctor]
+bundleReady = "适配器包已准备就绪。"
+requiredToolResolved = "必需工具已就绪。"
+optionalToolResolved = "可选工具已就绪。"
+requiredToolFailed = "必需工具检查失败。"
+optionalToolUnavailable = "可选工具不可用。"
+environmentResolved = "运行环境已解析。"
+environmentFailed = "无法解析运行环境。"
+discoveryDisabled = "设备发现已禁用。"
+discoverySourceFailed = "一个或多个设备发现来源失败。"
+discoveryAvailable = "被动设备发现可用。"
+discoveryUnavailable = "无法初始化被动设备发现。"

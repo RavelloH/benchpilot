@@ -23,6 +23,7 @@ import {
 import {
   humanErrorMessage,
   write,
+  writeDataPage,
   writeFailure,
   writePresentation,
   writeText,
@@ -51,6 +52,13 @@ import {
   promptInit,
 } from "./interaction/prompter.js";
 import { isLocale, t, type Locale, type MessageKey } from "../i18n/index.js";
+import {
+  checkForUpgrade,
+  compareUpgradeVersion,
+  upgradeBenchPilot,
+} from "./upgrade.js";
+import { upgradeCheckDataPage, upgradeResultDataPage } from "./data/upgrade.js";
+import { doctorDataPage } from "./data/doctor.js";
 
 const version = "0.0.0";
 const supportedLanguages = [
@@ -263,6 +271,74 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
         ),
         currentPresentationView(false),
       );
+      return;
+    }
+    if (parts[0] === "upgrade") {
+      const locale = await loadPresentationLocale();
+      if (parts.length > 2)
+        fail("USAGE_ERROR", 2, "upgrade accepts check, latest, or a version.");
+      const info = await checkForUpgrade(process.argv[1] || "");
+      if (parts.length === 1) {
+        if (!info.updateAvailable) {
+          writeDataPage({
+            page: upgradeCheckDataPage(info),
+            flags,
+            locale,
+            view: currentPresentationView(),
+            color: colorEnabled(flags, stdout.isTTY),
+          });
+          return;
+        }
+        const selected = await interactive(locale, ["upgrade"]).choose(
+          info.versions
+            .filter(
+              (candidate) =>
+                compareUpgradeVersion(candidate, info.currentVersion) > 0,
+            )
+            .map((candidate, index) => ({
+              value: candidate,
+              label: index === 0 ? `${candidate} — 最新` : candidate,
+            })),
+          { commandPath: ["upgrade"], nextBackPath: ["upgrade"] },
+        );
+        writeSelectedCommand();
+        const result = await upgradeBenchPilot(info, selected);
+        writeDataPage({
+          page: upgradeResultDataPage(result),
+          flags,
+          locale,
+          view: currentPresentationView(),
+          color: colorEnabled(flags, stdout.isTTY),
+        });
+        return;
+      }
+      if (parts[1] === "check") {
+        writeDataPage({
+          page: upgradeCheckDataPage(info),
+          flags,
+          locale,
+          view: currentPresentationView(),
+          color: colorEnabled(flags, stdout.isTTY),
+        });
+        return;
+      }
+      const requested = parts[1]!;
+      const targetVersion =
+        requested === "latest" ? info.latestVersion : requested;
+      if (!targetVersion)
+        fail(
+          "UPGRADE_VERSION_NOT_FOUND",
+          2,
+          "No published version is available.",
+        );
+      const result = await upgradeBenchPilot(info, targetVersion!);
+      writeDataPage({
+        page: upgradeResultDataPage(result),
+        flags,
+        locale,
+        view: currentPresentationView(),
+        color: colorEnabled(flags, stdout.isTTY),
+      });
       return;
     }
     if (parts[0] === "home") {
@@ -998,17 +1074,14 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
       if (commandFlags.save) {
         /* doctor is intentionally read-only unless explicit save; its diagnostics are returned */
       }
-      const result = await queries.doctor();
-      write(
-        result,
+      const result = await queries.doctor(locale);
+      writeDataPage({
+        page: doctorDataPage(result),
         flags,
-        result.checks
-          .map(
-            (check) =>
-              `${String(check.status)}: ${String(check.id)} — ${String(check.message)}`,
-          )
-          .join("\n"),
-      );
+        locale,
+        view: currentPresentationView(),
+        color: colorEnabled(flags, stdout.isTTY),
+      });
       return;
     }
     if (parts[0] === "adapter" && parts[1] === "list") {

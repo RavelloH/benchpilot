@@ -19,4 +19,5 @@ export interface LoadedAdapter {
   root: string;
   files: Record<string, JsonObject>;
   schemas: Record<string, JsonObject>;
+  i18n: Record<string, JsonObject>;
 }

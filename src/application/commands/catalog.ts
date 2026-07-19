@@ -252,6 +252,13 @@ export const commandRoots: readonly CommandNode[] = [
     fields: [],
     interaction: "never",
   },
+  {
+    id: "upgrade",
+    path: ["upgrade"],
+    summaryKey: "command.upgrade",
+    fields: [],
+    interaction: "when-incomplete",
+  },
 ];
 
 export const approvalApproveNode: CommandNode = {

@@ -5,9 +5,13 @@ operation lifecycle, locks, approvals, runs, RLog, process execution, timeout,
 abort handling and safe artifact collection. An adapter only declares its rules.
 
 Every adapter has the fixed files in `src/adapters/_template`. Runtime files
-outside that list are rejected; only `tests/fixtures/**` and `docs/**` may be
-added. All identifiers are lowercase kebab-case. Rules cannot contain shell
-command strings or JavaScript expressions.
+outside that list are rejected; only `tests/fixtures/**`, `docs/**`, and
+optional `i18n/<locale>.toml` files may be added. Adapter translations are
+compiled into the Bundle and are resolved through the Adapter contract, so the
+Core does not branch on adapter or vendor. Translation keys are nested TOML
+paths such as `doctor.environmentFailed`; `en` is the fallback locale. All
+identifiers are lowercase kebab-case. Rules cannot contain shell command
+strings or JavaScript expressions.
 
 `adapter:validate` writes diagnostics as JSON to stdout and exits non-zero for
 errors. `adapter:compile` emits deterministic Bundle v2 files under

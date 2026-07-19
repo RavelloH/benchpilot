@@ -254,6 +254,25 @@ export const createDeclarativeAdapter = (runtime: RuntimeAdapter): Adapter => {
     version: String(runtime.bundle.manifest.adapter_version),
     summary: String(runtime.bundle.manifest.display_name),
     description: String(runtime.bundle.manifest.description),
+    translate(locale, key, variables = {}) {
+      const lookup = (value: unknown) =>
+        key
+          .split(".")
+          .reduce<unknown>(
+            (current, segment) =>
+              current && typeof current === "object" && !Array.isArray(current)
+                ? (current as Record<string, unknown>)[segment]
+                : undefined,
+            value,
+          );
+      const message =
+        lookup(runtime.bundle.i18n[locale]) ?? lookup(runtime.bundle.i18n.en);
+      if (typeof message !== "string") return undefined;
+      return message.replace(
+        /\{([A-Za-z0-9_]+)\}/g,
+        (_, name) => variables[name] ?? `{${name}}`,
+      );
+    },
     configSchema: validatorSchema(validator, "config"),
     redactConfig(config) {
       return redactSecrets(runtime.bundle.schemas.config, config) as Json;
@@ -298,6 +317,7 @@ export const createDeclarativeAdapter = (runtime: RuntimeAdapter): Adapter => {
           id: `${runtime.bundle.id}-bundle`,
           status: "pass",
           message: `Adapter bundle ready for ${runtime.platform}.`,
+          messageKey: "doctor.bundleReady",
         },
       ];
       const rules = runtime.rules;
@@ -363,6 +383,9 @@ export const createDeclarativeAdapter = (runtime: RuntimeAdapter): Adapter => {
             message: required
               ? "Required tool resolved."
               : "Optional tool resolved.",
+            messageKey: required
+              ? "doctor.requiredToolResolved"
+              : "doctor.optionalToolResolved",
             // A parser can extract arbitrary tool output. Keep doctor output
             // safe by reporting the check, not its raw or extracted values.
             details: {
@@ -379,6 +402,9 @@ export const createDeclarativeAdapter = (runtime: RuntimeAdapter): Adapter => {
             message: required
               ? "Required tool check failed."
               : "Optional tool is unavailable.",
+            messageKey: required
+              ? "doctor.requiredToolFailed"
+              : "doctor.optionalToolUnavailable",
           });
         }
       }
@@ -394,12 +420,14 @@ export const createDeclarativeAdapter = (runtime: RuntimeAdapter): Adapter => {
             id: `${runtime.bundle.id}-environment-${id}`,
             status: "pass",
             message: "Environment resolved.",
+            messageKey: "doctor.environmentResolved",
           });
         } catch {
           checks.push({
             id: `${runtime.bundle.id}-environment-${id}`,
             status: "fail",
             message: "Environment could not be resolved.",
+            messageKey: "doctor.environmentFailed",
           });
         }
       }
@@ -409,6 +437,7 @@ export const createDeclarativeAdapter = (runtime: RuntimeAdapter): Adapter => {
           id: `${runtime.bundle.id}-device-sources`,
           status: "warn",
           message: "Device discovery is disabled.",
+          messageKey: "doctor.discoveryDisabled",
         });
       else {
         try {
@@ -438,6 +467,11 @@ export const createDeclarativeAdapter = (runtime: RuntimeAdapter): Adapter => {
             )
               ? "One or more device discovery sources failed."
               : "Passive device discovery is available.",
+            messageKey: discoveryResult.sources.some(
+              (source) => source.status === "fail",
+            )
+              ? "doctor.discoverySourceFailed"
+              : "doctor.discoveryAvailable",
             details: {
               candidates: discoveryResult.devices.length,
               sources: discoveryResult.sources,
@@ -448,6 +482,7 @@ export const createDeclarativeAdapter = (runtime: RuntimeAdapter): Adapter => {
             id: `${runtime.bundle.id}-device-sources`,
             status: "fail",
             message: "Passive device discovery could not be initialized.",
+            messageKey: "doctor.discoveryUnavailable",
           });
         }
       }

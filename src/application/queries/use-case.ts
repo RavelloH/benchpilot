@@ -87,7 +87,7 @@ export class QueryUseCases {
     return { valid: true as const };
   }
 
-  async doctor() {
+  async doctor(locale = "en") {
     const checks: Json[] = [
       {
         id: "node",
@@ -111,11 +111,24 @@ export class QueryUseCases {
     ];
     for (const adapter of this.dependencies.registry.list())
       checks.push(
-        ...(await this.dependencies.registry.doctor(
-          adapter,
-          this.dependencies.config.value,
-          this.dependencies.paths,
-        )),
+        ...(
+          await this.dependencies.registry.doctor(
+            adapter,
+            this.dependencies.config.value,
+            this.dependencies.paths,
+          )
+        ).map((check) => {
+          const value = check as Record<string, unknown>;
+          const message =
+            typeof value.messageKey === "string"
+              ? (adapter.translate?.(locale, value.messageKey) ?? value.message)
+              : value.message;
+          return {
+            adapter: adapter.id,
+            ...value,
+            ...(typeof message === "string" ? { message } : {}),
+          };
+        }),
       );
     return { checks };
   }
