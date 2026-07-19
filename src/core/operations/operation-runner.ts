@@ -28,7 +28,13 @@ import { RunManager } from "../runs/run-manager.js";
 import { ArtifactRegistry } from "../artifacts/artifact-registry.js";
 import type { ArtifactRecord as RegisteredArtifactRecord } from "../artifacts/types.js";
 import { describeCapability } from "../capabilities/descriptor.js";
-import { duration, redactResolvedConfig, type Json } from "../config/config.js";
+import {
+  approvalLevel,
+  duration,
+  redactResolvedConfig,
+  requiresApproval,
+  type Json,
+} from "../config/config.js";
 const Rlog = RlogModule.default;
 
 const object = (value: unknown): value is Json =>
@@ -96,13 +102,17 @@ export class OperationRunner {
       );
     const definition = capability!;
     const safety = definition.safety;
+    const approvalRequired = requiresApproval(
+      approvalLevel(this.s.config.value),
+      safety.mode,
+    );
     if (safety.mode !== "normal" && !this.s.flags[safety.flag!])
       fail(
         "DANGEROUS_CONFIRMATION_REQUIRED",
         7,
         `This operation requires --${safety.flag}.`,
       );
-    if (safety.mode !== "human-approval") return { required: false };
+    if (!approvalRequired) return { required: false };
     let validated = structuredClone(input);
     const options = definition.options || [];
     const allowed = new Set(options.map((option) => option.name));
@@ -138,6 +148,20 @@ export class OperationRunner {
       input: definition.redactInput
         ? definition.redactInput(validated)
         : validated,
+      presentation: {
+        command: {
+          capability: definition.id,
+          summary: definition.summary,
+        },
+        ...(typeof (this.s.config.value.project as Json | undefined)?.name ===
+        "string"
+          ? {
+              project: {
+                name: (this.s.config.value.project as Json).name,
+              },
+            }
+          : {}),
+      },
     };
     const approvals = this.lifecycle.approvals(project.root);
     const approved =
@@ -243,6 +267,10 @@ export class OperationRunner {
         physicalId: runtime.identity.physicalId,
       });
     const safety = capability.safety;
+    const approvalRequired = requiresApproval(
+      approvalLevel(this.s.config.value),
+      safety.mode,
+    );
     const approvals = this.lifecycle.approvals(project.root);
     if (safety.mode !== "normal" && !this.s.flags[safety.flag!])
       fail(
@@ -262,6 +290,20 @@ export class OperationRunner {
     const storedBinding: Json = {
       ...binding,
       input: capability.redactInput ? capability.redactInput(input) : input,
+      presentation: {
+        command: {
+          capability: capability.id,
+          summary: capability.summary,
+        },
+        ...(typeof (this.s.config.value.project as Json | undefined)?.name ===
+        "string"
+          ? {
+              project: {
+                name: (this.s.config.value.project as Json).name,
+              },
+            }
+          : {}),
+      },
     };
     const timeout = duration(this.s.flags.timeout, capability.defaultTimeoutMs);
     if (this.s.flags["dry-run"])
@@ -277,9 +319,9 @@ export class OperationRunner {
         lockMode: capability.lockMode,
         timeoutMs: timeout,
         safety,
-        approvalRequired: safety.mode === "human-approval",
+        approvalRequired,
       };
-    if (safety.mode === "human-approval") {
+    if (approvalRequired) {
       const existing =
         (await approvals.findMatchingApproval(binding)) ||
         (await approvals.recoverMatchingStaleClaim(binding));
@@ -429,7 +471,7 @@ export class OperationRunner {
         );
         emit("lock.acquired", { lockId });
       }
-      if (safety.mode === "human-approval") {
+      if (approvalRequired) {
         claimedApproval = await approvals.claim(binding);
         if (!claimedApproval)
           throw new BenchPilotError(
@@ -557,11 +599,7 @@ export class OperationRunner {
         });
     }
     const operationSucceeded = !primaryError;
-    if (
-      operationSucceeded &&
-      safety.mode === "human-approval" &&
-      !dangerousEffectStarted
-    )
+    if (operationSucceeded && approvalRequired && !dangerousEffectStarted)
       emit(
         "safety.marker-missing",
         {

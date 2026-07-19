@@ -91,17 +91,20 @@ export type {
 } from "./core/artifacts/types.js";
 export type {
   Json,
+  ApprovalLevel,
   Origin,
   ResolvedConfig,
   Scope,
 } from "./core/config/config.js";
 export {
   assertSafeKeyPath,
+  approvalLevel,
   deleteKey,
   duration,
   getKey,
   merge,
   redactResolvedConfig,
+  requiresApproval,
   setKey,
   validateConfig,
 } from "./core/config/config.js";

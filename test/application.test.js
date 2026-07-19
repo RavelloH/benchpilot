@@ -261,8 +261,8 @@ test("runtime command use case owns administrative action dispatch", async () =>
     async approvalChallenge(id) {
       return { id, physicalId: "serial-1" };
     },
-    async approveApproval(id, challenge) {
-      calls.push(["approve", id, challenge]);
+    async approveApproval(id) {
+      calls.push(["approve", id]);
       return { id, status: "approved" };
     },
   });
@@ -274,19 +274,14 @@ test("runtime command use case owns administrative action dispatch", async () =>
     { kind: "runtime.runs.list", data: { runs: [] } },
   );
   assert.deepEqual(calls[0], ["listRuns", { status: undefined, limit: 2 }]);
-  await assert.rejects(
-    commands.execute({ action: "approval.approve", id: "a" }),
-    (error) => error instanceof BenchPilotError && error.kind === "USAGE_ERROR",
-  );
   assert.deepEqual(
     await commands.execute({
       action: "approval.approve",
       id: "a",
-      challenge: "serial-1",
     }),
     { kind: "runtime.approval.approve", data: { id: "a", status: "approved" } },
   );
-  assert.deepEqual(calls.at(-1), ["approve", "a", "serial-1"]);
+  assert.deepEqual(calls.at(-1), ["approve", "a"]);
 });
 
 test("init creates the minimum project files and preserves them on repeat", async () => {
@@ -304,6 +299,7 @@ test("init creates the minimum project files and preserves them on repeat", asyn
     const gitignore = path.join(cwd, ".benchpilot", ".gitignore");
     assert.match(await readFile(config, "utf8"), /id = "demo"/);
     assert.match(await readFile(local, "utf8"), /locale = "zh-CN"/);
+    assert.match(await readFile(local, "utf8"), /level = "default"/);
     assert.equal(await readFile(gitignore, "utf8"), "*\n!.gitignore\n");
     const paths = new PathService({ TEMP: path.join(cwd, "runtime") }, "win32");
     const resolved = await loadApplicationConfig(
@@ -311,6 +307,7 @@ test("init creates the minimum project files and preserves them on repeat", asyn
       await paths.project(cwd),
     );
     assert.equal(resolved.value.cli.locale, "zh-CN");
+    assert.equal(resolved.value.approval.level, "default");
     assert.equal(resolved.origins.get("cli.locale")?.scope, "project-local");
     const before = await readFile(config, "utf8");
     await assert.rejects(

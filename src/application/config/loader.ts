@@ -76,7 +76,14 @@ export async function loadApplicationConfig(
   explicit?: string,
 ): Promise<ResolvedConfig> {
   const layers: ResolvedConfig["layers"] = [
-    { scope: "default", value: { version: 1, defaults: { timeout: "30s" } } },
+    {
+      scope: "default",
+      value: {
+        version: 1,
+        defaults: { timeout: "30s" },
+        approval: { level: "default" },
+      },
+    },
   ];
   const add = async (scope: Scope, file?: string) => {
     if (!file) return;

@@ -78,7 +78,10 @@ export async function initializeProject(
     created.push(config);
     await writeNewAtomic(
       local,
-      TOML.stringify({ cli: { locale: input.locale } } as never),
+      TOML.stringify({
+        cli: { locale: input.locale },
+        approval: { level: "default" },
+      } as never),
     );
     created.push(local);
     await writeNewAtomic(gitignore, "*\n!.gitignore\n");

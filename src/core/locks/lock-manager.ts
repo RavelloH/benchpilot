@@ -482,8 +482,19 @@ export class LockManager {
           }),
       );
       return {
-        locks: listed.flatMap(({ record }) => (record ? [record] : [])),
-        corrupt: listed.flatMap(({ corrupt }) => (corrupt ? [corrupt] : [])),
+        locks: listed
+          .flatMap(({ record }) => (record ? [record] : []))
+          .sort((left, right) => {
+            const leftTime = Date.parse(left.acquiredAt);
+            const rightTime = Date.parse(right.acquiredAt);
+            const newestFirst =
+              (Number.isFinite(rightTime) ? rightTime : 0) -
+              (Number.isFinite(leftTime) ? leftTime : 0);
+            return newestFirst || right.lockId.localeCompare(left.lockId);
+          }),
+        corrupt: listed
+          .flatMap(({ corrupt }) => (corrupt ? [corrupt] : []))
+          .sort((left, right) => right.lockId.localeCompare(left.lockId)),
       };
     } catch (error: unknown) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT")

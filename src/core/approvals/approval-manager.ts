@@ -104,9 +104,16 @@ export class ApprovalManager {
           ),
         ),
       );
-      return records.filter((record): record is ApprovalRecord =>
-        Boolean(record),
-      );
+      return records
+        .filter((record): record is ApprovalRecord => Boolean(record))
+        .sort((left, right) => {
+          const leftTime = Date.parse(left.createdAt);
+          const rightTime = Date.parse(right.createdAt);
+          const chronological =
+            (Number.isFinite(rightTime) ? rightTime : 0) -
+            (Number.isFinite(leftTime) ? leftTime : 0);
+          return chronological || right.id.localeCompare(left.id);
+        });
     } catch (error: unknown) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
       throw error;

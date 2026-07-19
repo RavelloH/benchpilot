@@ -58,6 +58,15 @@ const supportedLanguages = [
   { value: "zh-CN", label: "简体中文" },
 ] as const;
 
+const approvalStatusLabel = (locale: Locale, status: string) => {
+  if (status === "pending") return t(locale, "approval.status.pending");
+  if (status === "approved") return t(locale, "approval.status.approved");
+  if (status === "rejected") return t(locale, "approval.status.rejected");
+  if (status === "claimed") return t(locale, "approval.status.claimed");
+  if (status === "consumed") return t(locale, "approval.status.consumed");
+  return status;
+};
+
 interface MainResume {
   readonly path: readonly string[];
   readonly flags: ReturnType<typeof parse>["flags"];
@@ -694,21 +703,70 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
           );
       } else if (group === "approval") {
         const approvals = await runtime.listApprovals();
-        if (!approvals.approvals.length)
-          fail("APPROVAL_NOT_FOUND", 3, "No approvals are available.");
-        const id = await session.choose(
-          approvals.approvals.map((approval) => ({
-            value: approval.id,
-            label: `${approval.id} — ${approval.status}`,
-          })),
+        const selected = await session.choose(
+          [
+            ...commandChoices([
+              {
+                value: "list",
+                summary: t(locale, "menu.approval.listAll"),
+              },
+            ]),
+            ...(approvals.approvals.length
+              ? [
+                  {
+                    separator: menuDivider(colorEnabled(flags, stdout.isTTY)),
+                  },
+                  ...approvals.approvals.map((approval) => ({
+                    value: approval.id,
+                    label: `${approval.id} — ${approvalStatusLabel(locale, approval.status)}`,
+                  })),
+                ]
+              : []),
+          ],
           { commandPath: ["approval"], nextBackPath: ["approval"] },
         );
-        parts.push(
-          id,
-          await session.choose(menuChoices(["inspect", "approve", "reject"]), {
-            commandPath: ["approval", id],
-          }),
-        );
+        if (selected === "list") parts.push(selected);
+        else {
+          const approval = approvals.approvals.find(
+            (candidate) => candidate.id === selected,
+          );
+          const pending = approval?.status === "pending";
+          const actionEntries = [
+            { value: "inspect", summary: t(locale, "menu.action.inspect") },
+            { value: "approve", summary: t(locale, "menu.action.approve") },
+            { value: "reject", summary: t(locale, "menu.action.reject") },
+          ] as const;
+          const width = Math.max(
+            ...actionEntries.map((entry) => entry.value.length),
+          );
+          const unavailable = t(locale, "approval.actionUnavailable", {
+            status: approval
+              ? approvalStatusLabel(locale, approval.status)
+              : selected,
+          });
+          parts.push(
+            selected,
+            await session.choose(
+              actionEntries.map((entry) => ({
+                value: entry.value,
+                label:
+                  !pending && entry.value !== "inspect"
+                    ? terminalTheme(colorEnabled(flags, stdout.isTTY)).muted(
+                        `${entry.value.padEnd(width)}  ${entry.summary}`,
+                      )
+                    : commandChoice(entry.value, entry.summary, width),
+                ...(!pending && entry.value !== "inspect"
+                  ? {
+                      description: `${terminalTheme(colorEnabled(flags, stdout.isTTY)).debug(unavailable)}\n`,
+                    }
+                  : {}),
+              })),
+              {
+                commandPath: ["approval", selected],
+              },
+            ),
+          );
+        }
       }
     }
     // A known parent plus an omitted action is an incomplete command. Continue
@@ -958,7 +1016,11 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
     }
     // Approval confirmation is intrinsically human-only. Check this before
     // loading a record so an agent cannot use record validity as an oracle.
-    if (parts[0] === "approval" && parts[1] && parts[2] === "approve")
+    if (
+      parts[0] === "approval" &&
+      parts[1] &&
+      (parts[2] === "approve" || parts[2] === "reject")
+    )
       interactive(locale, parts);
     if (
       await handleRuntimeCommand({
@@ -969,9 +1031,20 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
         color: colorEnabled(flags, stdout.isTTY),
         presentationView: currentPresentationView(),
         runtimeCommands,
-        readApprovalChallenge: async ({ approvalId, physicalId }) =>
-          interactive(locale, ["approval", approvalId, "approve"]).value(
-            `physical device ID (${physicalId})`,
+        approvalPresentation: {
+          projectId: (config.value.project as Json | undefined)?.id as
+            string | undefined,
+          projectName: (config.value.project as Json | undefined)?.name as
+            string | undefined,
+        },
+        confirmApproval: ({ approvalId, action }) =>
+          interactive(locale, ["approval", approvalId, action]).confirm(
+            t(
+              locale,
+              action === "approve"
+                ? "approval.confirm.approve"
+                : "approval.confirm.reject",
+            ),
           ),
       })
     )

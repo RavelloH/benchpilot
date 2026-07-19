@@ -53,6 +53,16 @@ export const createConfigurationUseCases = (
 
 /** Mutates a declared configuration scope without CLI or terminal dependencies. */
 export async function editConfiguration(input: EditConfigInput): Promise<Json> {
+  if (
+    input.key === "approval.level" &&
+    input.scope !== undefined &&
+    input.scope !== "local"
+  )
+    fail(
+      "APPROVAL_LEVEL_LOCAL_SCOPE_REQUIRED",
+      2,
+      "approval.level is a personal project setting; use --local or omit the scope.",
+    );
   const scope = input.scope || (input.project ? "local" : "global");
   const file =
     scope === "local"

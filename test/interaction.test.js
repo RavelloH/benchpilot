@@ -267,7 +267,7 @@ test("interactive sessions append navigation and distinguish back from exit", as
   );
 });
 
-test("home enables the native double-Esc exit confirmation", async () => {
+test("first-level menus enable the native double-Esc exit confirmation", async () => {
   const requests = [];
   const session = new InteractionSession("zh-CN", {
     choose: async (request) => {
@@ -277,7 +277,7 @@ test("home enables the native double-Esc exit confirmation", async () => {
     value: async () => undefined,
   });
   await session.choose([{ value: "lock" }], {
-    commandPath: [],
+    commandPath: ["lock"],
     ignoreInitialEscape: true,
   });
   assert.equal(requests[0].exitConfirmation, true);
@@ -563,11 +563,19 @@ test("presenter keeps machine failures on stdout and human failures on stderr", 
 test("presenter localizes human error categories without changing machine kinds", () => {
   assert.equal(
     humanErrorMessage("zh-CN", "DEVICE_NOT_FOUND", "Device not found: demo"),
-    "设备错误：Device not found: demo",
+    "设备错误：找不到指定设备。",
   );
   assert.equal(
     humanErrorMessage("en", "DEVICE_NOT_FOUND", "Device not found: demo"),
-    "Device error: Device not found: demo",
+    "Device error: The requested device was not found.",
+  );
+  assert.equal(
+    humanErrorMessage(
+      "zh-CN",
+      "PROJECT_NOT_FOUND",
+      "A BenchPilot project is required for project state commands.",
+    ),
+    "配置错误：项目状态命令需要在 BenchPilot 项目中执行。",
   );
 });
 

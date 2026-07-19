@@ -193,10 +193,7 @@ export class RuntimeUseCases {
     return { id: approval.id, physicalId: physicalId as string };
   }
 
-  async approveApproval(id: string, challenge: string) {
-    const expected = await this.approvalChallenge(id);
-    if (challenge !== expected.physicalId)
-      fail("APPROVAL_CHALLENGE_FAILED", 7, "Challenge did not match.");
+  async approveApproval(id: string) {
     await this.approvals().change(id, "approved");
     return { id, status: "approved" as const };
   }

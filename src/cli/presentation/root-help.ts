@@ -128,6 +128,7 @@ export const agentHelpSections: readonly AgentHelpSection[] = [
         usages: [
           "benchpilot config get <key> [options]",
           "benchpilot config set <key> <value> [options]",
+          "benchpilot config set approval.level <default|strict|bypass> [options]",
           "benchpilot config unset <key> [options]",
           "benchpilot config resolved [options]",
           "benchpilot config explain <key> [options]",

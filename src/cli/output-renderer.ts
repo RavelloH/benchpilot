@@ -162,9 +162,66 @@ const errorMessageKey = (kind: string): MessageKey => {
   return "error.unknown";
 };
 
+const errorReasonKeys: Partial<Record<string, MessageKey>> = {
+  PROJECT_NOT_FOUND: "error.reason.projectNotFound",
+  CONFIG_EXISTS: "error.reason.configExists",
+  CONFIG_KEY_NOT_FOUND: "error.reason.configKeyNotFound",
+  INVALID_CONFIG: "error.reason.invalidConfig",
+  INVALID_TOML: "error.reason.invalidToml",
+  UNSUPPORTED_CONFIG_VERSION: "error.reason.unsupportedConfigVersion",
+  APPROVAL_NOT_FOUND: "error.reason.approvalNotFound",
+  APPROVAL_STATE_INVALID: "error.reason.approvalStateInvalid",
+  APPROVAL_EXPIRED: "error.reason.approvalExpired",
+  APPROVAL_ALREADY_CLAIMED: "error.reason.approvalAlreadyClaimed",
+  APPROVAL_CHALLENGE_FAILED: "error.reason.approvalChallengeFailed",
+  APPROVAL_CHALLENGE_UNAVAILABLE: "error.reason.approvalChallengeUnavailable",
+  HUMAN_APPROVAL_REQUIRED: "error.reason.humanApprovalRequired",
+  DANGEROUS_CONFIRMATION_REQUIRED: "error.reason.dangerousConfirmationRequired",
+  DEVICE_NOT_FOUND: "error.reason.deviceNotFound",
+  DEVICE_BUSY: "error.reason.deviceBusy",
+  DEVICE_IDENTITY_UNAVAILABLE: "error.reason.deviceIdentityUnavailable",
+  DEVICE_QUARANTINED: "error.reason.deviceQuarantined",
+  UNSUPPORTED_CAPABILITY: "error.reason.unsupportedCapability",
+  SYSTEM_NOT_FOUND: "error.reason.systemNotFound",
+  SYSTEM_CAPABILITY_UNAVAILABLE: "error.reason.systemCapabilityUnavailable",
+  LOCK_NOT_FOUND: "error.reason.lockNotFound",
+  LOCK_QUARANTINED: "error.reason.lockQuarantined",
+  LOCK_OWNERSHIP_LOST: "error.reason.lockOwnershipLost",
+  UNKNOWN_COMMAND: "error.reason.unknownCommand",
+  UNKNOWN_ADAPTER: "error.reason.unknownAdapter",
+  ADAPTER_NOT_FOUND: "error.reason.adapterNotFound",
+  OPERATION_TIMEOUT: "error.reason.operationTimeout",
+  OPERATION_ABORTED: "error.reason.operationAborted",
+  CLEANUP_FAILED: "error.reason.cleanupFailed",
+  CLEANUP_TIMEOUT: "error.reason.cleanupTimeout",
+  INTERACTION_CANCELLED: "error.reason.interactionCancelled",
+  AGENT_INTERACTION_UNSUPPORTED: "error.reason.agentInteractionUnsupported",
+  INTERACTIVE_TERMINAL_REQUIRED: "error.reason.interactiveTerminalRequired",
+  INTERACTIVE_MACHINE_OUTPUT_UNSUPPORTED:
+    "error.reason.interactiveMachineOutputUnsupported",
+};
+
+const localizedErrorReason = (
+  locale: Locale,
+  kind: string,
+  fallback: string,
+) => {
+  const key = errorReasonKeys[kind];
+  if (key) return t(locale, key);
+  // Adapter and operating-system diagnostics can be free-form. Keep English
+  // details in machine output, while ensuring human Chinese output never
+  // falls back to an untranslated message.
+  if (locale === "zh-CN")
+    return t(locale, "error.reason.untranslated", { kind });
+  return fallback;
+};
+
 /** Human-only localization; machine DTO messages are deliberately untouched. */
 export const humanErrorMessage = (
   locale: Locale,
   kind: string,
   fallback: string,
-) => t(locale, errorMessageKey(kind), { message: fallback });
+) =>
+  t(locale, errorMessageKey(kind), {
+    message: localizedErrorReason(locale, kind, fallback),
+  });

@@ -1,4 +1,4 @@
-import { input, select } from "@inquirer/prompts";
+import { confirm, input, select } from "@inquirer/prompts";
 import searchPrompt from "@inquirer/search";
 import { Separator } from "@inquirer/select";
 import {
@@ -64,7 +64,7 @@ export interface InteractionDriver {
     choices: readonly PromptItem[];
     pageSize?: number;
     searchable?: boolean;
-    /** Use the home-only double-Esc exit confirmation. */
+    /** Use the double-Esc exit confirmation when no Back action exists. */
     exitConfirmation?: boolean;
     ignoreInitialEscape?: boolean;
   }): Promise<string | undefined>;
@@ -72,6 +72,7 @@ export interface InteractionDriver {
     message: string;
     validate: (value: string) => true | string;
   }): Promise<string | undefined>;
+  confirm?(input: { message: string; default: boolean }): Promise<boolean>;
 }
 
 const filterPromptItems = (
@@ -120,8 +121,8 @@ interface ExitConfirmSearchConfig {
 }
 
 /**
- * A persistent Inquirer prompt for the home menu. Exit confirmation is local
- * state, so Esc never aborts and recreates a readline prompt.
+ * A persistent Inquirer prompt for first-level menus. Exit confirmation is
+ * local state, so Esc never aborts and recreates a readline prompt.
  */
 const exitConfirmSearchPrompt = createPrompt<string, ExitConfirmSearchConfig>(
   (config, done) => {
@@ -401,6 +402,8 @@ const createInquirerDriver = (
     );
   },
   value: async ({ message, validate }) => input({ message, validate }),
+  confirm: async ({ message, default: defaultValue }) =>
+    confirm({ message, default: defaultValue }),
 });
 
 const isPromptCancellation = (error: unknown) =>
@@ -487,8 +490,7 @@ export class InteractionSession {
         choices: [...commandChoices, ...navigation],
         pageSize: options.pageSize ?? 100,
         searchable: options.searchable ?? true,
-        exitConfirmation:
-          options.commandPath?.length === 0 && this.backPaths.length === 0,
+        exitConfirmation: this.backPaths.length === 0,
         ignoreInitialEscape: options.ignoreInitialEscape,
       });
     } catch (error) {
@@ -523,6 +525,19 @@ export class InteractionSession {
     if (this.cancelled || typeof value !== "string")
       throw new InteractionCancelledError();
     return value.trim();
+  }
+
+  async confirm(message: string): Promise<boolean> {
+    try {
+      return (
+        (await this.driver.confirm?.({ message, default: false })) === true
+      );
+    } catch (error) {
+      if (!isPromptCancellation(error)) throw error;
+      this.cancelled = true;
+    }
+    if (this.cancelled) throw new InteractionCancelledError();
+    return false;
   }
 
   close() {}

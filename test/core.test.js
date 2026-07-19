@@ -10,6 +10,7 @@ import {
   acquireFileGuard,
   ArtifactRegistry,
   abortPromise,
+  approvalLevel,
   ApprovalManager,
   atomicJson,
   booleanSchema,
@@ -30,6 +31,7 @@ import {
   runProcess,
   startProcess,
   setKey,
+  requiresApproval,
   stringSchema,
 } from "../dist/index.js";
 import { loadApplicationConfig } from "../dist/application/config/loader.js";
@@ -157,6 +159,16 @@ test("BENCHPILOT_ environment configuration preserves the first key segment", as
     config.origins.get("devices.esp32s3.port")?.scope,
     "environment",
   );
+});
+
+test("approval levels use default as the normal project policy", () => {
+  assert.equal(approvalLevel({}), "default");
+  assert.equal(requiresApproval("strict", "human-approval"), true);
+  assert.equal(requiresApproval("strict", "danger-flag"), false);
+  assert.equal(requiresApproval("default", "human-approval"), false);
+  assert.equal(requiresApproval("default", "danger-flag"), true);
+  assert.equal(requiresApproval("bypass", "human-approval"), false);
+  assert.equal(requiresApproval("bypass", "danger-flag"), false);
 });
 
 test("approval guards are project-local while lock guards use runtime state", () => {
@@ -341,6 +353,68 @@ test("approval claims are exclusive", async () => {
       (error) =>
         error instanceof BenchPilotError &&
         error.kind === "INVALID_APPROVAL_ID",
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("approval lists are ordered by creation time", async () => {
+  const root = await mkdtemp(
+    path.join(os.tmpdir(), "benchpilot-approval-order-"),
+  );
+  try {
+    const paths = new PathService(
+      { TEMP: path.join(root, "runtime") },
+      "win32",
+    );
+    const manager = new ApprovalManager(paths, root);
+    const first = await manager.request({ command: "device.first" });
+    const second = await manager.request({ command: "device.second" });
+    await atomicJson(path.join(paths.approvalsRoot(root), `${first.id}.json`), {
+      ...first,
+      createdAt: "2026-01-01T00:00:02.000Z",
+    });
+    await atomicJson(
+      path.join(paths.approvalsRoot(root), `${second.id}.json`),
+      { ...second, createdAt: "2026-01-01T00:00:01.000Z" },
+    );
+    assert.deepEqual(
+      (await manager.list()).map((approval) => approval.id),
+      [first.id, second.id],
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("lock lists are ordered by acquisition time, newest first", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "benchpilot-lock-order-"));
+  try {
+    const paths = new PathService(
+      { TEMP: path.join(root, "runtime") },
+      "win32",
+    );
+    const locks = new LockManager(paths);
+    const first = await locks.acquire("lock-first", "test");
+    const second = await locks.acquire("lock-second", "test");
+    await atomicJson(
+      path.join(paths.runtimeRoot(), first.lockId, "owner.json"),
+      {
+        ...first,
+        acquiredAt: "2026-01-01T00:00:01.000Z",
+      },
+    );
+    await atomicJson(
+      path.join(paths.runtimeRoot(), second.lockId, "owner.json"),
+      {
+        ...second,
+        acquiredAt: "2026-01-01T00:00:02.000Z",
+      },
+    );
+    assert.deepEqual(
+      (await locks.list()).map((lock) => lock.lockId),
+      [second.lockId, first.lockId],
     );
   } finally {
     await rm(root, { recursive: true, force: true });
@@ -612,7 +686,10 @@ test("a normal operation recovers and reuses a stale approval claim", async () =
       }),
     });
     const config = {
-      value: { devices: { device: { adapter: "approval-recovery" } } },
+      value: {
+        approval: { level: "strict" },
+        devices: { device: { adapter: "approval-recovery" } },
+      },
       origins: new Map(),
       layers: [],
     };
@@ -1669,7 +1746,10 @@ async function runDangerousFailure(root, markEffect) {
     }),
   });
   const config = {
-    value: { devices: { device: { adapter: "danger" } } },
+    value: {
+      approval: { level: "strict" },
+      devices: { device: { adapter: "danger" } },
+    },
     origins: new Map(),
     layers: [],
   };
@@ -1761,7 +1841,10 @@ test("successful dangerous operation without a marker consumes approval and warn
       }),
     });
     const config = {
-      value: { devices: { device: { adapter: "marker-missing" } } },
+      value: {
+        approval: { level: "strict" },
+        devices: { device: { adapter: "marker-missing" } },
+      },
       origins: new Map(),
       layers: [],
     };

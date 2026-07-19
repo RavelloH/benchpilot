@@ -130,12 +130,9 @@ export class RuntimeCommandUseCases {
           await this.runtime.approvalChallenge(request.id!),
         );
       case "approval.approve":
-        const challenge = request.challenge;
-        if (challenge === undefined)
-          fail("USAGE_ERROR", 2, "approval.approve requires a challenge.");
         return this.outcome(
           action,
-          await this.runtime.approveApproval(request.id!, challenge!),
+          await this.runtime.approveApproval(request.id!),
         );
     }
   }

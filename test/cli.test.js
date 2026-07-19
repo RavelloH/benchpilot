@@ -533,9 +533,9 @@ test("lock clear-stale summarizes at most five cleared locks on screen", async (
     }
     const result = await run(dir, "lock", "clear-stale");
     assert.match(result.stdout, /^Cleared stale locks:/);
-    for (const id of ids.slice(0, 5))
+    for (const id of ids.slice(1).reverse())
       assert.match(result.stdout, new RegExp(`^  ${id}$`, "m"));
-    assert.doesNotMatch(result.stdout, /^  stale-6$/m);
+    assert.doesNotMatch(result.stdout, /^  stale-1$/m);
     assert.match(result.stdout, /… and 6 stale locks in total\./);
     assert.doesNotMatch(result.stdout, /"cleared"/);
   } finally {
@@ -802,6 +802,11 @@ test("declarative demo executes build, deploy, and capture", async () => {
       (await run(dir, "device", "demo", "deploy", "--json")).stdout,
     );
     assert.deepEqual(Object.keys(deployed.data), ["build", "flash", "reset"]);
+    assert.deepEqual(
+      JSON.parse((await run(dir, "approval", "list", "--json")).stdout)
+        .approvals,
+      [],
+    );
     const lines = (
       await run(dir, "device", "demo", "capture", "--jsonl")
     ).stdout
@@ -839,6 +844,19 @@ test("declarative demo executes build, deploy, and capture", async () => {
       JSON.stringify(secretInspection).includes("never-write-this"),
       false,
     );
+    const pendingDangerous = await run(
+      dir,
+      "device",
+      "demo",
+      "dangerous-reset",
+      "--confirm-dangerous-reset",
+      "--json",
+    ).catch((error) => error);
+    assert.equal(
+      JSON.parse(pendingDangerous.stdout).kind,
+      "HUMAN_APPROVAL_REQUIRED",
+    );
+    await run(dir, "config", "set", "approval.level", "bypass");
     const dangerous = JSON.parse(
       (
         await run(
@@ -872,6 +890,7 @@ test("secret approval bindings are redacted but matched by their real digest", a
   const token = "approval-secret-value";
   try {
     await initDemo(dir);
+    await run(dir, "config", "set", "approval.level", "strict");
     const pending = await run(
       dir,
       "device",
@@ -892,6 +911,10 @@ test("secret approval bindings are redacted but matched by their real digest", a
     const record = await approvals.get(requested.details.approvalId);
     assert.equal(JSON.stringify(record).includes(token), false);
     assert.equal(record.binding.input.token, "[REDACTED]");
+    assert.equal(
+      record.binding.presentation.command.capability,
+      "secret-approval",
+    );
     await approvals.change(record.id, "approved");
     const approved = JSON.parse(
       (
@@ -1201,10 +1224,61 @@ test("dry-run creates no run, lock, approval, or artifact state", async () => {
       [],
     );
     assert.deepEqual(
-      JSON.parse((await run(dir, "approval", "list", "--json")).stdout).data
+      JSON.parse((await run(dir, "approval", "list", "--json")).stdout)
         .approvals,
       [],
     );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("approval commands render structured screen, JSON, and itemized JSONL data", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "benchpilot-approval-cli-"));
+  try {
+    await initDemo(dir);
+    const paths = new PathService({
+      ...process.env,
+      TEMP: path.join(dir, "runtime"),
+    });
+    const approvals = new ApprovalManager(paths, dir);
+    const binding = {
+      command: "device.demo.deploy",
+      device: {
+        adapter: "demo",
+        instance: "demo",
+        physicalId: "demo-device-01",
+      },
+      input: { profile: "release" },
+      project: "demo",
+    };
+    const approval = await approvals.request(binding, 3_600_000, {
+      ...binding,
+      presentation: {
+        command: { capability: "deploy", summary: "Deploy" },
+        project: { name: "Demo" },
+      },
+    });
+    const list = JSON.parse(
+      (await run(dir, "approval", "list", "--json")).stdout,
+    );
+    assert.equal(list.schema, "benchpilot.approval-list");
+    assert.equal(list.approvals[0].id, approval.id);
+    assert.equal(list.approvals[0].binding.device.physicalId, "demo-device-01");
+    const events = (await run(dir, "approval", "list", "--jsonl")).stdout
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    assert.deepEqual(
+      events.map((event) => event.op),
+      ["start", "snapshot", "complete"],
+    );
+    assert.equal(events[1].key, `approvals.${approval.id}`);
+    const detail = await run(dir, "approval", approval.id, "inspect");
+    assert.match(detail.stdout, /Approval details/);
+    assert.match(detail.stdout, /Deploy/);
+    assert.match(detail.stdout, /Demo/);
+    assert.match(detail.stdout, /demo-device-01/);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

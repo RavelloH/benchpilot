@@ -1,6 +1,7 @@
 import { fail } from "../errors/benchpilot-error.js";
 
 export type Json = Record<string, unknown>;
+export type ApprovalLevel = "strict" | "default" | "bypass";
 export type Scope =
   | "cli"
   | "environment"
@@ -18,6 +19,30 @@ export interface ResolvedConfig {
   value: Json;
   origins: Map<string, Origin>;
   layers: Array<{ scope: Scope; path?: string; value: Json }>;
+}
+
+const approvalLevels = new Set<ApprovalLevel>(["strict", "default", "bypass"]);
+
+/**
+ * Per-person, per-project policy for deciding which declared safety classes
+ * enter the human approval lifecycle.  Capability declarations remain the
+ * source of truth for whether an operation is ordinary, dangerous, or
+ * approval-sensitive; this setting only selects the approval threshold.
+ */
+export function approvalLevel(config: Json): ApprovalLevel {
+  const value = object(config.approval) ? config.approval.level : undefined;
+  return approvalLevels.has(value as ApprovalLevel)
+    ? (value as ApprovalLevel)
+    : "default";
+}
+
+export function requiresApproval(
+  level: ApprovalLevel,
+  safetyMode: "normal" | "danger-flag" | "human-approval",
+) {
+  if (level === "bypass" || safetyMode === "normal") return false;
+  if (level === "strict") return safetyMode === "human-approval";
+  return safetyMode === "danger-flag";
 }
 
 const unsafeKey = (key: string) =>
@@ -109,6 +134,18 @@ export function validateConfig(c: Json) {
     );
   if (c.devices !== undefined && !object(c.devices))
     fail("INVALID_CONFIG", 3, "devices must be a table.");
+  if (c.approval !== undefined && !object(c.approval))
+    fail("INVALID_CONFIG", 3, "approval must be a table.");
+  const configuredApproval = c.approval as Json | undefined;
+  if (
+    configuredApproval?.level !== undefined &&
+    !approvalLevels.has(configuredApproval.level as ApprovalLevel)
+  )
+    fail(
+      "INVALID_APPROVAL_LEVEL",
+      3,
+      "approval.level must be strict, default, or bypass.",
+    );
   const devices = (c.devices || {}) as Json;
   for (const [id, raw] of Object.entries(devices)) {
     const d = raw as Json;

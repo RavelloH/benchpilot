@@ -7,6 +7,11 @@ import {
 import type { RuntimeCommandUseCases } from "../../application/runtime/command-use-case.js";
 import type { Locale } from "../../i18n/index.js";
 import {
+  approvalChangeDataPage,
+  approvalDetailDataPage,
+  approvalListDataPage,
+} from "../data/approval.js";
+import {
   lockClearDataPage,
   lockClearStaleDataPage,
   lockDetailDataPage,
@@ -25,10 +30,14 @@ interface RuntimeCommandContext {
   color: boolean;
   presentationView: PresentationView;
   runtimeCommands: RuntimeCommandUseCases;
-  readApprovalChallenge: (input: {
+  approvalPresentation?: {
+    projectId?: string;
+    projectName?: string;
+  };
+  confirmApproval: (input: {
     approvalId: string;
-    physicalId: string;
-  }) => Promise<string>;
+    action: "approve" | "reject";
+  }) => Promise<boolean>;
 }
 
 export async function handleRuntimeCommand({
@@ -39,7 +48,8 @@ export async function handleRuntimeCommand({
   color,
   presentationView,
   runtimeCommands,
-  readApprovalChallenge,
+  approvalPresentation,
+  confirmApproval,
 }: RuntimeCommandContext): Promise<boolean> {
   if (parts[0] === "run" && parts[1] === "list") {
     if (parts.length !== 2)
@@ -202,10 +212,18 @@ export async function handleRuntimeCommand({
   if (parts[0] === "approval" && parts[1] === "list") {
     if (parts.length !== 2)
       fail("USAGE_ERROR", 2, "approval list takes no arguments.");
-    write(
-      (await runtimeCommands.execute({ action: "approvals.list" })).data,
+    const approvals = (
+      await runtimeCommands.execute({ action: "approvals.list" })
+    ).data as unknown as {
+      approvals: import("../../core.js").ApprovalRecord[];
+    };
+    writeDataPage({
+      page: approvalListDataPage(approvals.approvals),
       flags,
-    );
+      locale,
+      view: presentationView,
+      color,
+    });
     return true;
   }
   if (parts[0] === "approval") {
@@ -222,47 +240,55 @@ export async function handleRuntimeCommand({
       );
       return true;
     }
-    if (parts[2] === "inspect")
-      write(
-        (
-          await runtimeCommands.execute({
-            action: "approval.inspect",
-            id: parts[1],
-          })
-        ).data,
+    const approval = (
+      await runtimeCommands.execute({
+        action: "approval.inspect",
+        id: parts[1],
+      })
+    ).data as unknown as import("../../core.js").ApprovalRecord;
+    const inspect = () =>
+      writeDataPage({
+        page: approvalDetailDataPage(approval, approvalPresentation),
         flags,
-      );
+        locale,
+        view: presentationView,
+        color,
+      });
+    if (parts[2] === "inspect") inspect();
     else if (parts[2] === "reject") {
-      write(
-        (
-          await runtimeCommands.execute({
-            action: "approval.reject",
-            id: parts[1],
-          })
-        ).data,
-        flags,
-      );
-    } else if (parts[2] === "approve") {
-      const challenge = (
+      inspect();
+      if (!(await confirmApproval({ approvalId: parts[1], action: "reject" })))
+        return true;
+      const result = (
         await runtimeCommands.execute({
-          action: "approval.challenge",
+          action: "approval.reject",
           id: parts[1],
         })
-      ).data as { id: string; physicalId: string };
-      const answer = await readApprovalChallenge({
-        approvalId: challenge.id,
-        physicalId: challenge.physicalId,
-      });
-      write(
-        (
-          await runtimeCommands.execute({
-            action: "approval.approve",
-            id: parts[1],
-            challenge: answer,
-          })
-        ).data,
+      ).data as { id: string; status: "rejected" };
+      writeDataPage({
+        page: approvalChangeDataPage(result),
         flags,
-      );
+        locale,
+        view: presentationView,
+        color,
+      });
+    } else if (parts[2] === "approve") {
+      inspect();
+      if (!(await confirmApproval({ approvalId: parts[1], action: "approve" })))
+        return true;
+      const result = (
+        await runtimeCommands.execute({
+          action: "approval.approve",
+          id: parts[1],
+        })
+      ).data as { id: string; status: "approved" };
+      writeDataPage({
+        page: approvalChangeDataPage(result),
+        flags,
+        locale,
+        view: presentationView,
+        color,
+      });
     } else fail("USAGE_ERROR", 2, "Unknown approval command.");
     return true;
   }
