@@ -10,6 +10,7 @@ import {
   realpath,
   rm,
   symlink,
+  utimes,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -1341,6 +1342,81 @@ test(
     }
   },
 );
+
+test("capture-script environments persist a delta cache and invalidate by script mtime", async () => {
+  const root = await mkdtemp(
+    join(tmpdir(), "benchpilot-runtime-environment-cache-"),
+  );
+  try {
+    const windows = process.platform === "win32";
+    const script = join(root, windows ? "environment.cmd" : "environment.sh");
+    const marker = join(root, "captures.txt");
+    const source = (value) =>
+      windows
+        ? `@echo off\r\necho capture>>"${marker}"\r\nset BENCHPILOT_CACHE=${value}\r\n`
+        : `printf 'capture\\n' >> ${JSON.stringify(marker)}\nexport BENCHPILOT_CACHE=${value}\n`;
+    const definitions = {
+      captured: {
+        strategy: "first-valid",
+        providers: [
+          {
+            id: "script",
+            type: "capture-script",
+            script,
+            shell: windows ? "cmd" : "posix",
+            priority: 1,
+          },
+        ],
+      },
+    };
+    const base = { PATH: process.env.PATH, UNCHANGED: "keep" };
+    const context = { config: { root } };
+    const cacheRoot = join(root, "cache");
+    await writeFile(script, source("first"));
+    assert.equal(
+      (
+        await new EnvironmentResolver(base, cacheRoot).resolve(
+          "captured",
+          definitions,
+          context,
+          new AbortController().signal,
+        )
+      ).BENCHPILOT_CACHE,
+      "first",
+    );
+    assert.equal(
+      (
+        await new EnvironmentResolver(base, cacheRoot).resolve(
+          "captured",
+          definitions,
+          context,
+          new AbortController().signal,
+        )
+      ).UNCHANGED,
+      "keep",
+    );
+    assert.equal((await readFile(marker, "utf8")).match(/capture/g)?.length, 1);
+    if (windows)
+      assert.deepEqual(await readdir(join(root, "environment-capture")), []);
+    await writeFile(script, source("second"));
+    const future = new Date(Date.now() + 2_000);
+    await utimes(script, future, future);
+    assert.equal(
+      (
+        await new EnvironmentResolver(base, cacheRoot).resolve(
+          "captured",
+          definitions,
+          context,
+          new AbortController().signal,
+        )
+      ).BENCHPILOT_CACHE,
+      "second",
+    );
+    assert.equal((await readFile(marker, "utf8")).match(/capture/g)?.length, 2);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
 
 test(
   "artifact collection filters unsafe matches before cardinality and cleans failed registrations",

@@ -1,4 +1,14 @@
-import { mkdtemp, realpath, rm, stat, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  rename,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { runProcess } from "../../../core/process/process-runner.js";
@@ -62,6 +72,63 @@ const envValue = (base: NodeJS.ProcessEnv, name: string) =>
       : key === name,
   )?.[1];
 
+const environmentKey = (name: string) =>
+  process.platform === "win32" ? name.toLowerCase() : name;
+
+interface EnvironmentDelta {
+  readonly version: 1;
+  readonly set: Record<string, string>;
+  readonly unset: string[];
+}
+
+const environmentDelta = (
+  base: NodeJS.ProcessEnv,
+  captured: NodeJS.ProcessEnv,
+): EnvironmentDelta => {
+  const baseValues = new Map(
+    Object.entries(base).map(([key, value]) => [environmentKey(key), value]),
+  );
+  const capturedValues = new Map(
+    Object.entries(captured).map(([key, value]) => [
+      environmentKey(key),
+      value,
+    ]),
+  );
+  const set = Object.fromEntries(
+    Object.entries(captured).flatMap(([key, value]) =>
+      typeof value === "string" && baseValues.get(environmentKey(key)) !== value
+        ? [[key, value]]
+        : [],
+    ),
+  );
+  const unset = Object.keys(base).filter(
+    (key) => !capturedValues.has(environmentKey(key)),
+  );
+  return { version: 1, set, unset };
+};
+
+const parseEnvironmentDelta = (
+  value: unknown,
+): EnvironmentDelta | undefined => {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    return undefined;
+  const candidate = value as Record<string, unknown>;
+  if (candidate.version !== 1 || !Array.isArray(candidate.unset))
+    return undefined;
+  const set = candidate.set;
+  if (!set || typeof set !== "object" || Array.isArray(set)) return undefined;
+  if (
+    !Object.values(set).every((item) => typeof item === "string") ||
+    !candidate.unset.every((item) => typeof item === "string")
+  )
+    return undefined;
+  return {
+    version: 1,
+    set: set as Record<string, string>,
+    unset: candidate.unset as string[],
+  };
+};
+
 interface CaptureCommand {
   command: string;
   args: string[];
@@ -72,12 +139,14 @@ interface CaptureCommand {
 const captureCommand = async (
   shell: unknown,
   script: string,
+  temporaryRoot: string,
 ): Promise<CaptureCommand> => {
   const sentinel = "__BENCHPILOT_ENV__";
   const emit =
     "process.stdout.write('__BENCHPILOT_ENV__'+JSON.stringify(process.env))";
   if (shell === "powershell") {
-    const directory = await mkdtemp(path.join(tmpdir(), "benchpilot-env-"));
+    await mkdir(temporaryRoot, { recursive: true, mode: 0o700 });
+    const directory = await mkdtemp(path.join(temporaryRoot, "capture-"));
     const wrapper = path.join(directory, "capture.ps1");
     await writeFile(
       wrapper,
@@ -108,7 +177,8 @@ const captureCommand = async (
     };
   }
   if (shell === "cmd") {
-    const directory = await mkdtemp(path.join(tmpdir(), "benchpilot-env-"));
+    await mkdir(temporaryRoot, { recursive: true, mode: 0o700 });
+    const directory = await mkdtemp(path.join(temporaryRoot, "capture-"));
     const wrapper = path.join(directory, "capture.cmd");
     await writeFile(
       wrapper,
@@ -147,7 +217,14 @@ const captureCommand = async (
 export class EnvironmentResolver {
   private cache = new Map<string, NodeJS.ProcessEnv>();
 
-  constructor(private readonly base: NodeJS.ProcessEnv = process.env) {}
+  constructor(
+    private readonly base: NodeJS.ProcessEnv = process.env,
+    private readonly cacheRoot = path.join(
+      tmpdir(),
+      "benchpilot",
+      "environment-cache",
+    ),
+  ) {}
 
   async resolve(
     id: string,
@@ -275,6 +352,7 @@ export class EnvironmentResolver {
         providerId: provider.id,
         script,
         mtimeMs: metadata.mtimeMs,
+        discoveries: object(context.discovery),
         environment: Object.keys(this.base)
           .sort()
           .map((name) => [name, this.base[name]]),
@@ -282,7 +360,17 @@ export class EnvironmentResolver {
     );
     const cached = this.cache.get(key);
     if (cached) return { ...cached };
-    const command = await captureCommand(provider.shell, script);
+    const cachedPath = path.join(this.cacheRoot, `${key}.json`);
+    const persisted = await this.readCachedEnvironment(cachedPath);
+    if (persisted) {
+      this.cache.set(key, persisted);
+      return { ...persisted };
+    }
+    const command = await captureCommand(
+      provider.shell,
+      script,
+      path.join(path.dirname(this.cacheRoot), "environment-capture"),
+    );
     const controller = new AbortController();
     const onAbort = () => controller.abort(signal.reason);
     signal.addEventListener("abort", onAbort, { once: true });
@@ -319,6 +407,7 @@ export class EnvironmentResolver {
         );
       }
       this.cache.set(key, environment);
+      await this.writeCachedEnvironment(cachedPath, environment);
       return { ...environment };
     } catch (error) {
       // Keep a parent operation/action abort intact. The internal hard limit
@@ -338,6 +427,37 @@ export class EnvironmentResolver {
       clearTimeout(timer);
       signal.removeEventListener("abort", onAbort);
       await command.cleanup?.();
+    }
+  }
+
+  private async readCachedEnvironment(cachePath: string) {
+    const delta = await readFile(cachePath, "utf8")
+      .then((source) => parseEnvironmentDelta(JSON.parse(source)))
+      .catch(() => undefined);
+    if (!delta) return undefined;
+    const environment = { ...this.base };
+    for (const key of delta.unset)
+      for (const current of Object.keys(environment))
+        if (environmentKey(current) === environmentKey(key))
+          delete environment[current];
+    return mergeEnvironment(environment, delta.set);
+  }
+
+  private async writeCachedEnvironment(
+    cachePath: string,
+    environment: NodeJS.ProcessEnv,
+  ) {
+    const temporary = `${cachePath}.${process.pid}.${randomUUID()}.tmp`;
+    try {
+      await mkdir(this.cacheRoot, { recursive: true, mode: 0o700 });
+      await writeFile(
+        temporary,
+        JSON.stringify(environmentDelta(this.base, environment)),
+        { encoding: "utf8", mode: 0o600 },
+      );
+      await rename(temporary, cachePath);
+    } catch {
+      await rm(temporary, { force: true }).catch(() => undefined);
     }
   }
 }
