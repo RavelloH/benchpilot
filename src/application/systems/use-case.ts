@@ -26,6 +26,18 @@ export interface SystemOperationResult {
   results: SystemMemberOutcome[];
 }
 
+export interface SystemMember {
+  device: string;
+  role?: string;
+}
+
+export interface SystemDefinition {
+  name?: string;
+  description?: string;
+  labels?: string[];
+  members: SystemMember[];
+}
+
 export type SystemCapabilityDescriptor = CapabilityDescriptor;
 
 export interface SystemUseCaseDependencies {
@@ -38,29 +50,80 @@ export interface SystemUseCaseDependencies {
 export class SystemUseCases {
   constructor(private readonly dependencies: SystemUseCaseDependencies) {}
 
-  private members(name: string) {
+  private definition(name: string): SystemDefinition {
     const system = (
       this.dependencies.config.value.systems as Json | undefined
     )?.[name];
     if (!system || typeof system !== "object")
       fail("SYSTEM_NOT_FOUND", 3, `System not found: ${name}`);
-    const devices = (system as Json).devices;
+    const value = system as Json;
+    const members = value.members;
     if (
-      !Array.isArray(devices) ||
-      !devices.every((device) => typeof device === "string")
+      !Array.isArray(members) ||
+      !members.length ||
+      !members.every(
+        (member) =>
+          member &&
+          typeof member === "object" &&
+          typeof (member as Json).device === "string",
+      )
     )
       fail("SYSTEM_NOT_FOUND", 3, `System has no valid members: ${name}`);
-    return devices as string[];
+    return {
+      ...(typeof value.name === "string" ? { name: value.name } : {}),
+      ...(typeof value.description === "string"
+        ? { description: value.description }
+        : {}),
+      ...(Array.isArray(value.labels) &&
+      value.labels.every((label) => typeof label === "string")
+        ? { labels: value.labels as string[] }
+        : {}),
+      members: (members as Json[]).map((member) => {
+        const value = member as Json;
+        return {
+          device: String(value.device),
+          ...(typeof value.role === "string" ? { role: value.role } : {}),
+        };
+      }),
+    };
   }
 
-  async describe(name: string) {
-    const devices = this.members(name);
+  private members(name: string) {
+    return this.definition(name).members.map((member) => member.device);
+  }
+
+  async describe(name: string, locale?: string) {
+    const definition = this.definition(name);
+    const devices = definition.members.map((member) => member.device);
+    const capabilities = await systemCapabilityIntersection({
+      devices,
+      runner: this.dependencies.runner,
+    });
+    const first = [...devices].sort()[0];
+    const localized =
+      locale && first
+        ? (await this.dependencies.devices.describe(first, locale)).capabilities
+        : [];
     return {
       name,
+      ...(definition.name ? { displayName: definition.name } : {}),
+      ...(definition.description
+        ? { description: definition.description }
+        : {}),
+      ...(definition.labels ? { labels: definition.labels } : {}),
+      members: definition.members,
       devices,
-      capabilities: await systemCapabilityIntersection({
-        devices,
-        runner: this.dependencies.runner,
+      capabilities: capabilities.map((capability) => {
+        const translation = localized.find((item) => item.id === capability.id);
+        return translation
+          ? {
+              ...capability,
+              summary: translation.summary,
+              ...(translation.description
+                ? { description: translation.description }
+                : {}),
+            }
+          : capability;
       }),
     };
   }
@@ -69,8 +132,12 @@ export class SystemUseCases {
    * Returns a real capability definition only after the system intersection
    * confirms that every member exposes compatible safety/input metadata.
    */
-  async capability(name: string, capabilityId: string): Promise<Capability> {
-    const description = await this.describe(name);
+  async capability(
+    name: string,
+    capabilityId: string,
+    locale?: string,
+  ): Promise<Capability> {
+    const description = await this.describe(name, locale);
     if (!description.capabilities.some((item) => item.id === capabilityId))
       fail(
         "SYSTEM_CAPABILITY_UNAVAILABLE",
@@ -79,8 +146,9 @@ export class SystemUseCases {
       );
     const first = [...description.devices].sort()[0];
     if (!first) fail("SYSTEM_NOT_FOUND", 3, `System has no members: ${name}`);
-    return (await this.dependencies.devices.capability(first!, capabilityId))
-      .capability;
+    return (
+      await this.dependencies.devices.capability(first!, capabilityId, locale)
+    ).capability;
   }
 
   async execute(
@@ -159,14 +227,18 @@ export async function systemCapabilityIntersection(input: {
           stable({
             safety: match.safety,
             inputSchema: match.inputSchema,
+            outputSchema: match.outputSchema,
             options: match.options,
             defaultTimeoutMs: match.defaultTimeoutMs,
+            createsRun: match.createsRun,
           }) ===
             stable({
               safety: candidate.safety,
               inputSchema: candidate.inputSchema,
+              outputSchema: candidate.outputSchema,
               options: candidate.options,
               defaultTimeoutMs: candidate.defaultTimeoutMs,
+              createsRun: candidate.createsRun,
             })
         );
       }),
@@ -201,17 +273,20 @@ export async function executeSystemCapability(input: {
         available: available.map((candidate) => candidate.id),
       },
     );
-  const approvals = await Promise.all(
-    [...input.devices]
-      .sort()
-      .map((device) =>
-        input.runner.preflightApproval(
-          device,
-          input.capability,
-          structuredClone(input.capabilityInput ?? {}),
-        ),
-      ),
-  );
+  const approvals =
+    input.executionMode === "interactive"
+      ? []
+      : await Promise.all(
+          [...input.devices]
+            .sort()
+            .map((device) =>
+              input.runner.preflightApproval(
+                device,
+                input.capability,
+                structuredClone(input.capabilityInput ?? {}),
+              ),
+            ),
+        );
   const pendingApprovalIds = approvals
     .filter((approval) => approval.required && !approval.ready)
     .map((approval) => approval.approvalId)

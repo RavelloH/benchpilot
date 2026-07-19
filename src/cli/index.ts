@@ -81,7 +81,9 @@ import {
   deviceListDataPage,
   deviceRemovedDataPage,
   deviceScanDataPage,
+  systemDetailDataPage,
   systemListDataPage,
+  systemOperationDataPage,
 } from "./data/resource.js";
 import {
   configExplainDataPage,
@@ -738,6 +740,9 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
       inspect: "menu.action.inspect",
       approve: "menu.action.approve",
       reject: "menu.action.reject",
+      create: "menu.action.create",
+      delete: "menu.action.delete",
+      member: "menu.action.member",
     } as const satisfies Record<string, MessageKey>;
     const menuChoices = (values: readonly (keyof typeof menuActionKeys)[]) =>
       commandChoices(
@@ -1058,7 +1063,7 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
         const systemNodes = await catalog.children(["system"]);
         const id = await session.choose(
           [
-            ...menuChoices(["list"]),
+            ...menuChoices(["list", "create", "delete"]),
             ...(systemNodes.length
               ? [
                   { separator: menuDivider(colorEnabled(flags, stdout.isTTY)) },
@@ -1073,20 +1078,103 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
         );
         if (id === "list") {
           parts.push(id);
-        } else {
-          const capabilities = await catalog.children(["system", id]);
+        } else if (id === "create") {
+          const devices = queries.listConfiguredDevices().devices;
+          if (!devices.length)
+            fail("DEVICE_NOT_FOUND", 3, "No configured devices are available.");
+          const name = await session.value(
+            t(locale, "system.detail.id" as never),
+          );
+          const members = await session.chooseMany(
+            t(locale, "system.detail.members" as never),
+            devices.map((device) => ({
+              value: String((device as Record<string, unknown>).id),
+              label: String((device as Record<string, unknown>).id),
+            })),
+          );
+          if (!members.length)
+            fail(
+              "INVALID_SYSTEM_CONFIG",
+              3,
+              "A system requires at least one member.",
+            );
+          parts.push(id, name, ...members);
+        } else if (id === "delete") {
+          if (!systemNodes.length)
+            fail("SYSTEM_NOT_FOUND", 3, "No configured systems are available.");
           parts.push(
             id,
             await session.choose(
-              commandChoices(
-                capabilities.map((capability) => ({
-                  value: String(capability.path[2]),
-                  summary: String(capability.summaryKey),
-                })),
-              ),
-              { commandPath: ["system", id] },
+              systemNodes.map((system) => ({
+                value: String(system.path[1]),
+                label: String(system.summaryKey),
+              })),
+              { commandPath: ["system", "delete"] },
             ),
           );
+        } else {
+          const capabilities = (await systems.describe(id, locale))
+            .capabilities;
+          const action = await session.choose(
+            [
+              ...menuChoices(["show", "member"]),
+              ...(capabilities.length
+                ? [
+                    {
+                      separator: menuDivider(colorEnabled(flags, stdout.isTTY)),
+                    },
+                    ...commandChoices(
+                      capabilities.map((capability) => ({
+                        value: capability.id,
+                        summary: capability.summary,
+                      })),
+                    ),
+                  ]
+                : []),
+            ],
+            { commandPath: ["system", id] },
+          );
+          if (action === "show") parts.push(id, action);
+          else if (action === "member") {
+            const operation = await session.choose(
+              menuChoices(["add", "remove"]),
+              {
+                commandPath: ["system", id, "member"],
+              },
+            );
+            const system = await systems.describe(id, locale);
+            const candidates =
+              operation === "add"
+                ? queries
+                    .listConfiguredDevices()
+                    .devices.filter(
+                      (device) =>
+                        !system.members.some(
+                          (member) =>
+                            member.device ===
+                            String((device as Record<string, unknown>).id),
+                        ),
+                    )
+                : system.members.map((member) => ({ id: member.device }));
+            if (!candidates.length)
+              fail(
+                "USAGE_ERROR",
+                2,
+                "No eligible system members are available.",
+              );
+            parts.push(
+              "member",
+              operation,
+              id,
+              await session.choose(
+                candidates.map((candidate) => ({
+                  value: String((candidate as Record<string, unknown>).id),
+                  label: String((candidate as Record<string, unknown>).id),
+                })),
+                { commandPath: ["system", id, "member", operation] },
+              ),
+            );
+          } else parts.push(id, action);
         }
       } else if (group === "lock") {
         const locks = await runtime.listLocks();
@@ -1289,28 +1377,70 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
     if (
       !flags.help &&
       parts[0] === "system" &&
-      parts.length === 2 &&
-      parts[1] !== "list"
+      parts[1] === "create" &&
+      parts.length === 2
     ) {
       const session = interactive(locale, parts);
-      const capabilities = await catalog.children(["system", parts[1]!]);
-      if (!capabilities.length)
+      const devices = queries.listConfiguredDevices().devices;
+      if (!devices.length)
+        fail("DEVICE_NOT_FOUND", 3, "No configured devices are available.");
+      const name = await session.value(t(locale, "system.detail.id" as never));
+      const members = await session.chooseMany(
+        t(locale, "system.detail.members" as never),
+        devices.map((device) => ({
+          value: String((device as Record<string, unknown>).id),
+          label: String((device as Record<string, unknown>).id),
+        })),
+      );
+      if (!members.length)
         fail(
-          "SYSTEM_CAPABILITY_UNAVAILABLE",
+          "INVALID_SYSTEM_CONFIG",
           3,
-          "No system capabilities are available.",
+          "A system requires at least one member.",
         );
+      parts.push(name, ...members);
+    }
+    if (
+      !flags.help &&
+      parts[0] === "system" &&
+      parts[1] === "delete" &&
+      parts.length === 2
+    ) {
+      const systems = await catalog.children(["system"]);
+      if (!systems.length)
+        fail("SYSTEM_NOT_FOUND", 3, "No configured systems are available.");
       parts.push(
-        await session.choose(
-          commandChoices(
-            capabilities.map((capability) => ({
-              value: String(capability.path[2]),
-              summary: String(capability.summaryKey),
-            })),
-          ),
+        await interactive(locale, parts).choose(
+          systems.map((system) => ({
+            value: String(system.path[1]),
+            label: String(system.summaryKey),
+          })),
           { commandPath: parts },
         ),
       );
+    }
+    if (
+      !flags.help &&
+      parts[0] === "system" &&
+      parts.length === 2 &&
+      !["list", "create", "delete"].includes(parts[1]!)
+    ) {
+      const session = interactive(locale, parts);
+      const capabilities = (await systems.describe(parts[1]!, locale))
+        .capabilities;
+      const action = await session.choose(
+        [
+          ...menuChoices(["show"]),
+          ...commandChoices(
+            capabilities.map((capability) => ({
+              value: capability.id,
+              summary: capability.summary,
+            })),
+          ),
+        ],
+        { commandPath: parts },
+      );
+      parts.push(action);
     }
     if (
       !flags.help &&
@@ -1662,18 +1792,142 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
       });
       return;
     }
-    if (parts[0] === "system" && parts[1] && parts[1] !== "list") {
-      const system = await systems.describe(parts[1]);
-      if (parts.length === 2) {
-        write(
-          fullHelp(["system"]),
-          flags,
-          `benchpilot system ${parts[1]} — Configured system\n\nCommands:\n${system.capabilities.map((capability) => `  ${capability.id}`).join("\n")}\n`,
+    if (parts[0] === "system" && parts[1] === "create") {
+      if (parts.length < 4)
+        fail(
+          "USAGE_ERROR",
+          2,
+          "system create requires <name> and at least one <device>.",
         );
+      const name = parts[2]!;
+      if ((config.value.systems as Json | undefined)?.[name])
+        fail("CONFIG_EXISTS", 3, `System already exists: ${name}`);
+      const members = parts.slice(3).map((device) => ({ device }));
+      const outcome = await configurationCommands.execute({
+        action: "set",
+        key: `systems.${name}`,
+        value: JSON.stringify({ members }),
+        scopes: ["project"],
+      });
+      writeDataPage({
+        page: configMutationDataPage({
+          ...(outcome.data as Omit<
+            Parameters<typeof configMutationDataPage>[0],
+            "action"
+          >),
+          action: "set",
+        }),
+        flags,
+        locale,
+        view: currentPresentationView(),
+        color: colorEnabled(flags, stdout.isTTY),
+      });
+      return;
+    }
+    if (parts[0] === "system" && parts[1] === "delete") {
+      if (parts.length !== 3)
+        fail("USAGE_ERROR", 2, "system delete requires <name>.");
+      const outcome = await configurationCommands.execute({
+        action: "unset",
+        key: `systems.${parts[2]}`,
+        scopes: ["project"],
+      });
+      writeDataPage({
+        page: configMutationDataPage({
+          ...(outcome.data as Omit<
+            Parameters<typeof configMutationDataPage>[0],
+            "action"
+          >),
+          action: "unset",
+        }),
+        flags,
+        locale,
+        view: currentPresentationView(),
+        color: colorEnabled(flags, stdout.isTTY),
+      });
+      return;
+    }
+    if (parts[0] === "system" && parts[1] === "member") {
+      if (parts.length !== 5 || !["add", "remove"].includes(parts[2]!))
+        fail(
+          "USAGE_ERROR",
+          2,
+          "system member requires add/remove <system> <device>.",
+        );
+      const action = parts[2]!;
+      const systemName = parts[3]!;
+      const device = parts[4]!;
+      const current = await systems.describe(systemName, locale);
+      const members =
+        action === "add"
+          ? [...current.members, { device }]
+          : current.members.filter((member) => member.device !== device);
+      if (!members.length)
+        fail(
+          "SYSTEM_MEMBER_REQUIRED",
+          3,
+          "A system must retain at least one member.",
+        );
+      if (
+        action === "remove" &&
+        !current.members.some((member) => member.device === device)
+      )
+        fail(
+          "SYSTEM_MEMBER_NOT_FOUND",
+          3,
+          `Device is not a system member: ${device}`,
+        );
+      if (
+        action === "add" &&
+        current.members.some((member) => member.device === device)
+      )
+        fail(
+          "SYSTEM_MEMBER_EXISTS",
+          3,
+          `Device is already a member: ${device}`,
+        );
+      const outcome = await configurationCommands.execute({
+        action: "set",
+        key: `systems.${systemName}`,
+        value: JSON.stringify({
+          ...(current.displayName ? { name: current.displayName } : {}),
+          ...(current.description ? { description: current.description } : {}),
+          ...(current.labels ? { labels: current.labels } : {}),
+          members,
+        }),
+        scopes: ["project"],
+      });
+      writeDataPage({
+        page: configMutationDataPage({
+          ...(outcome.data as Omit<
+            Parameters<typeof configMutationDataPage>[0],
+            "action"
+          >),
+          action: "set",
+        }),
+        flags,
+        locale,
+        view: currentPresentationView(),
+        color: colorEnabled(flags, stdout.isTTY),
+      });
+      return;
+    }
+    if (parts[0] === "system" && parts[1] && parts[1] !== "list") {
+      const system = await systems.describe(parts[1], locale);
+      if (parts.length === 2 || parts[2] === "show") {
+        if (parts.length > 3)
+          fail("USAGE_ERROR", 2, "system show takes no arguments.");
+        writeDataPage({
+          page: systemDetailDataPage(system),
+          flags,
+          locale,
+          view: currentPresentationView(),
+          color: colorEnabled(flags, stdout.isTTY),
+        });
         return;
       }
       await catalog.executable(["system", parts[1], parts[2]]);
-      const definition = await systems.capability(parts[1], parts[2]);
+      const definition = await systems.capability(parts[1], parts[2], locale);
       const input = capabilityInput(
         rawOptions,
         definition.options || [],
@@ -1711,7 +1965,16 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
           ? { executionMode: "interactive" as const }
           : {}),
       });
-      if (!flags.jsonl) write(result, flags);
+      if (!flags.jsonl)
+        writeDataPage({
+          page: systemOperationDataPage(
+            result as Parameters<typeof systemOperationDataPage>[0],
+          ),
+          flags,
+          locale,
+          view: currentPresentationView(),
+          color: colorEnabled(flags, stdout.isTTY),
+        });
       return;
     }
     // Approval confirmation is intrinsically human-only. Check this before

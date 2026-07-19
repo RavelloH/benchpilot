@@ -4,7 +4,11 @@ import type { CliScreenNode } from "../presentation/page.js";
 import { terminalTheme } from "../presentation/theme.js";
 import type { CliDataPage } from "./page.js";
 
-type Entry = { id: string; adapter?: string; devices?: readonly string[] };
+type Entry = {
+  id: string;
+  adapter?: string;
+  members?: readonly { device: string; role?: string }[];
+};
 const object = (value: Json) =>
   value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -15,11 +19,21 @@ const entries = (values: readonly Json[]): Entry[] =>
     return {
       id: typeof input.id === "string" ? input.id : "unknown",
       ...(typeof input.adapter === "string" ? { adapter: input.adapter } : {}),
-      ...(Array.isArray(input.devices)
+      ...(Array.isArray(input.members)
         ? {
-            devices: input.devices.filter(
-              (item): item is string => typeof item === "string",
-            ),
+            members: input.members.flatMap((item) => {
+              const member = object(item as Json);
+              return typeof member.device === "string"
+                ? [
+                    {
+                      device: member.device,
+                      ...(typeof member.role === "string"
+                        ? { role: member.role }
+                        : {}),
+                    },
+                  ]
+                : [];
+            }),
           }
         : {}),
     };
@@ -53,7 +67,7 @@ const listPage = (
           text: theme.heading(t(context.locale, titleKey)),
           children: data.items.length
             ? data.items.map((item) => ({
-                text: `${theme.command(pad(item.id, idWidth))}${item.adapter ? theme.argument(item.adapter) : item.devices?.join(", ") || ""}`,
+                text: `${theme.command(pad(item.id, idWidth))}${item.adapter ? theme.argument(item.adapter) : item.members?.map((member) => member.device).join(", ") || ""}`,
               }))
             : [{ text: theme.muted(t(context.locale, emptyKey)) }],
         },
@@ -77,6 +91,145 @@ export const systemListDataPage = (input: { systems: readonly Json[] }) =>
     "resourceResult.systems.empty",
     input.systems,
   );
+
+export const systemDetailDataPage = (input: {
+  name: string;
+  displayName?: string;
+  description?: string;
+  labels?: readonly string[];
+  members: readonly { device: string; role?: string }[];
+  capabilities: readonly { id: string; summary: string }[];
+}): CliDataPage<{
+  schema: "benchpilot.system-detail";
+  version: 1;
+  system: typeof input;
+}> => {
+  const data = {
+    schema: "benchpilot.system-detail" as const,
+    version: 1 as const,
+    system: input,
+  };
+  return {
+    data,
+    screen: (context) => {
+      const theme = terminalTheme(context.color);
+      const label = (key: string, value: string) => ({
+        text: `${theme.muted(pad(t(context.locale, key as never), 14))}${theme.argument(value)}`,
+      });
+      return [
+        {
+          text: theme.heading(
+            t(context.locale, "system.detail.title" as never),
+          ),
+          children: [
+            label("system.detail.id", input.name),
+            ...(input.displayName
+              ? [label("system.detail.name", input.displayName)]
+              : []),
+            ...(input.description
+              ? [label("system.detail.description", input.description)]
+              : []),
+            ...(input.labels?.length
+              ? [label("system.detail.labels", input.labels.join(", "))]
+              : []),
+          ],
+        },
+        {
+          text: theme.heading(
+            t(context.locale, "system.detail.members" as never),
+          ),
+          children: input.members.map((member) => ({
+            text: `${theme.command(pad(member.device, 18))}${member.role ? theme.argument(member.role) : theme.muted("-")}`,
+          })),
+        },
+        {
+          text: theme.heading(
+            t(context.locale, "system.detail.capabilities" as never),
+          ),
+          children: input.capabilities.length
+            ? input.capabilities.map((capability) => ({
+                text: `${theme.command(pad(capability.id, 18))}${capability.summary}`,
+              }))
+            : [
+                {
+                  text: theme.muted(
+                    t(
+                      context.locale,
+                      "system.detail.capabilitiesEmpty" as never,
+                    ),
+                  ),
+                },
+              ],
+        },
+      ];
+    },
+    jsonl: [
+      ...input.members.map((member) => ({
+        key: `members.${member.device}`,
+        value: member,
+      })),
+      ...input.capabilities.map((capability) => ({
+        key: `capabilities.${capability.id}`,
+        value: capability,
+      })),
+    ],
+  };
+};
+
+export const systemOperationDataPage = (input: {
+  system: string;
+  capability: string;
+  policy: "parallel" | "serial-fail-fast";
+  results: readonly {
+    device: string;
+    ok: boolean;
+    result?: Json;
+    error?: { kind: string; message: string };
+  }[];
+}): CliDataPage<{
+  schema: "benchpilot.system-operation";
+  version: 1;
+  operation: typeof input;
+}> => {
+  const data = {
+    schema: "benchpilot.system-operation" as const,
+    version: 1 as const,
+    operation: input,
+  };
+  return {
+    data,
+    screen: (context) => {
+      const theme = terminalTheme(context.color);
+      return [
+        {
+          text: theme.heading(
+            t(context.locale, "system.operation.title" as never),
+          ),
+          children: [
+            {
+              text: `${theme.muted(pad(t(context.locale, "system.operation.system" as never), 14))}${theme.command(input.system)}`,
+            },
+            {
+              text: `${theme.muted(pad(t(context.locale, "system.operation.capability" as never), 14))}${theme.command(input.capability)}`,
+            },
+          ],
+        },
+        {
+          text: theme.heading(
+            t(context.locale, "system.operation.results" as never),
+          ),
+          children: input.results.map((result) => ({
+            text: `${theme.command(pad(result.device, 18))}${result.ok ? theme.success(t(context.locale, "system.operation.success" as never)) : theme.error(`${result.error?.kind ?? "ERROR"}: ${result.error?.message ?? ""}`)}`,
+          })),
+        },
+      ];
+    },
+    jsonl: input.results.map((result) => ({
+      key: `members.${result.device}`,
+      value: result,
+    })),
+  };
+};
 export const deviceScanDataPage = (input: {
   devices: readonly Json[];
   adapters: readonly Json[];

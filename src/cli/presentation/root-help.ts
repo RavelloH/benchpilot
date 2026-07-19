@@ -167,9 +167,13 @@ export const agentHelpSections: readonly AgentHelpSection[] = [
         command: "system",
         summaryKey: "screen.root.system",
         syntax:
-          "benchpilot system <list|system-instance> [capability] [arguments] [options]",
+          "benchpilot system <list|create|delete|system-instance> [arguments] [options]",
         usages: [
           "benchpilot system list [options]",
+          "benchpilot system create <name> <device...>",
+          "benchpilot system delete <name>",
+          "benchpilot system <system-instance> show [options]",
+          "benchpilot system member <add|remove> <system-instance> <device>",
           "benchpilot system <system-instance> <capability> [arguments] [options]",
         ],
       },

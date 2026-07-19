@@ -13,6 +13,22 @@ init:
   projectId: "Project ID"
   projectName: "Project name"
   done: "Initialized BenchPilot project."
+system:
+  detail:
+    title: "System details"
+    id: "System ID"
+    name: "Name"
+    description: "Description"
+    labels: "Labels"
+    members: "Members"
+    capabilities: "Available operations"
+    capabilitiesEmpty: "No compatible operations are available."
+  operation:
+    title: "System operation"
+    system: "System"
+    capability: "Operation"
+    results: "Member results"
+    success: "Completed"
 command:
   upgrade: "Check for and upgrade the BenchPilot CLI"
 configCatalog:
@@ -303,6 +319,9 @@ menu:
     inspect: "Inspect"
     approve: "Approve"
     reject: "Reject"
+    create: "Create system"
+    delete: "Delete system"
+    member: "Manage members"
   lock:
     listAll: "List all locks"
   approval:
@@ -383,6 +402,9 @@ help:
     run: "View an operation record's details, logs, and artifacts"
     lock: "View or clear a physical-resource lock"
     approval: "View, approve, or reject an approval request"
+    create: "Create a multi-device system"
+    delete: "Delete a multi-device system"
+    member: "Add or remove a system member"
   usage: "Usage"
   commands: "Commands"
   globalOptions: "Global options"
@@ -426,6 +448,7 @@ error:
     invalidApprovalId: "The approval identifier is invalid."
     invalidArtifact: "The artifact is invalid, unavailable, or outside the permitted run directory."
     invalidDeviceConfig: "The device configuration is invalid."
+    invalidSystemConfig: "The multi-device system configuration is invalid."
     invalidDuration: "The duration value is invalid."
     invalidLockId: "The physical resource lock identifier is invalid."
     invalidPath: "The requested path is invalid or outside the permitted directory."
@@ -460,6 +483,9 @@ error:
     unsupportedCapability: "The requested capability is not supported by this device."
     systemNotFound: "The requested multi-device system was not found."
     systemCapabilityUnavailable: "This operation is not safely available on every system member."
+    systemMemberNotFound: "The specified device is not a member of this system."
+    systemMemberExists: "The specified device is already a member of this system."
+    systemMemberRequired: "A multi-device system must retain at least one member."
     lockNotFound: "The requested physical resource lock was not found."
     lockQuarantined: "The resource lock is quarantined."
     lockOwnershipLost: "Resource lock ownership was lost."

@@ -65,7 +65,7 @@ name = "Demo"
 adapter = "demo"
 
 [systems.demo]
-devices = ["demo"]
+members = [{ device = "demo" }]
 
 [adapters]
 enabled = ["demo"]
@@ -77,6 +77,50 @@ operation_delay_ms = 1
 `,
   );
 }
+
+test("system commands manage member definitions and render details", async () => {
+  const dir = await mkdtemp(
+    path.join(os.tmpdir(), "benchpilot-system-manage-"),
+  );
+  try {
+    await initDemo(dir);
+    await writeFile(
+      path.join(dir, "benchpilot.toml"),
+      (await readFile(path.join(dir, "benchpilot.toml"), "utf8")) +
+        '\n[devices.second]\nadapter = "demo"\n',
+    );
+    const created = JSON.parse(
+      (await run(dir, "system", "create", "pair", "demo", "second", "--json"))
+        .stdout,
+    );
+    assert.equal(created.key, "systems.pair");
+    const detail = JSON.parse(
+      (await run(dir, "system", "pair", "show", "--json")).stdout,
+    );
+    assert.deepEqual(
+      detail.system.members.map((member) => member.device),
+      ["demo", "second"],
+    );
+    await run(dir, "system", "member", "remove", "pair", "second", "--json");
+    const listed = JSON.parse(
+      (await run(dir, "system", "list", "--json")).stdout,
+    );
+    assert.deepEqual(listed.items.find((item) => item.id === "pair").members, [
+      { device: "demo" },
+    ]);
+    await run(dir, "system", "delete", "pair", "--json");
+    const afterDelete = JSON.parse(
+      (await run(dir, "system", "list", "--json")).stdout,
+    );
+    assert.equal(
+      afterDelete.items.some((item) => item.id === "pair"),
+      false,
+    );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("capability boolean options are parsed without a hard-coded option list", () => {
   const parsed = parse([
     "device",
@@ -1280,7 +1324,7 @@ test("system JSONL emits child device events and one system terminal event", asy
         'adapter = "demo"',
         'device_id = "right"',
         "[systems.test]",
-        'devices = ["left", "right"]',
+        'members = [{ device = "left" }, { device = "right" }]',
       ].join("\n"),
     );
     const output = await run(dir, "system", "test", "deploy", "--jsonl");
@@ -1327,7 +1371,7 @@ test("a failed system status waits for every child before its terminal event", a
         "[devices.slow]",
         'adapter = "test"',
         "[systems.test]",
-        'devices = ["fast", "slow"]',
+        'members = [{ device = "fast" }, { device = "slow" }]',
       ].join("\n"),
     );
     const module = path.resolve("dist/cli/index.js").replaceAll("\\", "/");

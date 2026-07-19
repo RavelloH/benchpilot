@@ -56,7 +56,7 @@ const groups = {
   },
   system: {
     summaryKey: "help.group.system",
-    children: ["list", "<system-instance>"],
+    children: ["list", "create", "delete", "member", "<system-instance>"],
   },
   run: {
     summaryKey: "help.group.run",
@@ -112,6 +112,9 @@ const commandSummaryKeys = {
   language: "help.command.language",
   prune: "help.command.prune",
   "clear-stale": "help.command.clear-stale",
+  create: "help.command.create",
+  delete: "help.command.delete",
+  member: "help.command.member",
   adapter: "help.command.adapter",
   device: "help.command.device",
   system: "help.command.system",

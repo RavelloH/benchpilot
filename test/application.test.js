@@ -457,7 +457,13 @@ test("system capability definition is read only after safe intersection", async 
   };
   const systems = new SystemUseCases({
     config: {
-      value: { systems: { fixture: { devices: ["second", "first"] } } },
+      value: {
+        systems: {
+          fixture: {
+            members: [{ device: "second" }, { device: "first" }],
+          },
+        },
+      },
       origins: new Map(),
       layers: [],
     },
@@ -484,6 +490,42 @@ test("system capability definition is read only after safe intersection", async 
   });
   assert.equal(await systems.capability("fixture", "deploy"), definition);
   assert.deepEqual(selected, [{ device: "first", capability: "deploy" }]);
+});
+
+test("system capabilities use the display locale of a compatible member", async () => {
+  const systems = new SystemUseCases({
+    config: {
+      value: { systems: { fixture: { members: [{ device: "first" }] } } },
+      origins: new Map(),
+      layers: [],
+    },
+    runner: {
+      async listCapabilities() {
+        return [
+          {
+            id: "build",
+            summary: "Build firmware.",
+            defaultTimeoutMs: 60_000,
+            lockMode: "none",
+            createsRun: true,
+            safety: { mode: "normal" },
+            options: [],
+          },
+        ];
+      },
+    },
+    devices: {
+      async describe(device, locale) {
+        assert.equal(device, "first");
+        assert.equal(locale, "zh-CN");
+        return {
+          capabilities: [{ id: "build", summary: "构建固件。" }],
+        };
+      },
+    },
+  });
+  const result = await systems.describe("fixture", "zh-CN");
+  assert.equal(result.capabilities[0].summary, "构建固件。");
 });
 
 test("system status executes its safe intersection in parallel", async () => {
@@ -561,4 +603,39 @@ test("system approval preflight requests every member before execution", async (
   );
   assert.deepEqual(approvals, ["first", "second"]);
   assert.deepEqual(executed, []);
+});
+
+test("interactive system execution does not create agent approval preflights", async () => {
+  const executed = [];
+  const runner = {
+    async listCapabilities() {
+      return [
+        {
+          id: "reset",
+          summary: "reset",
+          lockMode: "exclusive",
+          safety: { mode: "caution" },
+        },
+      ];
+    },
+    async preflightApproval() {
+      throw new Error("interactive execution must not preflight approvals");
+    },
+    async execute(device) {
+      executed.push(device);
+      return { device };
+    },
+  };
+  const result = await executeSystemCapability({
+    system: "fixture",
+    capability: "reset",
+    devices: ["second", "first"],
+    runner,
+    executionMode: "interactive",
+  });
+  assert.equal(
+    result.results.every((member) => member.ok),
+    true,
+  );
+  assert.deepEqual(executed, ["first", "second"]);
 });

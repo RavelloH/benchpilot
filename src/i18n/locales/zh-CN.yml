@@ -13,6 +13,22 @@ init:
   projectId: "项目 ID"
   projectName: "项目名称"
   done: "BenchPilot 项目已初始化。"
+system:
+  detail:
+    title: "系统详情"
+    id: "系统 ID"
+    name: "名称"
+    description: "说明"
+    labels: "标签"
+    members: "成员"
+    capabilities: "可用操作"
+    capabilitiesEmpty: "当前没有可在所有成员上执行的兼容操作。"
+  operation:
+    title: "系统操作"
+    system: "系统"
+    capability: "操作"
+    results: "成员结果"
+    success: "已完成"
 command:
   upgrade: "检查并升级 BenchPilot CLI"
 configCatalog:
@@ -303,6 +319,9 @@ menu:
     inspect: "查看"
     approve: "批准"
     reject: "拒绝"
+    create: "创建系统"
+    delete: "删除系统"
+    member: "管理成员"
   lock:
     listAll: "列出所有锁"
   approval:
@@ -383,6 +402,9 @@ help:
     run: "查看单条记录的详情、日志或产物"
     lock: "查看或清除指定的物理资源锁"
     approval: "查看一项审批，并在允许时批准或拒绝它"
+    create: "创建多设备系统"
+    delete: "删除多设备系统"
+    member: "添加或移除系统成员"
   usage: "用法"
   commands: "命令"
   globalOptions: "全局选项"
@@ -426,6 +448,7 @@ error:
     invalidApprovalId: "审批标识符无效。"
     invalidArtifact: "执行产物无效、不可用，或不在允许的操作记录目录中。"
     invalidDeviceConfig: "设备配置无效。"
+    invalidSystemConfig: "多设备系统配置无效。"
     invalidDuration: "时长值无效。"
     invalidLockId: "物理资源锁标识符无效。"
     invalidPath: "请求的路径无效，或不在允许的目录中。"
@@ -460,6 +483,9 @@ error:
     unsupportedCapability: "该设备不支持指定操作。"
     systemNotFound: "找不到指定的多设备系统。"
     systemCapabilityUnavailable: "该操作无法在系统的所有成员上安全执行。"
+    systemMemberNotFound: "指定设备不是该系统成员。"
+    systemMemberExists: "指定设备已是该系统成员。"
+    systemMemberRequired: "多设备系统至少需要保留一个成员。"
     lockNotFound: "找不到指定的物理资源锁。"
     lockQuarantined: "该资源锁已被隔离。"
     lockOwnershipLost: "已失去资源锁的所有权。"

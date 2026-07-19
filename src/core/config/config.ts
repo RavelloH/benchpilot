@@ -187,10 +187,21 @@ export function validateConfig(c: Json) {
       fail("INVALID_DEVICE_CONFIG", 3, `Device ${id} requires an adapter.`);
   }
   for (const [id, s] of Object.entries((c.systems || {}) as Json)) {
+    const system = s as Json;
+    const members = system.members;
+    const validMember = (member: unknown): member is Json =>
+      object(member) &&
+      typeof member.device === "string" &&
+      Boolean(devices[member.device]) &&
+      (member.role === undefined || typeof member.role === "string");
     if (
+      !/^[a-zA-Z][\w-]*$/.test(id) ||
       !object(s) ||
-      !Array.isArray(s.devices) ||
-      s.devices.some((x) => typeof x !== "string" || !devices[x])
+      !Array.isArray(members) ||
+      !members.length ||
+      !members.every(validMember) ||
+      new Set((members as Json[]).map((member) => String(member.device)))
+        .size !== members.length
     )
       fail(
         "INVALID_SYSTEM_CONFIG",
