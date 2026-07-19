@@ -15,6 +15,76 @@ init:
   done: "Initialized BenchPilot project."
 command:
   upgrade: "Check for and upgrade the BenchPilot CLI"
+configCatalog:
+  scope:
+    local:
+      name: "Project local"
+      description: "Save in .benchpilot/config.local.toml for this project."
+    project:
+      name: "Project"
+      description: "Save in the project's benchpilot.toml file."
+    global:
+      name: "Global"
+      description: "Save in the global BenchPilot configuration file."
+  projectId:
+    name: "Project ID"
+    description: "Stable identifier generated when the project is initialized."
+  projectName:
+    name: "Project name"
+    description: "Human-readable name for this BenchPilot project."
+  timeout:
+    name: "Default timeout"
+    description: "Default time limit for operations without an explicit timeout."
+  enabledAdapters:
+    name: "Enabled adapters"
+    description: "Adapter IDs enabled for this project."
+    prompt: "Select adapters to enable"
+  approvalLevel:
+    name: "Approval level"
+    description: "Personal project policy for automated operation approvals."
+    strict:
+      name: "Strict"
+      description: "Require approval for operations declared as human approval."
+    default:
+      name: "Default"
+      description: "Require approval only for dangerous operations."
+    bypass:
+      name: "Bypass approvals"
+      description: "Do not request approval for automated operations."
+  locale:
+    name: "CLI language"
+    description: "Global language used by the BenchPilot CLI."
+    en:
+      name: "English"
+      description: "Use English for CLI text."
+    zhCN:
+      name: "Simplified Chinese"
+      description: "Use Simplified Chinese for CLI text."
+configResult:
+  key: "Key"
+  value: "Value"
+  origin: "Origin"
+  scope: "Scope"
+  path: "Path"
+  status: "Status"
+  resolved:
+    title: "Resolved configuration"
+    empty: "No configuration values are available."
+  explain:
+    title: "Configuration source"
+    layers: "Configuration layers"
+  validate:
+    title: "Configuration validation"
+    valid: "Valid"
+  get:
+    title: "Configuration value"
+  mutation:
+    setTitle: "Configuration updated"
+    unsetTitle: "Configuration removed"
+  scopeValue:
+    local: "Project local"
+    project: "Project"
+    global: "Global"
 doctor:
   local: "Local environment"
   adapter: "Adapter: {adapter}"
@@ -194,9 +264,6 @@ menu:
     inspect: "Inspect"
     approve: "Approve"
     reject: "Reject"
-  config:
-    existing: "Select an existing key"
-    new: "Enter a new key"
   lock:
     listAll: "List all locks"
   approval:
@@ -206,7 +273,6 @@ menu:
     older-than: "Remove runs older than a duration"
     all: "Remove all run records"
   field:
-    key: "configuration key"
     value: "configuration value"
 screen:
   root:
@@ -322,6 +388,7 @@ error:
     invalidPath: "The requested path is invalid or outside the permitted directory."
     invalidProjectName: "The project name is invalid."
     invalidRunId: "The operation record identifier is invalid."
+    configScopeInvalid: "This configuration item cannot be saved in the requested scope."
     lockCorrupt: "The physical resource lock record is corrupted."
     usageError: "The command arguments or options are invalid."
     upgradeInstallationNotFound: "The BenchPilot installation could not be located."

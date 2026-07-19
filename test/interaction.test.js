@@ -39,6 +39,11 @@ import {
   screenPresentation,
 } from "../dist/cli/presentation/page.js";
 import { handleRuntimeCommand } from "../dist/cli/commands/runtime.js";
+import {
+  configurationCatalog,
+  configurationMenuChoices,
+  configurationValueMenuChoices,
+} from "../dist/cli/config-catalog.js";
 
 const scriptedDriver = (...answers) => {
   let position = 0;
@@ -500,6 +505,71 @@ test("interactive sessions keep one conversation alive for sequential choices", 
   } finally {
     session.close();
   }
+});
+
+test("configuration picker uses the fixed localized configuration catalog", () => {
+  assert.deepEqual(
+    configurationCatalog.map((entry) => entry.key),
+    [
+      "project.id",
+      "project.name",
+      "defaults.timeout",
+      "adapters.enabled",
+      "approval.level",
+      "cli.locale",
+    ],
+  );
+  const choices = configurationMenuChoices("zh-CN", false);
+  assert.equal(choices.length, configurationCatalog.length);
+  const projectIdChoice = choices.find(
+    (choice) => choice.value === "project.id",
+  );
+  assert.match(projectIdChoice.label, /项目 ID/);
+  assert.match(projectIdChoice.label, /稳定唯一标识/);
+  assert.equal(
+    configurationCatalog.find((entry) => entry.key === "approval.level").editor,
+    "select",
+  );
+  assert.deepEqual(
+    configurationCatalog
+      .find((entry) => entry.key === "approval.level")
+      .choices.map((choice) => choice.value),
+    ["strict", "default", "bypass"],
+  );
+  const approvalEntry = configurationCatalog.find(
+    (entry) => entry.key === "approval.level",
+  );
+  assert.ok(approvalEntry);
+  const approvalValues = configurationValueMenuChoices(
+    approvalEntry,
+    "zh-CN",
+    false,
+  );
+  const descriptionOffsets = [
+    [approvalValues[0].label, "对声明为人工审批"],
+    [approvalValues[1].label, "仅对危险操作"],
+    [approvalValues[2].label, "自动化操作不再"],
+  ].map(([label, description]) =>
+    [...label.slice(0, label.indexOf(description))].reduce(
+      (width, character) => width + (character.codePointAt(0) > 0xff ? 2 : 1),
+      0,
+    ),
+  );
+  assert.equal(new Set(descriptionOffsets).size, 1);
+  assert.equal(
+    configurationCatalog.find((entry) => entry.key === "adapters.enabled")
+      .editor,
+    "multi-select",
+  );
+  assert.deepEqual(
+    configurationCatalog.find((entry) => entry.key === "adapters.enabled")
+      .scopes,
+    ["project"],
+  );
+  assert.deepEqual(
+    configurationCatalog.find((entry) => entry.key === "approval.level").scopes,
+    ["local", "global"],
+  );
 });
 
 test("interactive session treats EOF as cancellation", async () => {

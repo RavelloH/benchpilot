@@ -15,6 +15,76 @@ init:
   done: "BenchPilot 项目已初始化。"
 command:
   upgrade: "检查并升级 BenchPilot CLI"
+configCatalog:
+  scope:
+    local:
+      name: "项目本地"
+      description: "保存到当前项目的 .benchpilot/config.local.toml。"
+    project:
+      name: "项目"
+      description: "保存到项目的 benchpilot.toml 文件。"
+    global:
+      name: "全局"
+      description: "保存到全局 BenchPilot 配置文件。"
+  projectId:
+    name: "项目 ID"
+    description: "初始化项目时生成的稳定唯一标识。"
+  projectName:
+    name: "项目名称"
+    description: "当前 BenchPilot 项目的人类可读名称。"
+  timeout:
+    name: "默认超时"
+    description: "未单独指定超时时间的操作使用的默认时限。"
+  enabledAdapters:
+    name: "已启用适配器"
+    description: "当前项目已启用的适配器 ID 列表。"
+    prompt: "选择要启用的适配器"
+  approvalLevel:
+    name: "审批级别"
+    description: "自动化操作的个人项目级审批策略。"
+    strict:
+      name: "严格"
+      description: "对声明为人工审批的操作要求审批。"
+    default:
+      name: "默认"
+      description: "仅对危险操作要求审批。"
+    bypass:
+      name: "绕过审批"
+      description: "自动化操作不再请求审批。"
+  locale:
+    name: "CLI 语言"
+    description: "BenchPilot CLI 使用的全局语言。"
+    en:
+      name: "英语"
+      description: "CLI 文本使用英语。"
+    zhCN:
+      name: "简体中文"
+      description: "CLI 文本使用简体中文。"
+configResult:
+  key: "配置键"
+  value: "值"
+  origin: "来源"
+  scope: "作用域"
+  path: "路径"
+  status: "状态"
+  resolved:
+    title: "最终配置"
+    empty: "当前没有可用配置值。"
+  explain:
+    title: "配置来源"
+    layers: "配置层"
+  validate:
+    title: "配置校验"
+    valid: "有效"
+  get:
+    title: "配置值"
+  mutation:
+    setTitle: "配置已更新"
+    unsetTitle: "配置已删除"
+  scopeValue:
+    local: "项目本地"
+    project: "项目"
+    global: "全局"
 doctor:
   local: "本地环境"
   adapter: "适配器：{adapter}"
@@ -194,9 +264,6 @@ menu:
     inspect: "查看"
     approve: "批准"
     reject: "拒绝"
-  config:
-    existing: "选择已有配置键"
-    new: "输入新配置键"
   lock:
     listAll: "列出所有锁"
   approval:
@@ -206,7 +273,6 @@ menu:
     older-than: "删除早于指定时长的操作记录"
     all: "删除全部操作记录"
   field:
-    key: "配置键"
     value: "配置值"
 screen:
   root:
@@ -322,6 +388,7 @@ error:
     invalidPath: "请求的路径无效，或不在允许的目录中。"
     invalidProjectName: "项目名称无效。"
     invalidRunId: "操作记录标识符无效。"
+    configScopeInvalid: "该配置项不能保存到请求的作用域。"
     lockCorrupt: "物理资源锁记录已损坏。"
     usageError: "命令参数或选项无效。"
     upgradeInstallationNotFound: "找不到当前 BenchPilot 的安装位置。"

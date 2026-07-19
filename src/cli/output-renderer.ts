@@ -167,6 +167,7 @@ const errorReasonKeys: Partial<Record<string, MessageKey>> = {
   PROJECT_NOT_FOUND: "error.reason.projectNotFound",
   CONFIG_EXISTS: "error.reason.configExists",
   CONFIG_KEY_NOT_FOUND: "error.reason.configKeyNotFound",
+  CONFIG_SCOPE_INVALID: "error.reason.configScopeInvalid",
   INVALID_CONFIG: "error.reason.invalidConfig",
   INVALID_TOML: "error.reason.invalidToml",
   UNSUPPORTED_CONFIG_VERSION: "error.reason.unsupportedConfigVersion",

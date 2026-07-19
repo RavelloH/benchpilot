@@ -59,6 +59,66 @@ export const catalogs = {
     "cli.interaction.terminal":
       "This command requires an interactive terminal.",
     "command.upgrade": "Check for and upgrade the BenchPilot CLI",
+    "configCatalog.approvalLevel.bypass.description":
+      "Do not request approval for automated operations.",
+    "configCatalog.approvalLevel.bypass.name": "Bypass approvals",
+    "configCatalog.approvalLevel.default.description":
+      "Require approval only for dangerous operations.",
+    "configCatalog.approvalLevel.default.name": "Default",
+    "configCatalog.approvalLevel.description":
+      "Personal project policy for automated operation approvals.",
+    "configCatalog.approvalLevel.name": "Approval level",
+    "configCatalog.approvalLevel.strict.description":
+      "Require approval for operations declared as human approval.",
+    "configCatalog.approvalLevel.strict.name": "Strict",
+    "configCatalog.enabledAdapters.description":
+      "Adapter IDs enabled for this project.",
+    "configCatalog.enabledAdapters.name": "Enabled adapters",
+    "configCatalog.enabledAdapters.prompt": "Select adapters to enable",
+    "configCatalog.locale.description":
+      "Global language used by the BenchPilot CLI.",
+    "configCatalog.locale.en.description": "Use English for CLI text.",
+    "configCatalog.locale.en.name": "English",
+    "configCatalog.locale.name": "CLI language",
+    "configCatalog.locale.zhCN.description":
+      "Use Simplified Chinese for CLI text.",
+    "configCatalog.locale.zhCN.name": "Simplified Chinese",
+    "configCatalog.projectId.description":
+      "Stable identifier generated when the project is initialized.",
+    "configCatalog.projectId.name": "Project ID",
+    "configCatalog.projectName.description":
+      "Human-readable name for this BenchPilot project.",
+    "configCatalog.projectName.name": "Project name",
+    "configCatalog.scope.global.description":
+      "Save in the global BenchPilot configuration file.",
+    "configCatalog.scope.global.name": "Global",
+    "configCatalog.scope.local.description":
+      "Save in .benchpilot/config.local.toml for this project.",
+    "configCatalog.scope.local.name": "Project local",
+    "configCatalog.scope.project.description":
+      "Save in the project's benchpilot.toml file.",
+    "configCatalog.scope.project.name": "Project",
+    "configCatalog.timeout.description":
+      "Default time limit for operations without an explicit timeout.",
+    "configCatalog.timeout.name": "Default timeout",
+    "configResult.explain.layers": "Configuration layers",
+    "configResult.explain.title": "Configuration source",
+    "configResult.get.title": "Configuration value",
+    "configResult.key": "Key",
+    "configResult.mutation.setTitle": "Configuration updated",
+    "configResult.mutation.unsetTitle": "Configuration removed",
+    "configResult.origin": "Origin",
+    "configResult.path": "Path",
+    "configResult.resolved.empty": "No configuration values are available.",
+    "configResult.resolved.title": "Resolved configuration",
+    "configResult.scope": "Scope",
+    "configResult.scopeValue.global": "Global",
+    "configResult.scopeValue.local": "Project local",
+    "configResult.scopeValue.project": "Project",
+    "configResult.status": "Status",
+    "configResult.validate.title": "Configuration validation",
+    "configResult.validate.valid": "Valid",
+    "configResult.value": "Value",
     "doctor.adapter": "Adapter: {adapter}",
     "doctor.adaptersEnabled": "{count} enabled adapter(s) are installed.",
     "doctor.adaptersNone":
@@ -102,6 +162,8 @@ export const catalogs = {
       "The configuration file already exists and cannot be overwritten.",
     "error.reason.configKeyNotFound":
       "The requested configuration key was not found.",
+    "error.reason.configScopeInvalid":
+      "This configuration item cannot be saved in the requested scope.",
     "error.reason.dangerousConfirmationRequired":
       "This dangerous operation is missing its required explicit confirmation option.",
     "error.reason.deviceBusy":
@@ -310,11 +372,8 @@ export const catalogs = {
     "menu.approval.listAll": "List all approval requests",
     "menu.back": "Back",
     "menu.choose": "Choose the next action",
-    "menu.config.existing": "Select an existing key",
-    "menu.config.new": "Enter a new key",
     "menu.exit": "Exit",
     "menu.exitConfirm": "Press Esc again to exit",
-    "menu.field.key": "configuration key",
     "menu.field.value": "configuration value",
     "menu.invalid": "Choose one of the listed options.",
     "menu.keysHelp": "↑↓ navigate · Enter select",
@@ -440,6 +499,62 @@ export const catalogs = {
       "此命令需要交互式输入，不能与机器输出模式一起使用。",
     "cli.interaction.terminal": "此命令需要可交互的终端。",
     "command.upgrade": "检查并升级 BenchPilot CLI",
+    "configCatalog.approvalLevel.bypass.description":
+      "自动化操作不再请求审批。",
+    "configCatalog.approvalLevel.bypass.name": "绕过审批",
+    "configCatalog.approvalLevel.default.description": "仅对危险操作要求审批。",
+    "configCatalog.approvalLevel.default.name": "默认",
+    "configCatalog.approvalLevel.description":
+      "自动化操作的个人项目级审批策略。",
+    "configCatalog.approvalLevel.name": "审批级别",
+    "configCatalog.approvalLevel.strict.description":
+      "对声明为人工审批的操作要求审批。",
+    "configCatalog.approvalLevel.strict.name": "严格",
+    "configCatalog.enabledAdapters.description":
+      "当前项目已启用的适配器 ID 列表。",
+    "configCatalog.enabledAdapters.name": "已启用适配器",
+    "configCatalog.enabledAdapters.prompt": "选择要启用的适配器",
+    "configCatalog.locale.description": "BenchPilot CLI 使用的全局语言。",
+    "configCatalog.locale.en.description": "CLI 文本使用英语。",
+    "configCatalog.locale.en.name": "英语",
+    "configCatalog.locale.name": "CLI 语言",
+    "configCatalog.locale.zhCN.description": "CLI 文本使用简体中文。",
+    "configCatalog.locale.zhCN.name": "简体中文",
+    "configCatalog.projectId.description": "初始化项目时生成的稳定唯一标识。",
+    "configCatalog.projectId.name": "项目 ID",
+    "configCatalog.projectName.description":
+      "当前 BenchPilot 项目的人类可读名称。",
+    "configCatalog.projectName.name": "项目名称",
+    "configCatalog.scope.global.description":
+      "保存到全局 BenchPilot 配置文件。",
+    "configCatalog.scope.global.name": "全局",
+    "configCatalog.scope.local.description":
+      "保存到当前项目的 .benchpilot/config.local.toml。",
+    "configCatalog.scope.local.name": "项目本地",
+    "configCatalog.scope.project.description":
+      "保存到项目的 benchpilot.toml 文件。",
+    "configCatalog.scope.project.name": "项目",
+    "configCatalog.timeout.description":
+      "未单独指定超时时间的操作使用的默认时限。",
+    "configCatalog.timeout.name": "默认超时",
+    "configResult.explain.layers": "配置层",
+    "configResult.explain.title": "配置来源",
+    "configResult.get.title": "配置值",
+    "configResult.key": "配置键",
+    "configResult.mutation.setTitle": "配置已更新",
+    "configResult.mutation.unsetTitle": "配置已删除",
+    "configResult.origin": "来源",
+    "configResult.path": "路径",
+    "configResult.resolved.empty": "当前没有可用配置值。",
+    "configResult.resolved.title": "最终配置",
+    "configResult.scope": "作用域",
+    "configResult.scopeValue.global": "全局",
+    "configResult.scopeValue.local": "项目本地",
+    "configResult.scopeValue.project": "项目",
+    "configResult.status": "状态",
+    "configResult.validate.title": "配置校验",
+    "configResult.validate.valid": "有效",
+    "configResult.value": "值",
     "doctor.adapter": "适配器：{adapter}",
     "doctor.adaptersEnabled": "已安装 {count} 个已启用适配器。",
     "doctor.adaptersNone": "当前项目未启用任何已安装适配器。",
@@ -477,6 +592,7 @@ export const catalogs = {
     "error.reason.cleanupTimeout": "清理步骤执行超时。",
     "error.reason.configExists": "配置文件已存在，无法覆盖。",
     "error.reason.configKeyNotFound": "找不到指定的配置项。",
+    "error.reason.configScopeInvalid": "该配置项不能保存到请求的作用域。",
     "error.reason.dangerousConfirmationRequired":
       "该危险操作缺少所需的显式确认选项。",
     "error.reason.deviceBusy": "目标设备正在被其他操作占用。",
@@ -661,11 +777,8 @@ export const catalogs = {
     "menu.approval.listAll": "列出所有审批请求",
     "menu.back": "上一步",
     "menu.choose": "选择下一步操作",
-    "menu.config.existing": "选择已有配置键",
-    "menu.config.new": "输入新配置键",
     "menu.exit": "退出",
     "menu.exitConfirm": "再次按下 ESC 退出",
-    "menu.field.key": "配置键",
     "menu.field.value": "配置值",
     "menu.invalid": "请选择列出的选项之一。",
     "menu.keysHelp": "↑↓ 选择 · Enter 确认",

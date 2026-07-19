@@ -840,13 +840,113 @@ test("installed CLI surface initializes and runs the demo", async () => {
     );
     assert.ok(events.some((event) => event.event.type === "stage.started"));
     const commandJsonl = await run(dir, "config", "validate", "--jsonl");
-    const commandEvent = JSON.parse(commandJsonl.stdout);
-    assert.equal(commandEvent.schema, "benchpilot.event");
-    assert.equal(commandEvent.event.type, "command.result");
+    const commandEvents = commandJsonl.stdout
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    assert.equal(commandEvents[0].protocol, "benchpilot.data");
+    assert.equal(commandEvents[0].schema, "benchpilot.config-validate");
+    assert.deepEqual(commandEvents[1].value, { valid: true });
     const failedCommand = await run(dir, "config", "unknown", "--jsonl").catch(
       (error) => error,
     );
     assert.equal(JSON.parse(failedCommand.stdout).event.type, "command.failed");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("configuration query commands use structured data pages", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "benchpilot-config-pages-"));
+  try {
+    await initDemo(dir);
+    const resolved = JSON.parse(
+      (await run(dir, "config", "resolved", "--json")).stdout,
+    );
+    assert.equal(resolved.schema, "benchpilot.config-resolved");
+    assert.equal(resolved.config.project.name, "Demo");
+    assert.equal(resolved.origins["project.name"].scope, "project");
+
+    const resolvedScreen = await run(dir, "config", "resolved");
+    assert.match(resolvedScreen.stdout, /\n  version\n    Value\s+1/);
+    assert.doesNotMatch(resolvedScreen.stdout, /Key\s+Value\s+Origin/);
+
+    const explanation = JSON.parse(
+      (await run(dir, "config", "explain", "approval.level", "--json")).stdout,
+    );
+    assert.equal(explanation.schema, "benchpilot.config-explain");
+    assert.equal(explanation.key, "approval.level");
+    assert.ok(
+      explanation.layers.some((layer) => layer.scope === "project-local"),
+    );
+
+    const screen = await run(dir, "config", "explain", "approval.level");
+    assert.match(screen.stdout, /Configuration source/);
+    assert.match(screen.stdout, /Configuration layers/);
+
+    const updated = JSON.parse(
+      (await run(dir, "config", "set", "project.name", "Updated", "--json"))
+        .stdout,
+    );
+    assert.equal(updated.schema, "benchpilot.config-set");
+    assert.equal(updated.key, "project.name");
+    assert.equal(updated.value, "Updated");
+    assert.equal(updated.scope, "project");
+
+    const updateScreen = await run(
+      dir,
+      "config",
+      "set",
+      "project.name",
+      "Updated",
+    );
+    assert.match(updateScreen.stdout, /Configuration updated/);
+    assert.doesNotMatch(updateScreen.stdout, /"scope"/);
+
+    const value = JSON.parse(
+      (await run(dir, "config", "get", "project.name", "--json")).stdout,
+    );
+    assert.equal(value.schema, "benchpilot.config-get");
+    assert.equal(value.value, "Updated");
+    assert.equal(value.origin.scope, "project");
+
+    const timeout = JSON.parse(
+      (await run(dir, "config", "get", "defaults.timeout", "--json")).stdout,
+    );
+    assert.equal(timeout.origin.scope, "default");
+
+    const removed = JSON.parse(
+      (await run(dir, "config", "unset", "defaults.timeout", "--json")).stdout,
+    );
+    assert.equal(removed.schema, "benchpilot.config-unset");
+    assert.equal(removed.scope, "local");
+
+    const invalidScope = await run(
+      dir,
+      "config",
+      "set",
+      "project.name",
+      "Invalid",
+      "--local",
+      "--json",
+    ).catch((error) => error);
+    assert.equal(JSON.parse(invalidScope.stdout).kind, "CONFIG_SCOPE_INVALID");
+
+    const unmanaged = await run(
+      dir,
+      "config",
+      "get",
+      "devices",
+      "--json",
+    ).catch((error) => error);
+    assert.equal(JSON.parse(unmanaged.stdout).kind, "CONFIG_KEY_NOT_FOUND");
+
+    const frames = (await run(dir, "config", "resolved", "--jsonl")).stdout
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    assert.equal(frames[0].schema, "benchpilot.config-resolved");
+    assert.ok(frames.some((frame) => frame.key === "config.project.name"));
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

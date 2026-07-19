@@ -56,12 +56,12 @@ export async function editConfiguration(input: EditConfigInput): Promise<Json> {
   if (
     input.key === "approval.level" &&
     input.scope !== undefined &&
-    input.scope !== "local"
+    !["local", "global"].includes(input.scope)
   )
     fail(
-      "APPROVAL_LEVEL_LOCAL_SCOPE_REQUIRED",
+      "CONFIG_SCOPE_INVALID",
       2,
-      "approval.level is a personal project setting; use --local or omit the scope.",
+      "approval.level can only be saved with --local or --global.",
     );
   const scope = input.scope || (input.project ? "local" : "global");
   const file =

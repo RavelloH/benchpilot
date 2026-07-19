@@ -63,7 +63,20 @@ import {
 } from "./upgrade.js";
 import { upgradeCheckDataPage, upgradeResultDataPage } from "./data/upgrade.js";
 import { doctorDataPage } from "./data/doctor.js";
+import {
+  configExplainDataPage,
+  configGetDataPage,
+  configMutationDataPage,
+  configResolvedDataPage,
+  configValidateDataPage,
+} from "./data/config.js";
 import { initDataPage } from "./data/init.js";
+import {
+  configurationCatalogEntry,
+  configurationMenuChoices,
+  configurationValueMenuChoices,
+  type ConfigurationCatalogEntry,
+} from "./config-catalog.js";
 
 const version = "0.0.0";
 const supportedLanguages = [
@@ -185,8 +198,14 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
     const writeSelectedCommand = () => {
       if (!interaction || selectedCommandEmitted) return;
       selectedCommandEmitted = true;
+      const configScope =
+        parts[0] === "config"
+          ? ["local", "project", "global"].find(
+              (scope) => commandFlags[scope] === true,
+            )
+          : undefined;
       writeText(
-        `${terminalTheme(colorEnabled(flags, stdout.isTTY)).debug(`$ benchpilot ${parts.join(" ")}`)}\n\n`,
+        `${terminalTheme(colorEnabled(flags, stdout.isTTY)).debug(`$ benchpilot ${parts.join(" ")}${configScope ? ` --${configScope}` : ""}`)}\n\n`,
       );
     };
     const currentPresentationView = (help = flags.help === true) =>
@@ -676,35 +695,90 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
           summary: t(locale, menuActionKeys[value]),
         })),
       );
-    const chooseExistingConfigurationKey = async (
+    const chooseConfigurationKey = async (
       session: InteractionSession,
       commandPath: readonly string[],
-    ) => {
-      const keys = queries.configurationKeys().keys;
-      if (!keys.length)
-        fail("CONFIG_KEY_NOT_FOUND", 3, "No configured keys are available.");
-      return session.choose(
-        keys.map((value) => ({ value })),
+    ) =>
+      session.choose(
+        configurationMenuChoices(locale, colorEnabled(flags, stdout.isTTY)),
         { commandPath },
       );
+    const configurationScopeMessages = {
+      local: {
+        name: "configCatalog.scope.local.name",
+        description: "configCatalog.scope.local.description",
+      },
+      project: {
+        name: "configCatalog.scope.project.name",
+        description: "configCatalog.scope.project.description",
+      },
+      global: {
+        name: "configCatalog.scope.global.name",
+        description: "configCatalog.scope.global.description",
+      },
+    } as const satisfies Record<
+      "local" | "project" | "global",
+      { name: MessageKey; description: MessageKey }
+    >;
+    const chooseConfigurationScope = async (
+      session: InteractionSession,
+      entry: NonNullable<ReturnType<typeof configurationCatalogEntry>>,
+    ) => {
+      const explicit = ["local", "project", "global"].find(
+        (scope) => commandFlags[scope] === true,
+      );
+      if (explicit) return;
+      const scopes = entry.scopes;
+      const theme = terminalTheme(colorEnabled(flags, stdout.isTTY));
+      const nameWidth = Math.max(
+        ...scopes.map((scope) =>
+          displayWidth(t(locale, configurationScopeMessages[scope].name)),
+        ),
+      );
+      const scope = await session.choose(
+        scopes.map((scope) => ({
+          value: scope,
+          label: `${theme.command(padDisplay(scope, 7))}  ${padDisplay(t(locale, configurationScopeMessages[scope].name), nameWidth)}  ${theme.muted(t(locale, configurationScopeMessages[scope].description))}`,
+        })),
+      );
+      commandFlags = { ...commandFlags, [scope]: true };
     };
     const completeConfigSet = async (
       session: InteractionSession,
       commandPath: readonly string[],
     ) => {
-      const keyMode = await session.choose(
-        [
-          { value: "existing", label: t(locale, "menu.config.existing") },
-          { value: "new", label: t(locale, "menu.config.new") },
-        ],
-        { commandPath },
-      );
-      return [
-        keyMode === "existing"
-          ? await chooseExistingConfigurationKey(session, commandPath)
-          : await session.value(t(locale, "menu.field.key")),
-        await session.value(t(locale, "menu.field.value")),
-      ];
+      const key = await chooseConfigurationKey(session, commandPath);
+      const entry = configurationCatalogEntry(key);
+      if (!entry) throw new Error(`Unknown configuration key: ${key}`);
+      await chooseConfigurationScope(session, entry);
+      if (entry.editor === "select") {
+        return [
+          key,
+          await session.choose(
+            configurationValueMenuChoices(
+              entry,
+              locale,
+              colorEnabled(flags, stdout.isTTY),
+            ),
+            { commandPath: [...commandPath, key] },
+          ),
+        ];
+      }
+      if (entry.editor === "multi-select") {
+        const idWidth = Math.max(
+          ...declared.map((adapter) => displayWidth(adapter.id)),
+        );
+        const theme = terminalTheme(colorEnabled(flags, stdout.isTTY));
+        const selected = await session.chooseMany(
+          t(locale, "configCatalog.enabledAdapters.prompt"),
+          declared.map((adapter) => ({
+            value: adapter.id,
+            label: `${theme.command(padDisplay(adapter.id, idWidth))}  ${adapter.summary}`,
+          })),
+        );
+        return [key, JSON.stringify(selected)];
+      }
+      return [key, await session.value(t(locale, "menu.field.value"))];
     };
     if (isCommandGroup(parts[0]) && parts.length === 1) {
       const session = interactive(locale, parts);
@@ -722,8 +796,14 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
           { commandPath: ["config"], nextBackPath: ["config"] },
         );
         parts.push(sub);
-        if (["get", "unset", "explain"].includes(sub))
-          parts.push(await chooseExistingConfigurationKey(session, parts));
+        if (["get", "unset", "explain"].includes(sub)) {
+          parts.push(await chooseConfigurationKey(session, parts));
+          if (sub === "unset")
+            await chooseConfigurationScope(
+              session,
+              configurationCatalogEntry(parts[2]!)!,
+            );
+        }
         if (sub === "set")
           parts.push(...(await completeConfigSet(session, parts)));
       } else if (group === "run") {
@@ -978,9 +1058,14 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
       ["get", "unset", "explain", "set"].includes(parts[1]!)
     ) {
       const session = interactive(locale, parts);
-      if (["get", "unset", "explain"].includes(parts[1]!))
-        parts.push(await chooseExistingConfigurationKey(session, parts));
-      else if (parts[1] === "set")
+      if (["get", "unset", "explain"].includes(parts[1]!)) {
+        parts.push(await chooseConfigurationKey(session, parts));
+        if (parts[1] === "unset")
+          await chooseConfigurationScope(
+            session,
+            configurationCatalogEntry(parts[2]!)!,
+          );
+      } else if (parts[1] === "set")
         parts.push(...(await completeConfigSet(session, parts)));
     }
     if (
@@ -1091,6 +1176,38 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
         write(fullHelp(["config"]), flags, brief("config", locale));
         return;
       }
+      const configAction = parts[1]!;
+      const configEntry = configurationCatalogEntry(parts[2] ?? "") as
+        ConfigurationCatalogEntry | undefined;
+      if (["get", "set", "unset", "explain"].includes(configAction)) {
+        if (!configEntry)
+          fail(
+            "CONFIG_KEY_NOT_FOUND",
+            3,
+            `Configuration key is not managed by config: ${parts[2] ?? ""}.`,
+          );
+        if (["set", "unset"].includes(configAction)) {
+          const mutableEntry = configEntry as ConfigurationCatalogEntry;
+          const requestedScopes = ["local", "project", "global"].filter(
+            (scope) => commandFlags[scope] === true,
+          ) as Array<"local" | "project" | "global">;
+          if (
+            requestedScopes.some(
+              (scope) => !mutableEntry.scopes.includes(scope),
+            )
+          )
+            fail(
+              "CONFIG_SCOPE_INVALID",
+              2,
+              `${mutableEntry.key} cannot be saved in the requested scope.`,
+            );
+          if (!requestedScopes.length)
+            commandFlags = {
+              ...commandFlags,
+              [mutableEntry.scopes[0]]: true,
+            };
+        }
+      }
       const outcome = await configurationCommands.execute({
         action: parts[1]!,
         key: parts[2],
@@ -1098,17 +1215,75 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
         scopes: ["local", "project", "global"].filter(
           (scope) => commandFlags[scope],
         ) as Array<"local" | "project" | "global">,
-        showOrigin: commandFlags["show-origin"] === true,
+        showOrigin: commandFlags["show-origin"] === true || parts[1] === "get",
       });
       const value = outcome.data as { value?: unknown };
+      if (outcome.kind === "config.resolved") {
+        writeDataPage({
+          page: configResolvedDataPage(
+            outcome.data as Parameters<typeof configResolvedDataPage>[0],
+          ),
+          flags,
+          locale,
+          view: currentPresentationView(),
+          color: colorEnabled(flags, stdout.isTTY),
+        });
+        return;
+      }
+      if (outcome.kind === "config.explain") {
+        writeDataPage({
+          page: configExplainDataPage(
+            outcome.data as Parameters<typeof configExplainDataPage>[0],
+          ),
+          flags,
+          locale,
+          view: currentPresentationView(),
+          color: colorEnabled(flags, stdout.isTTY),
+        });
+        return;
+      }
+      if (outcome.kind === "config.validate") {
+        writeDataPage({
+          page: configValidateDataPage(),
+          flags,
+          locale,
+          view: currentPresentationView(),
+          color: colorEnabled(flags, stdout.isTTY),
+        });
+        return;
+      }
+      if (outcome.kind === "config.get") {
+        writeDataPage({
+          page: configGetDataPage(
+            outcome.data as Parameters<typeof configGetDataPage>[0],
+          ),
+          flags,
+          locale,
+          view: currentPresentationView(),
+          color: colorEnabled(flags, stdout.isTTY),
+        });
+        return;
+      }
+      if (outcome.kind === "config.set" || outcome.kind === "config.unset") {
+        writeDataPage({
+          page: configMutationDataPage({
+            ...(outcome.data as Omit<
+              Parameters<typeof configMutationDataPage>[0],
+              "action"
+            >),
+            action: outcome.kind === "config.set" ? "set" : "unset",
+          }),
+          flags,
+          locale,
+          view: currentPresentationView(),
+          color: colorEnabled(flags, stdout.isTTY),
+        });
+        return;
+      }
       write(
         outcome.data,
         flags,
-        outcome.kind === "config.get"
-          ? String(value.value)
-          : outcome.kind === "config.validate"
-            ? "Configuration is valid."
-            : undefined,
+        outcome.kind === "config.get" ? String(value.value) : undefined,
       );
       return;
     }
