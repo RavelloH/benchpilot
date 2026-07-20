@@ -621,3 +621,34 @@ upgradeResult:
   status:
     available: "Update available"
     current: "Up to date"
+capabilityResult:
+  execution:
+    title: "Execution"
+  output:
+    title: "Output"
+    empty: "No structured output."
+  artifacts:
+    title: "Artifacts"
+    empty: "No artifacts."
+  diagnostics:
+    title: "Diagnostics"
+    empty: "No diagnostics."
+    recovery: "Recovery:"
+    level:
+      info: "Info"
+      warning: "Warning"
+      error: "Error"
+  members:
+    title: "Members"
+    empty: "No member outcomes."
+  status: "Status"
+  key: "Key"
+  name: "Name"
+  run: "Run"
+  duration: "Duration"
+  value: "Value"
+operationProgress:
+  preparing: "Preparing"
+  running: "Running"
+  cleaning: "Cleaning up"
+  completing: "Finishing"

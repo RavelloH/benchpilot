@@ -87,34 +87,6 @@ export const systemDetailDataPage = (input: {
   };
 };
 
-export const systemOperationDataPage = (input: {
-  system: string;
-  capability: string;
-  policy: "parallel" | "serial-fail-fast";
-  results: readonly {
-    device: string;
-    ok: boolean;
-    result?: Json;
-    error?: { kind: string; message: string };
-  }[];
-}): CliDataPage<{
-  schema: "benchpilot.system-operation";
-  version: 1;
-  operation: typeof input;
-}> => {
-  const data = {
-    schema: "benchpilot.system-operation" as const,
-    version: 1 as const,
-    operation: input,
-  };
-  return {
-    data,
-    jsonl: input.results.map((result) => ({
-      key: `members.${result.device}`,
-      value: result,
-    })),
-  };
-};
 export const deviceScanDataPage = (input: {
   devices: readonly Json[];
   adapters: readonly Json[];

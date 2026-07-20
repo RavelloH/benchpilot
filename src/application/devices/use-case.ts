@@ -4,6 +4,7 @@ import {
   fail,
   type Json,
   type OperationRunner,
+  type OperationOutcome,
   type PathService,
   type ResolvedConfig,
 } from "../../core.js";
@@ -77,6 +78,39 @@ export class DeviceUseCases {
         executionMode: input.executionMode,
       },
     );
+  }
+
+  /** Returns final lifecycle facts for public rendering without exposing v2 output. */
+  async executeDetailed(input: {
+    device: string;
+    capability: string;
+    capabilityInput: Json;
+    safetyConfirmed?: boolean;
+    executionMode?: "interactive";
+  }) {
+    await this.capability(input.device, input.capability);
+    let outcome: OperationOutcome | undefined;
+    try {
+      await this.dependencies.runner.execute(
+        input.device,
+        input.capability,
+        input.capabilityInput,
+        {
+          safetyConfirmed: input.safetyConfirmed,
+          executionMode: input.executionMode,
+          onOutcome: (value) => {
+            outcome = value;
+          },
+        },
+      );
+    } catch (error) {
+      const failed = (error as { outcome?: typeof outcome }).outcome;
+      if (failed) return failed;
+      throw error;
+    }
+    if (!outcome)
+      throw new Error("Operation completed without lifecycle outcome.");
+    return outcome;
   }
 }
 

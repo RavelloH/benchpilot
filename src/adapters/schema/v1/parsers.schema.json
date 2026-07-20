@@ -16,6 +16,15 @@
     "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
     "source": { "enum": ["stdout", "stderr", "both"] },
     "cast": { "enum": ["string", "integer", "number", "boolean", "json"] },
+    "message": {
+      "type": "object",
+      "required": ["key", "fallback"],
+      "additionalProperties": false,
+      "properties": {
+        "key": { "type": "string", "pattern": "^[a-z][a-z0-9_.-]*$" },
+        "fallback": { "type": "string", "minLength": 1 }
+      }
+    },
     "extract": {
       "oneOf": [
         {
@@ -75,6 +84,31 @@
         "source": { "$ref": "#/$defs/source" },
         "pattern": { "type": "string", "minLength": 1 },
         "event": { "type": "string", "pattern": "^[a-z][a-z0-9.-]*$" },
+        "label": { "$ref": "#/$defs/message" },
+        "state": { "enum": ["running", "completed"] },
+        "reentrant": { "type": "boolean" },
+        "cycle": {
+          "type": "object",
+          "required": ["id", "start_field", "start_value", "label"],
+          "additionalProperties": false,
+          "properties": {
+            "id": { "type": "string", "pattern": "^[a-z][a-z0-9_-]*$" },
+            "start_field": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+            "start_value": { "type": ["string", "number", "boolean"] },
+            "label": { "$ref": "#/$defs/message" }
+          }
+        },
+        "cycle_complete": { "type": "boolean" },
+        "sample": {
+          "type": "object",
+          "required": ["field", "every"],
+          "additionalProperties": false,
+          "properties": {
+            "field": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+            "final_field": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+            "every": { "type": "integer", "minimum": 1 }
+          }
+        },
         "fields": {
           "type": "object",
           "propertyNames": { "pattern": "^[a-z][a-z0-9_]*$" },
@@ -100,6 +134,7 @@
         "source": { "$ref": "#/$defs/source" },
         "pattern": { "type": "string", "minLength": 1 },
         "kind": { "type": "string", "minLength": 1 },
+        "message": { "$ref": "#/$defs/message" },
         "retryable": { "type": "boolean" },
         "recovery": { "type": "array", "items": { "type": "string" } }
       }

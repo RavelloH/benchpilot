@@ -26,7 +26,7 @@ import { commandRoots } from "../dist/application/commands/catalog.js";
 import { commandCatalogDefinition } from "../dist/application/commands/definitions.js";
 import { HelpDocumentService } from "../dist/application/commands/help.js";
 import { projectHelpDocument } from "../dist/cli/help/projector.js";
-import { humanErrorMessage } from "../dist/cli/output-renderer.js";
+import { humanErrorMessage } from "../dist/cli/output/failure.js";
 import { renderFailure } from "../dist/cli/output/failure.js";
 import { handleDeviceCommand } from "../dist/cli/commands/device.js";
 import { t } from "../dist/i18n/index.js";
@@ -258,11 +258,30 @@ test("interactive device execution confirms safety and approval before running",
             safety: { mode: "destructive", flag: "approve-flash" },
           },
         }),
-        execute: async (input) => {
+        executeDetailed: async (input) => {
           calls.push({ type: "execute", input });
-          return { ok: true };
+          return {
+            status: "succeeded",
+            subject: {
+              adapter: "fixture",
+              capability: "flash",
+              device: { instance: "fixture", physicalId: "fixture" },
+            },
+            execution: {
+              status: "succeeded",
+              startedAt: "2026-07-20T00:00:00.000Z",
+              endedAt: "2026-07-20T00:00:00.000Z",
+              durationMs: 0,
+              dryRun: false,
+            },
+            artifacts: [],
+            result: {},
+            cleanupErrors: [],
+            lockFinalStatus: "not-required",
+          };
         },
       },
+      output: { write: () => true },
       confirmSafety: async () => {
         calls.push({ type: "safety" });
         return true;
@@ -627,7 +646,6 @@ test("presenter keeps machine failures on stdout and human failures on stderr", 
     result,
     command,
     flags: { json: true },
-    legacyOperation: false,
     terminalEmitted: false,
     humanMessage: "USAGE_ERROR: invalid input",
     sink,
@@ -638,7 +656,6 @@ test("presenter keeps machine failures on stdout and human failures on stderr", 
     result,
     command,
     flags: {},
-    legacyOperation: false,
     terminalEmitted: false,
     humanMessage: "USAGE_ERROR: invalid input",
     sink,
@@ -701,8 +718,7 @@ test("only the presenter owns CLI terminal writes", async () => {
     file.endsWith(".ts"),
   );
   for (const file of files) {
-    if (file === "output-renderer.ts" || file === "output\\failure.ts")
-      continue;
+    if (file === "output\\failure.ts") continue;
     const source = await readFile(join(root, file), "utf8");
     assert.doesNotMatch(source, /(?:process\.)?(?:stdout|stderr)\.write/);
     assert.doesNotMatch(source, /createInterface|node:readline/);

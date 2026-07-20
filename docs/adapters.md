@@ -10,6 +10,7 @@ Adapters are registered by ID and create a `DeviceRuntime`. They must declare `a
 Adapter-provided messages are loaded from optional `i18n/<locale>.toml` catalog
 files and resolved by the CLI, with `en` as the fallback. Capability input,
 output, safety, and timeout metadata participates in the Command Graph and
-dynamic help. Declarative Capability output Views are intentionally deferred
-with the Device/System output migration; adapters must not assume that their
-raw operation output is a public Screen or Event v3 representation yet.
+dynamic help. An optional `views.toml` can provide a schema-bound, localized
+Screen projection for an enabled capability. It uses only the shared Detail or
+ObjectTree components and never changes the public Result v3/Event v3 data.
+Absent Views use the generic capability screen projection.

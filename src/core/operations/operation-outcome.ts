@@ -1,5 +1,6 @@
 import type { BenchPilotError } from "../errors/benchpilot-error.js";
 import type { Json } from "../../core.js";
+import type { ArtifactRecord } from "../artifacts/types.js";
 
 export interface CleanupError {
   name: string;
@@ -11,6 +12,25 @@ export interface CleanupError {
 
 export interface OperationOutcome {
   status: "succeeded" | "failed" | "aborted";
+  command: string;
+  subject: {
+    adapter: string;
+    capability: string;
+    device: {
+      instance: string;
+      physicalId: string;
+    };
+  };
+  execution: {
+    status: "succeeded" | "failed" | "aborted";
+    startedAt: string;
+    endedAt: string;
+    durationMs: number;
+    runId?: string;
+    dryRun: boolean;
+  };
+  output?: Json;
+  artifacts: readonly ArtifactRecord[];
   result: Json;
   primaryError?: BenchPilotError;
   cleanupErrors: CleanupError[];

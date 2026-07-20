@@ -27,7 +27,6 @@ import {
   deviceScanDataPage,
   systemDetailDataPage,
   systemListDataPage,
-  systemOperationDataPage,
 } from "../dist/cli/data/resource.js";
 import {
   runArtifactsDataPage,
@@ -39,6 +38,7 @@ import {
 import { initDataPage } from "../dist/cli/data/init.js";
 import { stripTerminalText } from "../dist/cli/terminal/text.js";
 import { renderDataView } from "../dist/cli/views/data-screen-renderer.js";
+import { formatDataCell } from "../dist/cli/views/data-formatters.js";
 import {
   upgradeCheckDataPage,
   upgradeResultDataPage,
@@ -383,7 +383,7 @@ test("run detail composes optional timing and environment blocks", () => {
       color: false,
       columns: 80,
     }),
-    "Operation record details\n  Run ID      run-001\n  Status      Succeeded\n  Command     device board-a status\n\nTiming\n  Started     2026-01-01T00:00:00Z\n  Ended       2026-01-01T00:00:05Z\n  Duration    5000 ms\n\nEnvironment\n  Host        host\n  Process     42\n  Platform    win32\n",
+    "Operation record details\n  Run ID      run-001\n  Status      Succeeded\n  Command     device board-a status\n\nTiming\n  Started     2026-01-01T00:00:00Z\n  Ended       2026-01-01T00:00:05Z\n  Duration    5 s\n\nEnvironment\n  Host        host\n  Process     42\n  Platform    win32\n",
   );
   const sparse = runDetailDataPage({
     manifest: { runId: "run-002", status: "running" },
@@ -463,25 +463,34 @@ test("resource views compose tables and details without page callbacks", () => {
     }),
     /Members\n  a {17}primary\n  b {17}-/,
   );
-  const operation = systemOperationDataPage({
-    system: "pair",
-    capability: "status",
-    policy: "parallel",
-    results: [
-      { device: "a", ok: true, result: {} },
-      { device: "b", ok: false, error: { kind: "FAIL", message: "broken" } },
+  const operation = {
+    subject: {
+      scope: "system",
+      adapters: ["fixture"],
+      capability: "status",
+      system: { instance: "pair" },
+    },
+    execution: { status: "failed", durationMs: 10, dryRun: false },
+    members: [
+      {
+        device: { instance: "a" },
+        outcome: { execution: { status: "succeeded", runId: "run-a" } },
+      },
+      {
+        device: { instance: "b" },
+        outcome: { execution: { status: "failed" } },
+      },
     ],
-  });
+  };
   assert.match(
-    renderDataView("system-operation", operation.data, {
+    renderDataView("capability.system", operation, {
       locale: "en",
       color: false,
       columns: 80,
     }),
-    /a {17}Completed\n  b {17}FAIL: broken/,
+    /Members\n  a\s+Succeeded\s+run-a\n  b\s+Failed\s+—/,
   );
-  for (const page of [scan, system, operation])
-    assert.equal(page.screen, undefined);
+  for (const page of [scan, system]) assert.equal(page.screen, undefined);
 });
 
 test("config tree and layered table preserve nested source layout", () => {
@@ -820,4 +829,46 @@ test("run prune uses the shared list component and itemized snapshots", () => {
   assert.equal(outputView("language.get"), "language.get");
   assert.equal(outputView("language.set"), "language.set");
   assert.equal(outputView("run.prune"), "run.prune");
+});
+
+test("byte-size formatter retains an exact byte count beside the scaled value", () => {
+  assert.equal(
+    formatDataCell({
+      formatter: "byte-size",
+      row: { bytes: 1489732 },
+      field: "bytes",
+      locale: "en",
+    }).text,
+    "1.42 MiB (1,489,732 B)",
+  );
+  assert.equal(
+    formatDataCell({
+      formatter: "byte-size",
+      row: { bytes: 512 },
+      field: "bytes",
+      locale: "zh-CN",
+    }).text,
+    "512 B",
+  );
+});
+
+test("duration formatter scales units for the active locale", () => {
+  assert.equal(
+    formatDataCell({
+      formatter: "duration-ms",
+      row: { duration: 140199 },
+      field: "duration",
+      locale: "zh-CN",
+    }).text,
+    "2 分 20.2 秒",
+  );
+  assert.equal(
+    formatDataCell({
+      formatter: "duration-ms",
+      row: { duration: 3_723_000 },
+      field: "duration",
+      locale: "en",
+    }).text,
+    "1h 2m 3s",
+  );
 });

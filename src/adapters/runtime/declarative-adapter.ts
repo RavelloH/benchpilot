@@ -29,6 +29,7 @@ import {
   redactWithSchema,
   redactSecrets,
 } from "./validation/data-validator.js";
+import type { AdapterCapabilityViews } from "../contract/views.js";
 
 const validatorSchema = (
   validator: AdapterDataValidator,
@@ -71,6 +72,9 @@ const capabilityFor = (
   const inputRoot = adapter.bundle.schemas.inputs;
   const inputSchema =
     object(object(inputRoot).$defs)[inputDefinition] ?? inputRoot;
+  const outputRoot = adapter.bundle.schemas.outputs;
+  const outputSchema =
+    object(object(outputRoot).$defs)[outputDefinition] ?? outputRoot;
   const optionSchema = (schema: Json): RuntimeSchema<unknown> => ({
     parse: (item) => item,
     describe: () => schema,
@@ -133,6 +137,13 @@ const capabilityFor = (
       }) as Json;
     },
     outputSchema: validatorSchema(validator, "output", id, outputDefinition),
+    redactOutput(output) {
+      return redactWithSchema({
+        rootSchema: outputRoot,
+        schema: outputSchema,
+        value: output,
+      }) as Json;
+    },
     async execute(context: OperationContext, input: Json) {
       try {
         if (value.lock === "device" && !stableIdentity)
@@ -248,7 +259,9 @@ const doctorContext = (
 });
 
 /** Turns a validated compiled bundle into the Core Adapter contract. */
-export const createDeclarativeAdapter = (runtime: RuntimeAdapter): Adapter => {
+export const createDeclarativeAdapter = (
+  runtime: RuntimeAdapter,
+): Adapter & { readonly capabilityViews: AdapterCapabilityViews } => {
   const validator = new AdapterDataValidator(runtime.bundle);
   return {
     id: runtime.bundle.id,
@@ -256,6 +269,7 @@ export const createDeclarativeAdapter = (runtime: RuntimeAdapter): Adapter => {
     version: String(runtime.bundle.manifest.adapter_version),
     summary: String(runtime.bundle.manifest.display_name),
     description: String(runtime.bundle.manifest.description),
+    capabilityViews: runtime.bundle.views,
     translate(locale, key, variables = {}) {
       const lookup = (value: unknown) =>
         key

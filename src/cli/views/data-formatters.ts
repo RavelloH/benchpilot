@@ -22,6 +22,47 @@ const text = (value: JsonValue | undefined) =>
         ? JSON.stringify(value)
         : String(value);
 
+const byteSize = (value: JsonValue | undefined, locale: Locale) => {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0)
+    return text(value);
+  const bytes = Math.trunc(value);
+  const units = ["B", "KiB", "MiB", "GiB", "TiB"];
+  let unit = 0;
+  let scaled = bytes;
+  while (scaled >= 1024 && unit < units.length - 1) {
+    scaled /= 1024;
+    unit += 1;
+  }
+  if (unit === 0) return `${bytes.toLocaleString(locale)} B`;
+  return `${scaled.toLocaleString(locale, { maximumFractionDigits: 2 })} ${units[unit] ?? "B"} (${bytes.toLocaleString(locale)} B)`;
+};
+
+const duration = (value: JsonValue | undefined, locale: Locale) => {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0)
+    return text(value);
+  const milliseconds = Math.round(value);
+  if (milliseconds < 1000) return `${milliseconds} ms`;
+  const seconds = milliseconds / 1000;
+  const number = (current: number) =>
+    current.toLocaleString(locale, { maximumFractionDigits: 1 });
+  if (seconds < 60)
+    return locale === "zh-CN"
+      ? `${number(seconds)} 秒`
+      : `${number(seconds)} s`;
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds - minutes * 60;
+  if (minutes < 60)
+    return locale === "zh-CN"
+      ? `${minutes} 分 ${number(remainingSeconds)} 秒`
+      : `${minutes}m ${number(remainingSeconds)}s`;
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes - hours * 60;
+  const remainingWholeSeconds = Math.floor(remainingSeconds);
+  return locale === "zh-CN"
+    ? `${hours} 小时 ${remainingMinutes} 分 ${remainingWholeSeconds} 秒`
+    : `${hours}h ${remainingMinutes}m ${remainingWholeSeconds}s`;
+};
+
 const object = (value: JsonValue | undefined): JsonRow =>
   value && typeof value === "object" && !Array.isArray(value) ? value : {};
 
@@ -191,32 +232,78 @@ const diagnosticMessage = (
   locale: Locale,
   resolver?: ExternalMessageResolver,
 ): FormattedCell => {
-  const fallback = typeof row.message === "string" ? row.message : "";
-  if (typeof row.messageKey !== "string") return { text: fallback };
+  const message = object(row.message);
+  const messageKey =
+    typeof row.messageKey === "string"
+      ? row.messageKey
+      : typeof message.key === "string"
+        ? message.key
+        : undefined;
+  const fallback =
+    typeof row.message === "string"
+      ? row.message
+      : typeof message.fallback === "string"
+        ? message.fallback
+        : "";
+  const recoveryValue = object(row.details).recovery;
+  const recovery = Array.isArray(recoveryValue)
+    ? recoveryValue.filter(
+        (value): value is string => typeof value === "string",
+      )
+    : [];
+  const withRecovery = (text: string) =>
+    recovery.length
+      ? `${text} ${t(locale, "capabilityResult.diagnostics.recovery")} ${recovery.join(" ")}`
+      : text;
+  if (!messageKey) return { text: withRecovery(fallback) };
   const values =
-    row.messageValues &&
-    typeof row.messageValues === "object" &&
-    !Array.isArray(row.messageValues)
+    (row.messageValues ?? message.values) &&
+    typeof (row.messageValues ?? message.values) === "object" &&
+    !Array.isArray(row.messageValues ?? message.values)
       ? Object.fromEntries(
-          Object.entries(row.messageValues).flatMap(([key, value]) =>
-            typeof value === "string" ||
-            typeof value === "number" ||
-            typeof value === "boolean"
-              ? [[key, value]]
-              : [],
+          Object.entries(row.messageValues ?? message.values ?? {}).flatMap(
+            ([key, value]) =>
+              typeof value === "string" ||
+              typeof value === "number" ||
+              typeof value === "boolean"
+                ? [[key, value]]
+                : [],
           ),
         )
       : {};
   const adapter = typeof row.adapter === "string" ? row.adapter : undefined;
   const external = adapter
-    ? resolver?.({ adapter, key: row.messageKey, values, fallback })
+    ? resolver?.({ adapter, key: messageKey, values, fallback })
     : undefined;
-  if (external) return { text: external };
+  if (external) return { text: withRecovery(external) };
   return {
-    text: isMessageKey(row.messageKey)
-      ? t(locale, row.messageKey, values)
-      : fallback,
+    text: withRecovery(
+      isMessageKey(messageKey) ? t(locale, messageKey, values) : fallback,
+    ),
   };
+};
+
+const diagnosticLevel = (
+  value: JsonValue | undefined,
+  locale: Locale,
+): FormattedCell => {
+  const level = typeof value === "string" ? value : "info";
+  const definitions = {
+    info: {
+      text: t(locale, "capabilityResult.diagnostics.level.info"),
+      tone: "debug",
+    },
+    warning: {
+      text: t(locale, "capabilityResult.diagnostics.level.warning"),
+      tone: "warning",
+    },
+    error: {
+      text: t(locale, "capabilityResult.diagnostics.level.error"),
+      tone: "error",
+    },
+  } as const;
+  const definition = definitions[level as keyof typeof definitions];
+  return definition ? definition : { text: level, tone: "debug" };
 };
 
 const resourceSummary = (row: JsonRow, field: string): FormattedCell => {
@@ -279,8 +366,9 @@ export const formatDataCell = (input: {
           : t(input.locale, "init.none"),
     }),
     "duration-ms": () => ({
-      text: typeof value === "number" ? `${value} ms` : text(value),
+      text: duration(value, input.locale),
     }),
+    "byte-size": () => ({ text: byteSize(value, input.locale) }),
     "approval-status": () => approvalStatus(value, input.locale),
     "lock-liveness": () => lockLiveness(value, input.locale),
     "lock-state": () => lockState(value, input.locale),
@@ -320,6 +408,8 @@ export const formatDataCell = (input: {
       };
     },
     "doctor-status": () => doctorStatus(value, input.locale),
+    "capability-status": () => runStatus(value, input.locale),
+    "diagnostic-level": () => diagnosticLevel(value, input.locale),
     "diagnostic-message": () =>
       diagnosticMessage(input.row, input.locale, input.messageResolver),
     "approval-command": () => approvalCommand(value, input.row, input.locale),

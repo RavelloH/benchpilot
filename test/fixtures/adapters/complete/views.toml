@@ -1,0 +1,3 @@
+schema = "benchpilot.adapter.views"
+schema_version = 1
+[capabilities]

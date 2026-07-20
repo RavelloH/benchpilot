@@ -72,25 +72,50 @@ export const executeWorkflow = async (
   const results: RuleObject[] = [];
   try {
     const workflowId = String(workflow.id ?? "workflow");
-    emit?.("adapter.workflow.started", { workflowId });
-    for (const rawStep of Array.isArray(workflow.steps) ? workflow.steps : []) {
+    const rawSteps = Array.isArray(workflow.steps) ? workflow.steps : [];
+    const eventDataFor = (rawStep: unknown) => {
+      const raw = object(rawStep);
+      const rawLabel = object(raw.label);
+      const label =
+        typeof rawLabel.key === "string" &&
+        typeof rawLabel.fallback === "string"
+          ? { key: rawLabel.key, fallback: rawLabel.fallback }
+          : undefined;
+      return {
+        workflowId,
+        stepId: String(raw.id),
+        displayId:
+          typeof raw.progress_id === "string"
+            ? raw.progress_id
+            : String(raw.id),
+        actionId: String(raw.uses).replace(/^action:/, ""),
+        ...(label ? { label } : {}),
+      };
+    };
+    emit?.("adapter.workflow.started", {
+      workflowId,
+      steps: rawSteps.map(eventDataFor),
+    });
+    for (const rawStep of rawSteps) {
       throwIfControlled(signal, controller);
       const raw = object(rawStep);
-      const actionId = String(raw.uses).replace(/^action:/, "");
-      const stepId = String(raw.id);
+      const eventData = eventDataFor(rawStep);
+      const { actionId, stepId } = eventData;
       // Workflow conditions see the original capability input. Step inputs
       // are rendered separately and exposed through `context.step.input`.
       const step = planWorkflowStep(rawStep, context, true);
       if (!step) {
-        emit?.("adapter.workflow.step.skipped", {
-          workflowId,
-          stepId,
-          actionId,
-        });
+        emit?.("adapter.workflow.step.skipped", eventData);
         continue;
       }
-      emit?.("adapter.workflow.step.started", { workflowId, stepId, actionId });
-      context.step = { id: step.id, action: actionId, input: step.with };
+      emit?.("adapter.workflow.step.started", eventData);
+      context.step = {
+        workflowId,
+        id: step.id,
+        displayId: eventData.displayId,
+        action: actionId,
+        input: step.with,
+      };
       try {
         const result = await executeAction(
           actionId,
@@ -100,7 +125,9 @@ export const executeWorkflow = async (
         throwIfControlled(signal, controller);
         results.push({ id: step.id, ok: true, result });
         context.step = {
+          workflowId,
           id: step.id,
+          displayId: eventData.displayId,
           action: actionId,
           input: step.with,
           ok: true,
@@ -110,11 +137,7 @@ export const executeWorkflow = async (
           ...object(context.result),
           [String(step.id)]: result,
         };
-        emit?.("adapter.workflow.step.completed", {
-          workflowId,
-          stepId,
-          actionId,
-        });
+        emit?.("adapter.workflow.step.completed", eventData);
       } catch (error) {
         throwIfControlled(signal, controller);
         if (isControlFlowError(error)) throw error;
@@ -122,7 +145,9 @@ export const executeWorkflow = async (
         const runtime =
           error instanceof AdapterRuntimeError ? error : undefined;
         context.step = {
+          workflowId,
           id: step.id,
+          displayId: eventData.displayId,
           action: actionId,
           input: step.with,
           ok: false,
@@ -135,11 +160,7 @@ export const executeWorkflow = async (
           ...object(context.result),
           [String(step.id)]: context.step,
         };
-        emit?.("adapter.workflow.step.failed", {
-          workflowId,
-          stepId,
-          actionId,
-        });
+        emit?.("adapter.workflow.step.failed", eventData);
         if (
           step.continue_on_error === true ||
           workflow.stop_on_failure === false

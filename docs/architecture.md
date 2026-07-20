@@ -12,13 +12,14 @@ semantics and dynamic catalogs; Core owns safety and lifecycle. Built-in
 adapters are loaded only from compiled Bundle v2 files, and the declarative
 runtime exposes their capabilities.
 
-For migrated static commands, the Output Engine consumes one locale-neutral
+The Output Engine consumes one locale-neutral
 semantic data object and renders Screen, `benchpilot.result` v3 JSON, or
 `benchpilot.event` v3 JSONL frames. `MessageRef` keeps user-facing text typed
 and resolved in the CLI, while Application and Core return locale-neutral data.
 RLog is an infrastructure sink for business logs, captures, and Run audit; it
-is deliberately separate from public JSONL. Device and system Capability output
-continues to use a temporary legacy bridge pending its dedicated migration.
+is deliberately separate from public JSONL. Device and system Capability
+operations project Core lifecycle facts into the same Result v3 and Event v3
+protocol as all other commands.
 `OperationRunner` applies safety, creates the Run, configures RLog, acquires a
 physical-identity lock, executes with cancellation/timeout, persists a result,
 and releases resources in `finally`. A lock ownership loss aborts the same
@@ -27,8 +28,9 @@ signal supplied to the Capability.
 Core operations now run registered cleanup handlers before stopping the `LockLease`
 and releasing the physical-resource lock. Runs are finalized only after critical
 cleanup completes. Adapters are supplied through `createBenchPilotApplication`, so
-the CLI dynamically resolves their devices and capabilities. This repository still
-contains no real hardware adapter.
+the CLI dynamically resolves their devices and capabilities. The bundled ESP-IDF
+Adapter is declarative and hardware-capable, while ordinary tests use fixtures
+and never access hardware.
 
 `runProcess` is a shell-free future-adapter helper. It binds a child process to an
 operation AbortSignal and waits for it to exit before cleanup can release the

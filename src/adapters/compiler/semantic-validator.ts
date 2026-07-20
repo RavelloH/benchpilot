@@ -84,6 +84,54 @@ const condition = (
     );
 };
 
+const schemaAtSelector = (
+  root: JsonObject,
+  selector: string,
+): JsonObject | undefined =>
+  selector.split(".").reduce<JsonObject | undefined>((schema, segment) => {
+    if (!schema) return undefined;
+    const properties = obj(schema.properties);
+    const direct = properties[segment];
+    if (direct && typeof direct === "object" && !Array.isArray(direct))
+      return direct as JsonObject;
+    return undefined;
+  }, root);
+
+const schemaContainsSecret = (schema: JsonObject): boolean => {
+  if (
+    schema["x-benchpilot-secret"] === true ||
+    obj(schema["x-benchpilot-cli"]).secret === true
+  )
+    return true;
+  return Object.values(obj(schema.properties)).some(
+    (value) =>
+      value &&
+      typeof value === "object" &&
+      !Array.isArray(value) &&
+      schemaContainsSecret(value as JsonObject),
+  );
+};
+
+const hasMessage = (catalog: JsonObject, key: string) =>
+  key
+    .split(".")
+    .reduce<unknown>(
+      (value, segment) =>
+        value && typeof value === "object" && !Array.isArray(value)
+          ? (value as JsonObject)[segment]
+          : undefined,
+      catalog,
+    ) !== undefined;
+
+const messageKeys = (catalog: JsonObject, prefix = ""): string[] =>
+  Object.entries(catalog).flatMap(([key, value]) => {
+    const path = prefix ? `${prefix}.${key}` : key;
+    if (typeof value === "string") return [path];
+    return value && typeof value === "object" && !Array.isArray(value)
+      ? messageKeys(value as JsonObject, path)
+      : [];
+  });
+
 export const validateSemantics = async (
   adapter: LoadedAdapter,
   catalogPath: string,
@@ -99,7 +147,8 @@ export const validateSemantics = async (
     workflows = obj(file("workflows.toml").workflows),
     parsers = obj(file("parsers.toml").parsers),
     sets = obj(file("artifacts.toml").sets),
-    devices = file("devices.toml");
+    devices = file("devices.toml"),
+    views = obj(file("views.toml").capabilities);
   const catalog = obj(parseToml(await readFile(catalogPath, "utf8")))
     .capabilities as JsonObject;
   const declaredSafetyFlags = new Map<string, string>();
@@ -140,6 +189,48 @@ export const validateSemantics = async (
         adapter.id,
       ),
     );
+  if (Object.keys(adapter.i18n).length) {
+    const english = adapter.i18n.en;
+    if (!english)
+      errors.push(
+        diagnostic(
+          "ADAPTER_I18N_EN_REQUIRED",
+          "i18n",
+          "Adapters with message catalogs require i18n/en.toml",
+          undefined,
+          adapter.id,
+        ),
+      );
+    else {
+      const expected = new Set(messageKeys(english));
+      for (const [locale, catalog] of Object.entries(adapter.i18n)) {
+        if (locale === "en") continue;
+        const actual = new Set(messageKeys(catalog));
+        for (const key of expected)
+          if (!actual.has(key))
+            errors.push(
+              diagnostic(
+                "ADAPTER_I18N_KEY_MISSING",
+                `i18n/${locale}.toml`,
+                `Message key is missing from ${locale}: ${key}`,
+                key,
+                adapter.id,
+              ),
+            );
+        for (const key of actual)
+          if (!expected.has(key))
+            errors.push(
+              diagnostic(
+                "ADAPTER_I18N_KEY_UNKNOWN",
+                `i18n/${locale}.toml`,
+                `Message key is not declared by en: ${key}`,
+                key,
+                adapter.id,
+              ),
+            );
+      }
+    }
+  }
   const declared = obj(capabilities.capabilities);
   const extensions = obj(capabilities.extensions);
   for (const key of Object.keys(extensions))
@@ -418,6 +509,86 @@ export const validateSemantics = async (
             adapter.id,
           ),
         );
+  const outputDefinitions = obj(adapter.schemas.outputs.$defs);
+  const presentationMessageKeys = new Set<string>();
+  for (const [capabilityId, rawView] of entries(views)) {
+    const capability = obj(declared[capabilityId] ?? extensions[capabilityId]);
+    if (!Object.keys(capability).length || capability.enabled !== true) {
+      errors.push(
+        diagnostic(
+          "ADAPTER_VIEW_INVALID",
+          "views.toml",
+          `View references a missing or disabled capability: ${capabilityId}`,
+          `capabilities.${capabilityId}`,
+          adapter.id,
+        ),
+      );
+      continue;
+    }
+    const outputSchema = obj(
+      outputDefinitions[String(capability.output_schema)],
+    );
+    const view = obj(rawView);
+    const title = obj(view.title);
+    if (typeof title.key === "string") presentationMessageKeys.add(title.key);
+    const empty = obj(view.empty);
+    if (typeof empty.key === "string") presentationMessageKeys.add(empty.key);
+    if (view.kind === "completion") {
+      const message = obj(view.message);
+      if (typeof message.key === "string")
+        presentationMessageKeys.add(message.key);
+      continue;
+    }
+    if (view.kind === "tree" || view.kind === "table") {
+      if (schemaContainsSecret(outputSchema))
+        errors.push(
+          diagnostic(
+            "ADAPTER_VIEW_SECRET_SELECTOR",
+            "views.toml",
+            `Tree or table view for ${capabilityId} may expose a secret output field`,
+            `capabilities.${capabilityId}`,
+            adapter.id,
+          ),
+        );
+      if (view.kind === "table")
+        for (const rawMessage of Object.values(obj(view.keys))) {
+          const message = obj(rawMessage);
+          if (typeof message.key === "string")
+            presentationMessageKeys.add(message.key);
+        }
+      continue;
+    }
+    for (const [index, rawField] of (Array.isArray(view.fields)
+      ? view.fields
+      : []
+    ).entries()) {
+      const field = obj(rawField);
+      const label = obj(field.label);
+      if (typeof label.key === "string") presentationMessageKeys.add(label.key);
+      const selector = String(field.selector ?? "");
+      const selected = schemaAtSelector(outputSchema, selector);
+      if (!selected)
+        errors.push(
+          diagnostic(
+            "ADAPTER_VIEW_SELECTOR_INVALID",
+            "views.toml",
+            `View selector does not exist in ${String(capability.output_schema)}: ${selector}`,
+            `capabilities.${capabilityId}.fields.${index}.selector`,
+            adapter.id,
+          ),
+        );
+      else if (schemaContainsSecret(selected))
+        errors.push(
+          diagnostic(
+            "ADAPTER_VIEW_SECRET_SELECTOR",
+            "views.toml",
+            `View selector may not expose a secret: ${selector}`,
+            `capabilities.${capabilityId}.fields.${index}.selector`,
+            adapter.id,
+          ),
+        );
+    }
+  }
   for (const [key, raw] of entries(discoveries)) {
     const discovery = obj(raw),
       candidateIds = new Set<string>();
@@ -770,6 +941,8 @@ export const validateSemantics = async (
           ),
         );
       seen.add(String(step.id));
+      const label = obj(step.label);
+      if (typeof label.key === "string") presentationMessageKeys.add(label.key);
       const [kind, target] = String(step.uses ?? "").split(":");
       if (kind !== "action")
         errors.push(
@@ -784,6 +957,16 @@ export const validateSemantics = async (
       else ref(errors, actions, target, "workflows.toml", adapter.id, "Action");
       condition(step.when, "workflows.toml", adapter.id, errors);
     }
+    if (typeof workflow.output === "string" && !seen.has(workflow.output))
+      errors.push(
+        diagnostic(
+          "ADAPTER_SCHEMA_INVALID",
+          "workflows.toml",
+          `Workflow ${key} output must reference a declared step`,
+          undefined,
+          adapter.id,
+        ),
+      );
   }
   for (const [key, raw] of entries(parsers)) {
     const parser = obj(raw);
@@ -807,6 +990,11 @@ export const validateSemantics = async (
       ...(Array.isArray(parser.errors) ? parser.errors : []),
     ]) {
       const item = obj(rule);
+      const label = obj(item.label);
+      if (typeof label.key === "string") presentationMessageKeys.add(label.key);
+      const message = obj(item.message);
+      if (typeof message.key === "string")
+        presentationMessageKeys.add(message.key);
       if (typeof item.id !== "string" || ids.has(item.id))
         errors.push(
           diagnostic(
@@ -886,6 +1074,28 @@ export const validateSemantics = async (
   for (const [name, value] of Object.entries(adapter.files))
     errors.push(
       ...validateSchemaTemplates(value, name, adapter.id, adapter.schemas),
+    );
+  for (const messageKey of presentationMessageKeys)
+    for (const [locale, catalog] of Object.entries(adapter.i18n))
+      if (!hasMessage(catalog, messageKey))
+        errors.push(
+          diagnostic(
+            "ADAPTER_VIEW_MESSAGE_MISSING",
+            "presentation",
+            `Presentation message ${messageKey} is missing from ${locale}`,
+            undefined,
+            adapter.id,
+          ),
+        );
+  if (presentationMessageKeys.size && !adapter.i18n.en)
+    errors.push(
+      diagnostic(
+        "ADAPTER_VIEW_MESSAGE_MISSING",
+        "presentation",
+        "Adapter presentation declarations require an en message catalog",
+        undefined,
+        adapter.id,
+      ),
     );
   return errors;
 };

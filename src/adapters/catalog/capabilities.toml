@@ -3,7 +3,7 @@ version = 1
 [capabilities.status]
 description = "Return current target state."
 [capabilities.info]
-description = "Return project, device and toolchain information."
+description = "Return detailed target state."
 [capabilities.build]
 description = "Build firmware or application artifacts."
 [capabilities.clean]

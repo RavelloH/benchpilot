@@ -221,6 +221,8 @@ export const compileAdapter = async (
     capabilityCatalogHash: sha(catalogContent),
     schemas: adapter.schemas,
     i18n: adapter.i18n,
+    views: adapter.files["views.toml"]
+      .capabilities as CompiledAdapterBundleV2["views"],
     platforms,
   };
   const bundle: CompiledAdapterBundleV2 = {

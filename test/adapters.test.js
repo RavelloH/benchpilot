@@ -32,6 +32,7 @@ const complete = join(
   "complete",
 );
 const invalid = join(process.cwd(), "test", "fixtures", "adapters", "invalid");
+const espIdf = join(process.cwd(), "src", "adapters", "builtin", "esp-idf");
 const catalog = join(
   process.cwd(),
   "src",
@@ -84,6 +85,122 @@ test("the adapter template validates and compiles deterministically", async () =
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test("adapter views are schema-bound and reject unknown output selectors", async () => {
+  const root = await mkdtemp(join(tmpdir(), "benchpilot-adapter-view-"));
+  const adapterRoot = join(root, "complete");
+  try {
+    await cp(complete, adapterRoot, { recursive: true });
+    await writeFile(
+      join(adapterRoot, "views.toml"),
+      `schema = "benchpilot.adapter.views"\nschema_version = 1\n[capabilities.build]\nkind = "detail"\n[capabilities.build.title]\nkey = "view.build.title"\nfallback = "Build"\n[[capabilities.build.fields]]\nselector = "missing"\nformatter = "string"\n[capabilities.build.fields.label]\nkey = "view.build.missing"\nfallback = "Missing"\n`,
+    );
+    const result = await validateAdapter(adapterRoot);
+    assert.ok(
+      result.diagnostics.some(
+        (item) =>
+          item.code === "ADAPTER_VIEW_SELECTOR_INVALID" &&
+          item.file === "views.toml",
+      ),
+    );
+    assert.ok(
+      result.diagnostics.some(
+        (item) => item.code === "ADAPTER_VIEW_MESSAGE_MISSING",
+      ),
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("adapter message catalogs require an English baseline and matching keys", async () => {
+  const root = await mkdtemp(join(tmpdir(), "benchpilot-adapter-i18n-"));
+  const adapterRoot = join(root, "demo");
+  try {
+    await cp(
+      join(process.cwd(), "test", "fixtures", "adapters", "demo"),
+      adapterRoot,
+      { recursive: true },
+    );
+    const english = await readFile(join(adapterRoot, "i18n", "en.toml"));
+    await rm(join(adapterRoot, "i18n", "en.toml"));
+    let result = await validateAdapter(adapterRoot);
+    assert.ok(
+      result.diagnostics.some(
+        (item) => item.code === "ADAPTER_I18N_EN_REQUIRED",
+      ),
+    );
+    await writeFile(join(adapterRoot, "i18n", "en.toml"), english);
+    await writeFile(
+      join(adapterRoot, "i18n", "zh-CN.toml"),
+      '[doctor]\nbundleReady = "已就绪"\n',
+    );
+    result = await validateAdapter(adapterRoot);
+    assert.ok(
+      result.diagnostics.some(
+        (item) => item.code === "ADAPTER_I18N_KEY_MISSING",
+      ),
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("adapter views reject selectors marked secret by the output schema", async () => {
+  const root = await mkdtemp(join(tmpdir(), "benchpilot-adapter-view-secret-"));
+  const adapterRoot = join(root, "complete");
+  try {
+    await cp(complete, adapterRoot, { recursive: true });
+    await writeFile(
+      join(adapterRoot, "schemas", "outputs.schema.json"),
+      JSON.stringify({
+        $schema: "https://json-schema.org/draft/2020-12/schema",
+        type: "object",
+        $defs: {
+          build: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              token: {
+                type: "string",
+                "x-benchpilot-cli": { secret: true },
+              },
+            },
+          },
+        },
+      }),
+    );
+    await writeFile(
+      join(adapterRoot, "views.toml"),
+      `schema = "benchpilot.adapter.views"\nschema_version = 1\n[capabilities.build]\nkind = "detail"\n[capabilities.build.title]\nkey = "view.build.title"\nfallback = "Build"\n[[capabilities.build.fields]]\nselector = "token"\nformatter = "string"\n[capabilities.build.fields.label]\nkey = "view.build.token"\nfallback = "Token"\n`,
+    );
+    const result = await validateAdapter(adapterRoot);
+    assert.ok(
+      result.diagnostics.some(
+        (item) => item.code === "ADAPTER_VIEW_SECRET_SELECTOR",
+      ),
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("ESP-IDF supplies a declarative View for every enabled capability", async () => {
+  const result = await compileAdapter(espIdf);
+  assert.deepEqual(result.diagnostics, []);
+  assert.deepEqual(Object.keys(result.bundle.views).sort(), [
+    "build",
+    "capture",
+    "clean",
+    "deploy",
+    "flash",
+    "fullclean",
+    "info",
+    "reset",
+    "size",
+    "status",
+  ]);
 });
 
 test("capture-script providers allow a composed declared path template", async () => {

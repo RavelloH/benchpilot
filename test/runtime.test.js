@@ -27,6 +27,7 @@ import { executeCopy } from "../dist/adapters/runtime/executors/copy-executor.js
 import { executeUnsupportedSerial } from "../dist/adapters/runtime/executors/unsupported-executor.js";
 import { executeWorkflow } from "../dist/adapters/runtime/executors/workflow-executor.js";
 import { collectArtifacts } from "../dist/adapters/runtime/rules/artifact-collector.js";
+import { parseOutput } from "../dist/adapters/contract/rules.js";
 import { ExecutionDeadline } from "../dist/adapters/runtime/capability-runner.js";
 import { planLaunch } from "../dist/adapters/runtime/planning/launch-plan.js";
 import { RuntimeAdapterRegistry } from "../dist/adapters/runtime/registry.js";
@@ -157,6 +158,34 @@ test("bundle loader uses its module-relative root and validates bundle hashes", 
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test("parser progress sampling keeps the first interval and final update", () => {
+  const parsed = parseOutput(
+    {
+      mode: "line",
+      encoding: "utf8",
+      strip_ansi: true,
+      success_exit_codes: [0],
+      progress: [
+        {
+          id: "compile",
+          source: "stdout",
+          pattern: "\\[(?<current>\\d+)\\/(?<total>\\d+)\\]",
+          event: "adapter.compile",
+          fields: { current: "integer", total: "integer" },
+          sample: { field: "current", final_field: "total", every: 10 },
+        },
+      ],
+    },
+    "[1/25] one\n[5/25] two\n[11/25] three\n[20/25] four\n[25/25] done\n",
+    "",
+    0,
+  );
+  assert.deepEqual(
+    parsed.progress.map((event) => event.data.current),
+    [1, 11, 25],
+  );
 });
 
 test("runtime data validation applies defaults without removing unknown fields", () => {
@@ -2270,9 +2299,12 @@ test("declarative adapters execute through the Core operation lifecycle", async 
         layers: [],
       },
     }).execute("target", "build", {});
-    assert.equal(result.data.value, 3);
-    assert.equal(result.data.temp.endsWith(join(result.runId, "tmp")), true);
-    assert.equal((await lstat(result.data.temp)).isDirectory(), true);
+    assert.equal(result.output.value, 3);
+    assert.equal(
+      result.output.temp.endsWith(join(result.execution.runId, "tmp")),
+      true,
+    );
+    assert.equal((await lstat(result.output.temp)).isDirectory(), true);
     const snapshots = (
       await readdir(paths.projectStateRoot(root), { recursive: true })
     ).filter((entry) => entry.endsWith("resolved-config.json"));

@@ -1,4 +1,8 @@
-import type { JsonValue } from "../../contracts/index.js";
+import {
+  messageRef,
+  type JsonValue,
+  type MessageRef,
+} from "../../contracts/index.js";
 import { resolveMessage } from "../../i18n/index.js";
 import { terminalTheme } from "../presentation/theme.js";
 import { displayWidth } from "../terminal/text.js";
@@ -6,14 +10,17 @@ import { formatDataCell } from "./data-formatters.js";
 import type {
   CellTone,
   DataViewBlockDefinition,
+  DataViewDefinition,
   DataViewRenderContext,
   DetailBlockDefinition,
   FormattedCell,
   GroupedTableBlockDefinition,
+  KeyValueTableBlockDefinition,
   ListBlockDefinition,
   LogBlockDefinition,
   MessageBlockDefinition,
   ObjectTreeBlockDefinition,
+  StaticMessageBlockDefinition,
   TableBlockDefinition,
   TableColumnDefinition,
 } from "./data-types.js";
@@ -27,6 +34,31 @@ export const hasDataView = (viewId: string) => views.has(viewId);
 
 const object = (value: JsonValue | undefined): JsonRow =>
   value && typeof value === "object" && !Array.isArray(value) ? value : {};
+
+const resolveViewMessage = (
+  context: DataViewRenderContext,
+  message: MessageRef,
+) => {
+  const values = Object.fromEntries(
+    Object.entries(message.values ?? {}).flatMap(([key, value]) =>
+      typeof value === "string" ||
+      typeof value === "number" ||
+      typeof value === "boolean"
+        ? [[key, value]]
+        : [],
+    ),
+  );
+  return (
+    (context.adapter &&
+      context.messageResolver?.({
+        adapter: context.adapter,
+        key: message.key,
+        values,
+        fallback: message.fallback ?? message.key,
+      })) ??
+    resolveMessage(context.locale, message)
+  );
+};
 
 const valueAt = (data: JsonValue, path: string): JsonValue | undefined =>
   path
@@ -122,7 +154,7 @@ const renderTable = (
     }),
   );
   const headers = block.columns.map((column) =>
-    column.header ? resolveMessage(context.locale, column.header) : "",
+    column.header ? resolveViewMessage(context, column.header) : "",
   );
   const widths = block.columns.map((column, index) =>
     columnWidth(
@@ -159,9 +191,9 @@ const renderTable = (
           ...formatted.map(renderCells),
         ]
       : block.empty
-        ? [theme.muted(resolveMessage(context.locale, block.empty))]
+        ? [theme.muted(resolveViewMessage(context, block.empty))]
         : [];
-  const title = theme.heading(resolveMessage(context.locale, block.title));
+  const title = theme.heading(resolveViewMessage(context, block.title));
   const output = lines.length
     ? `${title}\n${lines.map((line) => `  ${line}`).join("\n")}`
     : title;
@@ -187,16 +219,17 @@ const renderDetail = (
         : {}),
     });
     if (row.omitEmpty && !cell.text) return [];
-    const label = resolveMessage(context.locale, row.label);
+    const label = resolveViewMessage(context, row.label);
     const gap = " ".repeat(Math.max(1, block.labelWidth - displayWidth(label)));
     return [
       `${theme.muted(`${label}${gap}`)}${paint(cell.tone ?? row.tone ?? "plain", cell.text, theme)}`,
     ];
   });
   if (block.omitWhenEmpty && !lines.length) return "";
-  return `${theme.heading(resolveMessage(context.locale, block.title))}\n${lines
-    .map((line) => `  ${line}`)
-    .join("\n")}`;
+  const title = theme.heading(resolveViewMessage(context, block.title));
+  if (!lines.length && block.empty)
+    return `${title}\n  ${theme.muted(resolveViewMessage(context, block.empty))}`;
+  return `${title}\n${lines.map((line) => `  ${line}`).join("\n")}`;
 };
 
 const renderMessage = (
@@ -209,7 +242,19 @@ const renderMessage = (
   if (!message) throw new Error(`Message view has no value for ${key}`);
   return paint(
     block.tone,
-    resolveMessage(context.locale, message),
+    resolveViewMessage(context, message),
+    terminalTheme(context.color),
+  );
+};
+
+const renderStaticMessage = (
+  input: DataViewBlockDefinition,
+  context: DataViewRenderContext,
+) => {
+  const block = input as StaticMessageBlockDefinition;
+  return paint(
+    block.tone,
+    resolveViewMessage(context, block.message),
     terminalTheme(context.color),
   );
 };
@@ -245,7 +290,7 @@ const renderList = (
           ? [
               paint(
                 block.overflow.tone,
-                resolveMessage(context.locale, {
+                resolveViewMessage(context, {
                   ...block.overflow.message,
                   values: { count: values.length },
                 }),
@@ -254,8 +299,8 @@ const renderList = (
             ]
           : []),
       ]
-    : [theme.muted(resolveMessage(context.locale, block.empty))];
-  return `${theme.heading(resolveMessage(context.locale, block.title))}\n${lines
+    : [theme.muted(resolveViewMessage(context, block.empty))];
+  return `${theme.heading(resolveViewMessage(context, block.title))}\n${lines
     .map((line) => `  ${line}`)
     .join("\n")}`;
 };
@@ -281,9 +326,9 @@ const renderObjectTree = (
       : undefined,
   );
   const entries = flattenObject(source);
-  const title = theme.heading(resolveMessage(context.locale, block.title));
+  const title = theme.heading(resolveViewMessage(context, block.title));
   if (!entries.length)
-    return `${title}\n  ${theme.muted(resolveMessage(context.locale, block.empty))}`;
+    return `${title}\n  ${theme.muted(resolveViewMessage(context, block.empty))}`;
   const rendered = entries.map((entry) => {
     const rowData = { value: entry.value, origin: metadata[entry.key] };
     const rows = block.rows.map((row) => {
@@ -297,7 +342,7 @@ const renderObjectTree = (
           ? { messageResolver: context.messageResolver }
           : {}),
       });
-      const label = resolveMessage(context.locale, row.label);
+      const label = resolveViewMessage(context, row.label);
       const gap = " ".repeat(
         Math.max(1, block.labelWidth - displayWidth(label)),
       );
@@ -306,6 +351,54 @@ const renderObjectTree = (
     return `  ${theme.command(entry.key)}\n${rows.join("\n")}`;
   });
   return `${title}\n${rendered.join("\n\n")}`;
+};
+
+const renderKeyValueTable = (
+  input: DataViewBlockDefinition,
+  context: DataViewRenderContext,
+) => {
+  const block = input as KeyValueTableBlockDefinition;
+  const rows = flattenObject(valueAt(context.data, block.source) ?? {}).map(
+    (entry) => {
+      const segment = entry.key.split(".").at(-1) ?? entry.key;
+      const label = block.keyLabels[segment];
+      return {
+        key: entry.key,
+        name: label ? resolveViewMessage(context, label) : segment,
+        value: entry.value,
+      };
+    },
+  );
+  return renderTable(
+    {
+      component: "Table",
+      source: "rows",
+      title: block.title,
+      empty: block.empty,
+      header: true,
+      columns: [
+        {
+          field: "key",
+          header: messageRef("capabilityResult.key"),
+          formatter: "string",
+          tone: "command",
+          width: { kind: "content", min: 24, gap: 2 },
+        },
+        {
+          field: "name",
+          header: messageRef("capabilityResult.name"),
+          formatter: "string",
+          width: { kind: "content", min: 16, gap: 2 },
+        },
+        {
+          field: "value",
+          header: messageRef("capabilityResult.value"),
+          formatter: "string",
+        },
+      ],
+    },
+    { ...context, data: { rows } },
+  );
 };
 
 const renderGroupedTable = (
@@ -363,9 +456,11 @@ const dataComponents: Readonly<
   Table: renderTable,
   Detail: renderDetail,
   Message: renderMessage,
+  StaticMessage: renderStaticMessage,
   List: renderList,
   Log: renderLog,
   ObjectTree: renderObjectTree,
+  KeyValueTable: renderKeyValueTable,
   GroupedTable: renderGroupedTable,
 };
 
@@ -377,6 +472,15 @@ export const renderDataView = (
 ) => {
   const view = views.get(viewId);
   if (!view) throw new Error(`Unknown data view: ${viewId}`);
+  return renderDataViewDefinition(view, data, context);
+};
+
+/** Renders either a built-in View or compiled Adapter View metadata. */
+export const renderDataViewDefinition = (
+  view: DataViewDefinition,
+  data: JsonValue,
+  context: Omit<DataViewRenderContext, "data">,
+) => {
   const renderContext = { ...context, data };
   return `${view.blocks
     .map((block) => dataComponents[block.component](block, renderContext))

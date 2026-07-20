@@ -72,22 +72,28 @@ export class RunManager {
     await atomicJson(path.join(run.dir, "result.json"), result);
     const manifest =
       (await readJson<Json>(path.join(run.dir, "manifest.json"))) || {};
+    const lifecycle =
+      result.lifecycle &&
+      typeof result.lifecycle === "object" &&
+      !Array.isArray(result.lifecycle)
+        ? (result.lifecycle as Json)
+        : {};
     await atomicJson(path.join(run.dir, "manifest.json"), {
       ...manifest,
       status,
       endedAt: new Date().toISOString(),
       durationMs,
-      cleanupErrors: result.cleanupErrors || [],
-      abortReason: result.abortReason,
-      signal: result.signal,
-      timeoutMs: result.timeoutMs,
-      lockLoss: result.lockLoss,
-      lockFinalStatus: result.lockFinalStatus,
-      quarantinedLock: result.quarantinedLock,
-      approvalFinalStatus: result.approvalFinalStatus,
-      dangerousEffectStarted: result.dangerousEffectStarted,
-      dangerousEffectStartedAt: result.dangerousEffectStartedAt,
-      dangerousEffectDetails: result.dangerousEffectDetails,
+      cleanupErrors: lifecycle.cleanupErrors || [],
+      abortReason: lifecycle.abortReason,
+      signal: lifecycle.signal,
+      timeoutMs: lifecycle.timeoutMs,
+      lockLoss: lifecycle.lockLoss,
+      lockFinalStatus: lifecycle.lockFinalStatus,
+      quarantinedLock: lifecycle.quarantinedLock,
+      approvalFinalStatus: lifecycle.approvalFinalStatus,
+      dangerousEffectStarted: lifecycle.dangerousEffectStarted,
+      dangerousEffectStartedAt: lifecycle.dangerousEffectStartedAt,
+      dangerousEffectDetails: lifecycle.dangerousEffectDetails,
     });
     await fs.unlink(finalizing).catch(() => {});
   }

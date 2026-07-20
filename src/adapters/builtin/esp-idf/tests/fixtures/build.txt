@@ -1,4 +1,4 @@
-Configuring ESP-IDF project
+[0/1] Re-running CMake...
 [12/20] Building C object main.c.obj
-Generating application bin
+Generated E:/workspace/build/app.bin
 Project build complete.

@@ -1,0 +1,6 @@
+schema = "benchpilot.adapter.views"
+schema_version = 1
+
+# Add one entry per enabled capability. Views are optional: an absent entry
+# uses BenchPilot's generic, schema-safe capability view.
+[capabilities]

@@ -6,6 +6,7 @@ import { diagnostic } from "./diagnostics.js";
 export const fixedFiles = [
   "manifest.toml",
   "capabilities.toml",
+  "views.toml",
   "tools.toml",
   "tool-discovery.toml",
   "environments.toml",

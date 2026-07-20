@@ -2,6 +2,7 @@ export type {
   JsonObject,
   CompiledAdapterBundleV2,
 } from "../contract/bundle.js";
+export type { AdapterCapabilityViews } from "../contract/views.js";
 import type { JsonObject } from "../contract/bundle.js";
 
 export interface AdapterDiagnostic {

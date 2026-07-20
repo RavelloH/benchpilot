@@ -75,14 +75,16 @@ returned in that case.
 
 ## Operations and recovery
 
-`status`, `build`, `clean`, and `size` are normal operations. `fullclean`
-requires `--dangerously-fullclean`; it deletes only the configured build
-directory. `info`, `reset`, and bounded `capture` require their declared danger
-flags because connecting with esptool or opening a USB serial port can toggle
-reset lines. Capture receives port, baud, duration, and line limits as argv;
-it always closes the port and returns `lines` and `marker`. `flash` and `deploy`
-require a human approval and never use force, erase, eFuse, JTAG, OpenOCD, or
-OTA commands.
+`build`, `clean`, and `size` are normal operations. `status` reads the current
+device state with a compact probe, while `info` performs the fuller diagnostic
+sequence. Both require their declared caution confirmation because connecting
+with esptool can toggle reset lines. `fullclean` requires
+`--dangerously-fullclean`; it deletes only the configured build directory.
+`reset` and bounded `capture` also require their declared danger flags.
+Capture receives port, baud, duration, and line limits as argv; it always
+closes the port and returns `lines` and `marker`. `flash` and `deploy` require
+a human approval and never use force, erase, eFuse, JTAG, OpenOCD, or OTA
+commands.
 
 For a missing or busy port, close serial monitors, verify the configured port,
 reconnect the board, then hold BOOT/GPIO0 and briefly press EN before retrying.
@@ -111,8 +113,11 @@ configuration example, safety model, and explicit hardware test entry point.
 
 ## CLI output status
 
-ESP-IDF capabilities already contribute their schemas, timeout, lock mode,
-safety metadata, and localized help to the dynamic Command Graph. Their
-dedicated Screen/JSON/JSONL View migration is deferred with Device/System
-operation output, so this document does not promise a capability-specific
-public Event v3 layout yet.
+ESP-IDF capabilities contribute schemas, timeout, lock mode, safety metadata,
+localized help, and schema-bound Screen Views to the dynamic Command Graph.
+`status` presents a structured device-state table, while `info` presents the
+full multi-step probe with raw key paths for detailed diagnosis. `size` and
+`capture` use compact structured summaries; `build`, `clean`, `fullclean`,
+`flash`, `reset`, and `deploy` use the shared ObjectTree component. JSON Result
+v3 and JSONL Event v3 remain the same locale-neutral capability outcome for
+every ESP-IDF operation.

@@ -2,7 +2,7 @@ import { runProcess } from "../../../core/process/process-runner.js";
 import { AdapterRuntimeError } from "../errors.js";
 import { planLaunch, type ProcessLaunchPlan } from "../planning/launch-plan.js";
 import { castValue, type CastKind } from "../rules/cast.js";
-import { parseOutput } from "../rules/parser.js";
+import { parseOutput, shouldEmitProgress } from "../rules/parser.js";
 import { object, type RuleObject } from "../rules/template.js";
 import type { SecretRedactor } from "../validation/secret-redactor.js";
 
@@ -26,6 +26,7 @@ class StreamingProgress {
   private stdoutTail = "";
   private stderrTail = "";
   private readonly maxLineChars = 1024 * 1024;
+  private readonly progressSamples = new Map<string, number>();
   private finished = false;
 
   constructor(
@@ -97,17 +98,32 @@ class StreamingProgress {
       } catch {
         continue;
       }
-      for (const match of matches)
-        this.emit(
-          String(rule.event),
-          Object.fromEntries(
+      for (const match of matches) {
+        const label = object(rule.label);
+        const data = {
+          ...Object.fromEntries(
             Object.entries(object(rule.fields)).map(([name, kind]) => {
               const rawValue = match.groups?.[name] ?? "";
               const value = castValue(rawValue, kind as CastKind);
               return [name, this.redactor?.redactValue(value) ?? value];
             }),
           ),
-        );
+          ...(typeof label.key === "string" &&
+          typeof label.fallback === "string"
+            ? { label: { key: label.key, fallback: label.fallback } }
+            : {}),
+          ...(rule.state === "running" || rule.state === "completed"
+            ? { state: rule.state }
+            : {}),
+          ...(rule.reentrant === true ? { reentrant: true } : {}),
+          ...(Object.keys(object(rule.cycle)).length
+            ? { cycle: object(rule.cycle) }
+            : {}),
+          ...(rule.cycle_complete === true ? { cycleComplete: true } : {}),
+        };
+        if (shouldEmitProgress(rule, data, this.progressSamples))
+          this.emit(String(rule.event), data);
+      }
     }
   }
 }
@@ -240,6 +256,11 @@ export const executeProcess = async (
         exitCode: result.code,
         signal: result.signal,
         ...(parsed.error ? { parserKind: String(parsed.error.kind) } : {}),
+        ...(parsed.error &&
+        typeof object(parsed.error.message).key === "string" &&
+        typeof object(parsed.error.message).fallback === "string"
+          ? { messageRef: object(parsed.error.message) }
+          : {}),
       },
     );
   return {

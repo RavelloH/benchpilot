@@ -3,6 +3,136 @@ import type { DataViewDefinition } from "./data-types.js";
 
 export const dataViewDefinitions: readonly DataViewDefinition[] = [
   {
+    id: "capability.device",
+    blocks: [
+      {
+        component: "Detail",
+        source: "execution",
+        title: msg("capabilityResult.execution.title"),
+        labelWidth: 12,
+        rows: [
+          {
+            field: "status",
+            label: msg("capabilityResult.status"),
+            formatter: "capability-status",
+          },
+          {
+            field: "runId",
+            label: msg("capabilityResult.run"),
+            formatter: "string",
+            tone: "argument",
+            omitEmpty: true,
+          },
+          {
+            field: "durationMs",
+            label: msg("capabilityResult.duration"),
+            formatter: "duration-ms",
+            tone: "debug",
+          },
+        ],
+      },
+      {
+        component: "ObjectTree",
+        source: "output",
+        title: msg("capabilityResult.output.title"),
+        empty: msg("capabilityResult.output.empty"),
+        labelWidth: 10,
+        rows: [
+          {
+            field: "value",
+            label: msg("capabilityResult.value"),
+            formatter: "json-value",
+          },
+        ],
+      },
+      {
+        component: "Table",
+        source: "artifacts",
+        title: msg("capabilityResult.artifacts.title"),
+        empty: msg("capabilityResult.artifacts.empty"),
+        omitWhenEmpty: true,
+        columns: [
+          {
+            field: "name",
+            formatter: "string",
+            tone: "command",
+            width: { kind: "content", min: 16, gap: 2 },
+          },
+          {
+            field: "kind",
+            formatter: "string",
+            tone: "argument",
+            width: { kind: "content", min: 12, gap: 2 },
+          },
+          { field: "path", formatter: "string" },
+        ],
+      },
+      {
+        component: "Table",
+        source: "diagnostics",
+        title: msg("capabilityResult.diagnostics.title"),
+        empty: msg("capabilityResult.diagnostics.empty"),
+        omitWhenEmpty: true,
+        columns: [
+          {
+            field: "level",
+            formatter: "diagnostic-level",
+            width: { kind: "content", min: 8, gap: 2 },
+          },
+          { field: "message", formatter: "diagnostic-message" },
+        ],
+      },
+    ],
+  },
+  {
+    id: "capability.system",
+    blocks: [
+      {
+        component: "Detail",
+        source: "execution",
+        title: msg("capabilityResult.execution.title"),
+        labelWidth: 12,
+        rows: [
+          {
+            field: "status",
+            label: msg("capabilityResult.status"),
+            formatter: "capability-status",
+          },
+          {
+            field: "durationMs",
+            label: msg("capabilityResult.duration"),
+            formatter: "duration-ms",
+            tone: "debug",
+          },
+        ],
+      },
+      {
+        component: "Table",
+        source: "members",
+        title: msg("capabilityResult.members.title"),
+        empty: msg("capabilityResult.members.empty"),
+        columns: [
+          {
+            field: "device.instance",
+            formatter: "string",
+            tone: "command",
+            width: { kind: "content", min: 12, gap: 2 },
+          },
+          {
+            field: "outcome.execution.status",
+            formatter: "capability-status",
+            width: { kind: "fixed", size: 12, minimum: 1 },
+          },
+          {
+            field: "outcome.execution.runId",
+            formatter: "fallback-dash",
+            tone: "argument",
+          },
+        ],
+      },
+    ],
+  },
+  {
     id: "language.list",
     blocks: [
       {

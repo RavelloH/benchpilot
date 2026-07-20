@@ -104,9 +104,19 @@ export const commandResultV3Schema = {
         not: { properties: { error: true }, required: ["error"] },
       },
       else: {
-        properties: { error: true },
-        required: ["error"],
-        not: { properties: { data: true }, required: ["data"] },
+        if: {
+          properties: { kind: { const: "operation" } },
+          required: ["kind"],
+        },
+        then: {
+          properties: { data: true, error: true },
+          required: ["data", "error"],
+        },
+        else: {
+          properties: { error: true },
+          required: ["error"],
+          not: { properties: { data: true }, required: ["data"] },
+        },
       },
     },
   ],

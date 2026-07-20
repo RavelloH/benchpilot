@@ -1,9 +1,0 @@
-{
-  "build_dir": "build",
-  "cmake_lists": true,
-  "flasher_args": true,
-  "project": "/work/benchpilot-smoke",
-  "project_description": true,
-  "sdkconfig": true,
-  "target": "esp32s3"
-}

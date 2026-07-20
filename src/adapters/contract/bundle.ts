@@ -1,4 +1,5 @@
 import { sha } from "../../core/utilities/stable-json.js";
+import type { AdapterCapabilityViews } from "./views.js";
 
 export type JsonObject = { [key: string]: unknown };
 
@@ -15,6 +16,7 @@ export interface CompiledAdapterBundleV2 {
   schemas: Record<string, JsonObject>;
   platforms: Record<string, JsonObject>;
   i18n: Record<string, JsonObject>;
+  views: AdapterCapabilityViews;
 }
 
 export type UnsignedAdapterBundleV2 = Omit<

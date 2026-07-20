@@ -4,7 +4,10 @@ Copy this directory into `src/adapters/builtin/<adapter-id>` and replace all
 placeholder metadata. Every standard capability must be declared explicitly.
 Rules are data only: actions use structured arguments and never shell strings.
 
-Optional `i18n/<locale>.toml` files provide adapter messages. The runtime uses
+`i18n/en.toml` is the Adapter message baseline. Additional
+`i18n/<locale>.toml` files must provide the same message keys; the runtime uses
 `en` as their fallback locale. Capability schemas and metadata are available to
-dynamic CLI help; declarative capability output Views are not yet part of this
-template because Device/System output migration is tracked separately.
+dynamic CLI help. `views.toml` optionally gives an enabled capability a
+screen-only `detail` or `tree` View. It may select only declared, non-secret
+output schema fields and can only use central formatters; it cannot contain
+TypeScript, shell commands, or renderer code.

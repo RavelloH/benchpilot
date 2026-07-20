@@ -189,14 +189,21 @@ export class OperationRunner {
     options: OperationExecutionOptions = {},
   ): Promise<Json> {
     const project = this.requireProject();
-    const reporter =
-      options.eventContext && this.s.reporter?.child
-        ? this.s.reporter.child(options.eventContext)
-        : this.s.reporter;
     const raw = (this.s.config.value.devices as Json | undefined)?.[instance];
     if (!object(raw))
       fail("DEVICE_NOT_FOUND", 3, `Device not found: ${instance}`);
     const d = raw as Json;
+    const reporterContext = {
+      adapter: String((d as Record<string, Json>).adapter),
+      ...(options.eventContext &&
+      typeof options.eventContext === "object" &&
+      !Array.isArray(options.eventContext)
+        ? (options.eventContext as Record<string, Json>)
+        : {}),
+    };
+    const reporter = this.s.reporter?.child
+      ? this.s.reporter.child(reporterContext)
+      : this.s.reporter;
     const adapter = this.s.registry.get(String(d.adapter));
     const runtime = await this.s.registry.createDevice(
       adapter,
@@ -315,21 +322,54 @@ export class OperationRunner {
       this.s.defaults?.timeout,
       capability.defaultTimeoutMs,
     );
-    if (this.s.defaults?.dryRun)
-      return {
-        schema: "benchpilot.result" as const,
-        version: 2 as const,
-        ok: true,
+    if (this.s.defaults?.dryRun) {
+      const now = new Date();
+      const result = {
+        schema: "benchpilot.operation-outcome" as const,
+        version: 1 as const,
+        status: "succeeded" as const,
         command,
-        dryRun: true,
-        device: runtime.identity,
-        capability: capability.id,
-        lockId,
-        lockMode: capability.lockMode,
-        timeoutMs: timeout,
-        safety,
-        approvalRequired,
+        subject: {
+          adapter: String(d.adapter),
+          capability: capability.id,
+          device: runtime.identity,
+        },
+        execution: {
+          startedAt: now.toISOString(),
+          endedAt: now.toISOString(),
+          durationMs: 0,
+          dryRun: true,
+        },
+        plan: {
+          lockId,
+          lockMode: capability.lockMode,
+          timeoutMs: timeout,
+          safety,
+          approvalRequired,
+        },
       };
+      options.onOutcome?.({
+        status: "succeeded",
+        command,
+        subject: {
+          adapter: String(d.adapter),
+          capability: capability.id,
+          device: { instance, physicalId: runtime.identity.physicalId },
+        },
+        execution: {
+          status: "succeeded",
+          startedAt: now.toISOString(),
+          endedAt: now.toISOString(),
+          durationMs: 0,
+          dryRun: true,
+        },
+        artifacts: [],
+        result,
+        cleanupErrors: [],
+        lockFinalStatus: "not-required",
+      });
+      return result;
+    }
     if (approvalRequired) {
       const existing =
         (await approvals.findMatchingApproval(binding)) ||
@@ -785,34 +825,8 @@ export class OperationRunner {
       dangerousEffectStartedAt,
       dangerousEffectDetails,
     };
-    const result: Json = ok
-      ? {
-          schema: "benchpilot.result",
-          version: 2,
-          ok: true,
-          command,
-          runId: run?.id,
-          durationMs: Date.now() - started,
-          data,
-          artifacts,
-          ...outcomeFields,
-        }
-      : {
-          schema: "benchpilot.result",
-          version: 2,
-          ok: false,
-          command,
-          runId: run?.id,
-          durationMs: Date.now() - started,
-          kind: primaryError!.kind,
-          diagnosticId: primaryError!.diagnosticId,
-          message: primaryError!.message,
-          retryable: primaryError!.retryable,
-          stage: primaryError!.stage,
-          recovery: primaryError!.recovery,
-          ...outcomeFields,
-          details: { ...primaryError!.details, cleanupErrors },
-        };
+    const endedAt = new Date();
+    const durationMs = Math.max(0, endedAt.getTime() - started);
     const status: OperationOutcome["status"] =
       primaryError?.kind === "OPERATION_TIMEOUT" ||
       primaryError?.kind === "OPERATION_ABORTED"
@@ -820,8 +834,79 @@ export class OperationRunner {
         : ok
           ? "succeeded"
           : "failed";
+    const output =
+      ok && data ? (capability.redactOutput?.(data) ?? data) : undefined;
+    const result: Json = ok
+      ? {
+          schema: "benchpilot.operation-outcome",
+          version: 1,
+          status,
+          command,
+          subject: {
+            adapter: String(d.adapter),
+            capability: capability.id,
+            device: runtime.identity,
+          },
+          execution: {
+            startedAt: new Date(started).toISOString(),
+            endedAt: endedAt.toISOString(),
+            durationMs,
+            runId: run?.id,
+            dryRun: false,
+          },
+          ...(output !== undefined ? { output } : {}),
+          artifacts,
+          lifecycle: outcomeFields,
+        }
+      : {
+          schema: "benchpilot.operation-outcome",
+          version: 1,
+          status,
+          command,
+          subject: {
+            adapter: String(d.adapter),
+            capability: capability.id,
+            device: runtime.identity,
+          },
+          execution: {
+            startedAt: new Date(started).toISOString(),
+            endedAt: endedAt.toISOString(),
+            durationMs,
+            runId: run?.id,
+            dryRun: false,
+          },
+          error: {
+            kind: primaryError!.kind,
+            diagnosticId: primaryError!.diagnosticId,
+            message: primaryError!.message,
+            retryable: primaryError!.retryable,
+            stage: primaryError!.stage,
+            recovery: primaryError!.recovery,
+            details: { ...primaryError!.details, cleanupErrors },
+          },
+          lifecycle: outcomeFields,
+        };
     const outcome: OperationOutcome = {
       status,
+      command,
+      subject: {
+        adapter: String(d.adapter),
+        capability: capability.id,
+        device: {
+          instance,
+          physicalId: runtime.identity.physicalId,
+        },
+      },
+      execution: {
+        status,
+        startedAt: new Date(started).toISOString(),
+        endedAt: endedAt.toISOString(),
+        durationMs,
+        ...(run ? { runId: run.id } : {}),
+        dryRun: false,
+      },
+      ...(output !== undefined ? { output } : {}),
+      artifacts,
       result,
       primaryError,
       cleanupErrors,
@@ -829,27 +914,22 @@ export class OperationRunner {
       quarantinedLock,
     };
     if (run) await runManager.finalize(run, outcome.status, outcome.result);
+    options.onOutcome?.(outcome);
     session.transition("finalized");
     if (outcome.primaryError) {
       if (options.eventScope === "child")
-        reporter?.emit("device.operation.failed", { error: outcome.result });
-      else reporter?.emit("operation.failed", { error: outcome.result });
+        reporter?.emit("device.operation.failed", { outcome: outcome.result });
+      else reporter?.emit("operation.failed", { outcome: outcome.result });
       throw Object.assign(outcome.primaryError, {
         result: outcome.result,
+        outcome,
         operationTerminalReported: Boolean(reporter),
       });
     }
     if (options.eventScope === "child")
-      reporter?.emit("device.operation.completed", {
-        result: outcome.result,
-      });
-    else reporter?.emit("operation.completed", { result: outcome.result });
+      reporter?.emit("device.operation.completed", { outcome: outcome.result });
+    else reporter?.emit("operation.completed", { outcome: outcome.result });
     return outcome.result;
-  }
-
-  emitSystemEvent(type: string, data: Json = {}) {
-    this.s.reporter?.emit(type, data);
-    return Boolean(this.s.reporter);
   }
 
   private requireProject(): { root: string; config: string } {

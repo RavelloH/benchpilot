@@ -121,10 +121,21 @@ try {
     `Passive scan did not find configured port ${port}`,
   );
 
-  const status = await run(["device", "esp32s3", "status", "--json"]);
-  expect(status.data.project.cmake_lists, "status did not find CMakeLists.txt");
-  expect(status.data.python.major >= 3, "status did not report Python 3");
-  expect(status.data.idf.major >= 5, "status did not report ESP-IDF v5+");
+  const status = await run([
+    "device",
+    "esp32s3",
+    "status",
+    "--dangerously-status",
+    "--json",
+  ]);
+  expect(
+    status.lockFinalStatus === "released",
+    "status did not release its lock",
+  );
+  expect(
+    JSON.stringify(status.data).includes("ESP32"),
+    "status did not identify an ESP target",
+  );
 
   const info = await run([
     "device",

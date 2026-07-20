@@ -1,0 +1,12 @@
+[doctor]
+bundleReady = "Adapter bundle is ready."
+requiredToolResolved = "Required tool is ready."
+optionalToolResolved = "Optional tool is ready."
+requiredToolFailed = "Required tool check failed."
+optionalToolUnavailable = "Optional tool is unavailable."
+environmentResolved = "Runtime environment resolved."
+environmentFailed = "Could not resolve runtime environment."
+discoveryDisabled = "Device discovery is disabled."
+discoverySourceFailed = "One or more device discovery sources failed."
+discoveryAvailable = "Passive device discovery is available."
+discoveryUnavailable = "Could not initialize passive device discovery."

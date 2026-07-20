@@ -12,6 +12,12 @@ export type LocalizedMessageData = JsonObject & {
   text: string;
 };
 
+export type AdapterHelpMessageResolver = (
+  adapter: string,
+  key: string,
+  fallback: string | undefined,
+) => string | undefined;
+
 export type HelpFieldData = JsonObject & {
   name: string;
   kind: "argument" | "option";
@@ -84,9 +90,16 @@ const jsonValue = (value: unknown): JsonValue => {
 const messageData = (
   message: MessageRef,
   locale: Locale,
+  adapterMessages?: AdapterHelpMessageResolver,
 ): LocalizedMessageData => ({
   key: message.key,
-  text: resolveMessage(locale, message),
+  text: (() => {
+    const match = /^adapter\.([a-z][a-z0-9-]*)\.(.+)$/.exec(message.key);
+    return match
+      ? (adapterMessages?.(match[1]!, match[2]!, message.fallback) ??
+          resolveMessage(locale, message))
+      : resolveMessage(locale, message);
+  })(),
   ...(message.values ? { values: jsonValue(message.values) } : {}),
   ...(message.fallback ? { fallback: message.fallback } : {}),
 });
@@ -94,10 +107,11 @@ const messageData = (
 const fieldData = (
   field: HelpFieldDefinition,
   locale: Locale,
+  adapterMessages?: AdapterHelpMessageResolver,
 ): HelpFieldData => ({
   name: field.name,
   kind: field.kind,
-  summary: messageData(field.summary, locale),
+  summary: messageData(field.summary, locale, adapterMessages),
   ...(field.required ? { required: true } : {}),
   ...(field.position === undefined ? {} : { position: field.position }),
   ...(field.variadic ? { variadic: true } : {}),
@@ -111,16 +125,28 @@ const fieldData = (
   ...(field.choices ? { choices: [...field.choices] } : {}),
 });
 
-const childData = (child: HelpCommandEntry, locale: Locale): HelpChildData => ({
+const childData = (
+  child: HelpCommandEntry,
+  locale: Locale,
+  adapterMessages?: AdapterHelpMessageResolver,
+): HelpChildData => ({
   id: child.id,
   path: [...child.path],
   usage: child.usage,
-  summary: messageData(child.summary, locale),
+  summary: messageData(child.summary, locale, adapterMessages),
   ...(child.navigationSummary
-    ? { navigationSummary: messageData(child.navigationSummary, locale) }
+    ? {
+        navigationSummary: messageData(
+          child.navigationSummary,
+          locale,
+          adapterMessages,
+        ),
+      }
     : {}),
   availability: child.availability,
-  ...(child.group ? { group: messageData(child.group, locale) } : {}),
+  ...(child.group
+    ? { group: messageData(child.group, locale, adapterMessages) }
+    : {}),
   ...(child.groupId ? { groupId: child.groupId } : {}),
   ...(child.order === undefined ? {} : { order: child.order }),
 });
@@ -129,6 +155,7 @@ const childData = (child: HelpCommandEntry, locale: Locale): HelpChildData => ({
 export const projectHelpDocument = (
   document: HelpDocument,
   locale: Locale,
+  adapterMessages?: AdapterHelpMessageResolver,
 ): HelpData => ({
   schema: document.schema,
   version: document.version,
@@ -143,29 +170,45 @@ export const projectHelpDocument = (
     ? { interactionView: document.interactionView }
     : {}),
   usage: [...document.usage],
-  summary: messageData(document.summary, locale),
+  summary: messageData(document.summary, locale, adapterMessages),
   ...(document.description
-    ? { description: messageData(document.description, locale) }
+    ? {
+        description: messageData(document.description, locale, adapterMessages),
+      }
     : {}),
-  arguments: document.arguments.map((field) => fieldData(field, locale)),
-  options: document.options.map((field) => fieldData(field, locale)),
+  arguments: document.arguments.map((field) =>
+    fieldData(field, locale, adapterMessages),
+  ),
+  options: document.options.map((field) =>
+    fieldData(field, locale, adapterMessages),
+  ),
   globalOptions: document.globalOptions.map((field) =>
-    fieldData(field, locale),
+    fieldData(field, locale, adapterMessages),
   ),
   groups: document.groups.map((group) => ({
     id: group.id,
-    label: messageData(group.label, locale),
+    label: messageData(group.label, locale, adapterMessages),
     order: group.order,
     views: [...group.views],
   })),
-  children: document.children.map((child) => childData(child, locale)),
+  children: document.children.map((child) =>
+    childData(child, locale, adapterMessages),
+  ),
   examples: document.examples.map((example) => ({
     argv: [...example.argv],
     ...(example.description
-      ? { description: messageData(example.description, locale) }
+      ? {
+          description: messageData(
+            example.description,
+            locale,
+            adapterMessages,
+          ),
+        }
       : {}),
   })),
-  footer: document.footer.map((message) => messageData(message, locale)),
+  footer: document.footer.map((message) =>
+    messageData(message, locale, adapterMessages),
+  ),
   ...(document.output ? { output: jsonValue(document.output) } : {}),
   ...(document.safety ? { safety: jsonValue(document.safety) } : {}),
   errors: [...document.errors],

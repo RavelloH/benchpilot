@@ -19,6 +19,7 @@ export type DataFormatterId =
   | "fallback-unknown"
   | "enabled-adapters"
   | "duration-ms"
+  | "byte-size"
   | "approval-status"
   | "lock-liveness"
   | "lock-state"
@@ -34,6 +35,8 @@ export type DataFormatterId =
   | "role"
   | "system-result"
   | "doctor-status"
+  | "capability-status"
+  | "diagnostic-level"
   | "diagnostic-message"
   | "approval-command"
   | "approval-project"
@@ -79,6 +82,7 @@ export interface DetailBlockDefinition {
   readonly component: "Detail";
   readonly source: string;
   readonly title: MessageRef;
+  readonly empty?: MessageRef;
   readonly labelWidth: number;
   readonly omitWhenEmpty?: boolean;
   readonly rows: readonly DetailRowDefinition[];
@@ -88,6 +92,12 @@ export interface MessageBlockDefinition {
   readonly component: "Message";
   readonly field: string;
   readonly messages: Readonly<Record<string, MessageRef>>;
+  readonly tone: CellTone;
+}
+
+export interface StaticMessageBlockDefinition {
+  readonly component: "StaticMessage";
+  readonly message: MessageRef;
   readonly tone: CellTone;
 }
 
@@ -120,6 +130,14 @@ export interface ObjectTreeBlockDefinition {
   readonly rows: readonly DetailRowDefinition[];
 }
 
+export interface KeyValueTableBlockDefinition {
+  readonly component: "KeyValueTable";
+  readonly source: string;
+  readonly title: MessageRef;
+  readonly empty: MessageRef;
+  readonly keyLabels: Readonly<Record<string, MessageRef>>;
+}
+
 export interface GroupedTableBlockDefinition {
   readonly component: "GroupedTable";
   readonly source: string;
@@ -136,9 +154,11 @@ export type DataViewBlockDefinition =
   | TableBlockDefinition
   | DetailBlockDefinition
   | MessageBlockDefinition
+  | StaticMessageBlockDefinition
   | ListBlockDefinition
   | LogBlockDefinition
   | ObjectTreeBlockDefinition
+  | KeyValueTableBlockDefinition
   | GroupedTableBlockDefinition;
 
 export interface DataViewDefinition {
@@ -154,4 +174,5 @@ export interface FormattedCell {
 export interface DataViewRenderContext extends ScreenRenderContext {
   readonly data: JsonValue;
   readonly presentation?: JsonValue;
+  readonly adapter?: string;
 }

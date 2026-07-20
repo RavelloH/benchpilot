@@ -65,7 +65,7 @@ test("terminal surface replaces keyed TTY state and bounds non-TTY updates", () 
   tty.update("status", "ready");
   tty.append("log entry");
   assert.equal(ttyWrites[0], "one\n");
-  assert.match(ttyWrites.join(""), /\u001B\[1A\r\u001B\[Jtwo/);
+  assert.match(ttyWrites.join(""), /\u001B\[1A\r\u001B\[2Ktwo\u001B\[1B\r/);
   assert.match(ttyWrites.join(""), /\u001B\[2A\r\u001B\[Jlog entry/);
   tty.close();
   assert.throws(() => tty.update("progress", "closed"), /closed/);
@@ -88,4 +88,24 @@ test("terminal surface replaces keyed TTY state and bounds non-TTY updates", () 
   fallback.update("progress", "suppressed");
   fallback.update("progress", "final", { final: true });
   assert.deepEqual(fallbackWrites, ["one\n", "two\n", "final\n"]);
+});
+
+test("terminal surface patches only changed lines in a stable live region", () => {
+  const writes = [];
+  const surface = new StreamTerminalSurface(
+    { write: (value) => writes.push(value) },
+    {
+      stdinIsTTY: true,
+      stdoutIsTTY: true,
+      stderrIsTTY: true,
+      columns: 80,
+      color: false,
+      cursor: true,
+    },
+  );
+  surface.update("progress", "building\n  old step\n  unchanged");
+  writes.length = 0;
+  surface.update("progress", "building\n  new step\n  unchanged");
+  assert.deepEqual(writes, ["\u001B[2A\r\u001B[2K  new step\u001B[2B\r"]);
+  assert.doesNotMatch(writes.join(""), /\u001B\[J/);
 });

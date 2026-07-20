@@ -11,11 +11,11 @@ lifecycle, parsing, artifact registration, and output validation. Locks,
 approvals, Runs, cleanup, quarantine and JSON/JSONL terminal events remain
 owned by Core.
 
-The public static-command protocol is rendered by the CLI Output Engine as
-Result v3 or Event v3. Capability operations currently retain their legacy
-Device/System bridge while declarative output Views are migrated separately;
-adapter output is therefore validated as data, not treated as an independently
-formatted public terminal protocol.
+The public command protocol is rendered by the CLI Output Engine as Result v3
+or Event v3. Capability operations emit the same locale-neutral outcome for
+Screen, JSON, and JSONL. Compiled Adapter `views.toml` metadata can select a
+shared Screen component over validated output fields, but never creates a
+second result format or a custom terminal renderer.
 
 Production loading remains limited to the bundles shipped with the package;
 test fixtures are compiled and loaded only by the test harness.

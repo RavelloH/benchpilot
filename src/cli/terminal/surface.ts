@@ -60,8 +60,12 @@ export class StreamTerminalSurface implements TerminalSurface {
     this.assertOpen();
     const next = normalized(value);
     if (this.capabilities.cursor) {
-      this.eraseLiveRegion();
+      const previous = [...this.live.values()].join("\n");
+      if (this.live.get(key) === next) return;
       this.live.set(key, next);
+      const replacement = [...this.live.values()].join("\n");
+      if (this.patchLiveRegion(previous, replacement)) return;
+      this.eraseLiveRegion();
       this.drawLiveRegion();
       return;
     }
@@ -97,6 +101,31 @@ export class StreamTerminalSurface implements TerminalSurface {
     const content = [...this.live.values()].join("\n");
     this.output.write(`${content}\n`);
     this.liveLines = renderedLines(content, this.capabilities.columns);
+  }
+
+  /** Updates unchanged-height, unwrapped live regions without clearing them. */
+  private patchLiveRegion(previous: string, replacement: string) {
+    if (!this.liveLines || previous === replacement)
+      return previous === replacement;
+    const before = previous.split("\n");
+    const after = replacement.split("\n");
+    if (
+      before.length !== after.length ||
+      before.length !== this.liveLines ||
+      [...before, ...after].some(
+        (line) =>
+          displayWidth(stripTerminalText(line)) > this.capabilities.columns,
+      )
+    )
+      return false;
+    for (let index = 0; index < after.length; index += 1) {
+      if (before[index] === after[index]) continue;
+      const offset = this.liveLines - index;
+      this.output.write(
+        `\u001B[${offset}A\r\u001B[2K${after[index]}\u001B[${offset}B\r`,
+      );
+    }
+    return true;
   }
 
   private assertOpen() {

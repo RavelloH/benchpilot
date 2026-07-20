@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["schema", "schema_version", "capabilities"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": { "const": "benchpilot.adapter.views" },
+    "schema_version": { "const": 1 },
+    "capabilities": {
+      "type": "object",
+      "propertyNames": { "pattern": "^[a-z][a-z0-9-]*$" },
+      "additionalProperties": { "$ref": "#/$defs/view" }
+    }
+  },
+  "$defs": {
+    "message": {
+      "type": "object",
+      "required": ["key", "fallback"],
+      "additionalProperties": false,
+      "properties": {
+        "key": { "type": "string", "pattern": "^[a-z][a-z0-9_.-]*$" },
+        "fallback": { "type": "string", "minLength": 1 }
+      }
+    },
+    "field": {
+      "type": "object",
+      "required": ["selector", "label", "formatter"],
+      "additionalProperties": false,
+      "properties": {
+        "selector": {
+          "type": "string",
+          "pattern": "^[a-zA-Z][a-zA-Z0-9_]*(\\.[a-zA-Z][a-zA-Z0-9_]*)*$"
+        },
+        "label": { "$ref": "#/$defs/message" },
+        "formatter": {
+          "enum": [
+            "string",
+            "fallback-dash",
+            "duration-ms",
+            "byte-size",
+            "json-value",
+            "comma-list"
+          ]
+        }
+      }
+    },
+    "view": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["kind", "title", "fields"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "const": "detail" },
+            "title": { "$ref": "#/$defs/message" },
+            "empty": { "$ref": "#/$defs/message" },
+            "fields": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "$ref": "#/$defs/field" }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["kind", "title"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "const": "tree" },
+            "title": { "$ref": "#/$defs/message" },
+            "empty": { "$ref": "#/$defs/message" }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["kind", "title", "keys"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "const": "table" },
+            "title": { "$ref": "#/$defs/message" },
+            "empty": { "$ref": "#/$defs/message" },
+            "keys": {
+              "type": "object",
+              "propertyNames": { "pattern": "^[a-z][a-z0-9_]*$" },
+              "additionalProperties": { "$ref": "#/$defs/message" }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["kind", "message"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "const": "completion" },
+            "message": { "$ref": "#/$defs/message" }
+          }
+        }
+      ]
+    }
+  }
+}

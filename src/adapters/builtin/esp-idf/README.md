@@ -8,7 +8,7 @@ candidates only.
 
 `status`, `build`, `clean`, `fullclean`, `size`, `info`, `flash`, `reset`,
 `capture`, and `deploy` are available. `flash` and `deploy` require a human
-approval. `info`, `fullclean`, `reset`, and bounded `capture` require their
+approval. `status`, `info`, `fullclean`, `reset`, and bounded `capture` require their
 declared danger flags: opening a USB serial port may reset the target. Capture
 uses fixed Python code with independent argv values, always closes the port,
 and saves its bounded raw output as the `serial-capture.txt` run artifact.

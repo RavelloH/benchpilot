@@ -6,6 +6,7 @@ import {
   stable,
   type Json,
   type OperationRunner,
+  type OperationOutcome,
   type ResolvedConfig,
 } from "../../core.js";
 import type { DeviceUseCases } from "../devices/use-case.js";
@@ -17,6 +18,8 @@ export interface SystemMemberOutcome {
   ok: boolean;
   result?: Json;
   error?: { kind: string; message: string; details?: Json };
+  /** Final core lifecycle facts when the runner reached execution. */
+  outcome?: OperationOutcome;
 }
 
 export interface SystemOperationResult {
@@ -130,53 +133,22 @@ export class SystemUseCases {
       .capability;
   }
 
-  async execute(
+  /** Returns member lifecycle facts for the public CLI result projection. */
+  async executeDetailed(
     name: string,
     capability: string,
     capabilityInput?: Json,
     options?: { executionMode?: "interactive"; safetyConfirmed?: boolean },
   ) {
-    const devices = this.members(name);
-    this.dependencies.runner.emitSystemEvent("system.operation.started", {
+    return executeSystemCapability({
       system: name,
-      operation: capability,
+      capability,
+      devices: this.members(name),
+      runner: this.dependencies.runner,
+      capabilityInput,
+      executionMode: options?.executionMode,
+      safetyConfirmed: options?.safetyConfirmed,
     });
-    try {
-      const result = await executeSystemCapability({
-        system: name,
-        capability,
-        devices,
-        runner: this.dependencies.runner,
-        capabilityInput,
-        executionMode: options?.executionMode,
-        safetyConfirmed: options?.safetyConfirmed,
-      });
-      if (result.results.some((item) => !item.ok))
-        throw Object.assign(
-          new BenchPilotError(
-            "SYSTEM_OPERATION_FAILED",
-            5,
-            `System operation failed: ${name}`,
-            false,
-            undefined,
-            [],
-            { result },
-          ),
-          { result },
-        );
-      this.dependencies.runner.emitSystemEvent("system.operation.completed", {
-        result,
-      });
-      return result as unknown as Json;
-    } catch (error) {
-      const operationTerminalReported =
-        this.dependencies.runner.emitSystemEvent("system.operation.failed", {
-          error: (error as { result?: Json }).result ?? {
-            message: (error as Error).message,
-          },
-        });
-      throw Object.assign(error as Error, { operationTerminalReported });
-    }
   }
 }
 
@@ -287,23 +259,43 @@ export async function executeSystemCapability(input: {
   const policy =
     input.policy ??
     (input.capability === "status" ? "parallel" : "serial-fail-fast");
-  const execute = (device: string) =>
-    input.runner.execute(
-      device,
-      input.capability,
-      structuredClone(input.capabilityInput ?? {}),
-      {
-        eventScope: "child",
-        eventContext: { system: input.system, device },
-        executionMode: input.executionMode,
-        safetyConfirmed: input.safetyConfirmed,
-      },
-    );
+  const execute = async (device: string) => {
+    let outcome: OperationOutcome | undefined;
+    try {
+      const result = await input.runner.execute(
+        device,
+        input.capability,
+        structuredClone(input.capabilityInput ?? {}),
+        {
+          eventScope: "child",
+          eventContext: { system: input.system, device },
+          executionMode: input.executionMode,
+          safetyConfirmed: input.safetyConfirmed,
+          onOutcome: (value) => {
+            outcome = value;
+          },
+        },
+      );
+      return { result, outcome };
+    } catch (error) {
+      const failed = (error as { outcome?: OperationOutcome }).outcome;
+      if (!failed) throw error;
+      return {
+        result: (error as { result?: Json }).result ?? failed.result,
+        outcome: failed,
+      };
+    }
+  };
   if (policy === "parallel") {
     const settled = await Promise.allSettled(input.devices.map(execute));
     const results = settled.map((entry, index): SystemMemberOutcome =>
       entry.status === "fulfilled"
-        ? { device: input.devices[index]!, ok: true, result: entry.value }
+        ? {
+            device: input.devices[index]!,
+            ok: !entry.value.outcome?.primaryError,
+            result: entry.value.result,
+            ...(entry.value.outcome ? { outcome: entry.value.outcome } : {}),
+          }
         : {
             device: input.devices[index]!,
             ok: false,
@@ -329,7 +321,14 @@ export async function executeSystemCapability(input: {
   const results: SystemMemberOutcome[] = [];
   for (const device of [...input.devices].sort()) {
     try {
-      results.push({ device, ok: true, result: await execute(device) });
+      const member = await execute(device);
+      results.push({
+        device,
+        ok: !member.outcome?.primaryError,
+        result: member.result,
+        ...(member.outcome ? { outcome: member.outcome } : {}),
+      });
+      if (member.outcome?.primaryError) break;
     } catch (error) {
       results.push({
         device,

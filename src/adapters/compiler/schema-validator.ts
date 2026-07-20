@@ -8,6 +8,7 @@ import { diagnostic } from "./diagnostics.js";
 const schemaFor: Record<string, string> = {
   "manifest.toml": "manifest",
   "capabilities.toml": "capabilities",
+  "views.toml": "views",
   "tools.toml": "tools",
   "tool-discovery.toml": "tool-discovery",
   "environments.toml": "environments",

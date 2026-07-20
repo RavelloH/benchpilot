@@ -3,6 +3,7 @@ import test from "node:test";
 import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 import {
+  capabilityOutcomeSchema,
   CliEventEncoder,
   OutputFrameSequenceError,
   cliEventV3Schema,
@@ -22,6 +23,28 @@ const result = {
   kind: "operation",
   data: { schema: "benchpilot.device-status", version: 1, ready: true },
   meta: { startedAt, endedAt, durationMs: 1000, runId: "run-1" },
+};
+
+const capabilityOutcome = {
+  schema: "benchpilot.capability-outcome",
+  version: 1,
+  subject: {
+    scope: "device",
+    adapter: "fixture",
+    capability: "status",
+    device: { instance: "demo", physicalId: "fixture-01" },
+  },
+  execution: {
+    status: "succeeded",
+    startedAt,
+    endedAt,
+    durationMs: 1000,
+    runId: "run-1",
+    dryRun: false,
+  },
+  output: { ready: true },
+  artifacts: [],
+  diagnostics: [],
 };
 
 test("v3 result and event schemas compile and accept a terminal stream", () => {
@@ -61,6 +84,35 @@ test("v3 result and event schemas compile and accept a terminal stream", () => {
       JSON.stringify(validateEvent.errors),
     );
   assert.deepEqual(events.at(-1).event.result, result);
+});
+
+test("capability outcomes enforce a locale-neutral public object shape", () => {
+  const ajv = new Ajv2020({ strict: true, allErrors: true });
+  addFormats(ajv);
+  const validate = ajv.compile(capabilityOutcomeSchema);
+  assert.equal(
+    validate(capabilityOutcome),
+    true,
+    JSON.stringify(validate.errors),
+  );
+  assert.equal(
+    validate({
+      ...capabilityOutcome,
+      subject: { ...capabilityOutcome.subject, system: { instance: "all" } },
+    }),
+    false,
+    "a device outcome may not also declare a system subject",
+  );
+  assert.equal(
+    validate({
+      ...capabilityOutcome,
+      diagnostics: [
+        { level: "error", message: { key: "error.reason.usageError" } },
+      ],
+    }),
+    true,
+    JSON.stringify(validate.errors),
+  );
 });
 
 test("output frames reduce keyed replacement, append, progress, and notices", () => {

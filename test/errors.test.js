@@ -7,7 +7,7 @@ import {
   coreErrorCatalog,
   coreErrorDefinition,
 } from "../dist/core/errors/catalog.js";
-import { humanErrorMessage } from "../dist/cli/output-renderer.js";
+import { humanErrorMessage } from "../dist/cli/output/failure.js";
 import { isMessageKey } from "../dist/i18n/index.js";
 
 const sourceRoot = join(process.cwd(), "src");

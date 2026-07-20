@@ -736,15 +736,27 @@ test("a normal operation recovers and reuses a stale approval claim", async () =
       project: { root, config: path.join(root, "benchpilot.toml") },
       config,
     });
+    let observedOutcome;
     const result = await runner.execute(
       "device",
       "burn",
       {},
       {
         safetyConfirmed: true,
+        onOutcome: (outcome) => {
+          observedOutcome = outcome;
+        },
       },
     );
-    assert.equal(result.ok, true);
+    assert.equal(result.status, "succeeded");
+    assert.deepEqual(observedOutcome.subject, {
+      adapter: "approval-recovery",
+      capability: "burn",
+      device: { instance: "device", physicalId: "approval-recovery-device" },
+    });
+    assert.equal(observedOutcome.execution.status, "succeeded");
+    assert.equal(observedOutcome.execution.dryRun, false);
+    assert.equal(observedOutcome.execution.runId, undefined);
     assert.equal((await approvals.list()).length, 1);
     assert.equal((await approvals.get(request.id)).status, "consumed");
   } finally {
@@ -985,6 +997,68 @@ test("output schema failures are classified as INVALID_CAPABILITY_OUTPUT", async
       {},
     );
     assert.deepEqual(unregistered.artifacts, []);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("operation outcomes redact Adapter output before projection", async () => {
+  const root = await mkdtemp(
+    path.join(os.tmpdir(), "benchpilot-output-redaction-"),
+  );
+  try {
+    const paths = new PathService(
+      { TEMP: path.join(root, "runtime") },
+      "win32",
+    );
+    const registry = new AdapterRegistry();
+    registry.register({
+      id: "output-redaction",
+      apiVersion: 1,
+      version: "1",
+      summary: "output redaction test",
+      configSchema: objectSchema(),
+      discover: async () => [],
+      doctor: async () => [],
+      createDevice: async (instance) => ({
+        identity: {
+          instance,
+          physicalId: "redacted",
+          adapter: "output-redaction",
+        },
+        capabilities: () => [
+          {
+            id: "inspect",
+            summary: "inspect",
+            defaultTimeoutMs: 1_000,
+            lockMode: "none",
+            createsRun: false,
+            safety: { mode: "normal" },
+            redactOutput: (output) => ({ ...output, token: "[REDACTED]" }),
+            execute: async () => ({ token: "secret", state: "ready" }),
+          },
+        ],
+      }),
+    });
+    let observed;
+    const result = await new OperationRunner({
+      businessLogs: recordingBusinessLogs,
+      paths,
+      registry,
+      project: { root, config: path.join(root, "benchpilot.toml") },
+      config: {
+        value: { devices: { device: { adapter: "output-redaction" } } },
+        origins: new Map(),
+        layers: [],
+      },
+    }).execute(
+      "device",
+      "inspect",
+      {},
+      { onOutcome: (outcome) => (observed = outcome) },
+    );
+    assert.deepEqual(result.output, { token: "[REDACTED]", state: "ready" });
+    assert.deepEqual(observed.output, { token: "[REDACTED]", state: "ready" });
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -1539,8 +1613,8 @@ test("critical cleanup failure quarantines its lock and finalizes a failed run",
     );
     await locks.clear(lock.lockId, { dangerousQuarantined: true });
     assert.equal((await locks.list()).length, 0);
-    assert.equal(error.result.ok, false);
-    assert.deepEqual(error.result.cleanupErrors, [
+    assert.equal(error.result.status, "failed");
+    assert.deepEqual(error.result.lifecycle.cleanupErrors, [
       {
         name: "failing-cleanup",
         critical: true,
@@ -1717,8 +1791,8 @@ test("non-physical cleanup failures preserve warning and release the lock", asyn
       critical: false,
       holdsPhysicalResource: false,
     });
-    assert.equal(warning.outcome.ok, true);
-    assert.equal(warning.outcome.cleanupErrors[0].critical, false);
+    assert.equal(warning.outcome.status, "succeeded");
+    assert.equal(warning.outcome.lifecycle.cleanupErrors[0].critical, false);
     assert.equal(warning.locks.length, 0);
     const critical = await runCleanupFailureScenario(root, {
       critical: true,

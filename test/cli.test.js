@@ -784,7 +784,8 @@ test("agent cannot use an incomplete nested command as an interactive probe", as
       (failure) => failure,
     );
     const result = JSON.parse(error.stdout);
-    assert.equal(result.kind, "AGENT_INTERACTION_UNSUPPORTED");
+    assert.equal(result.kind, "interaction");
+    assert.equal(result.error.kind, "AGENT_INTERACTION_UNSUPPORTED");
     assert.equal(error.stderr, "");
   } finally {
     await rm(dir, { recursive: true, force: true });
@@ -918,10 +919,10 @@ test("installed CLI surface initializes and runs the demo", async () => {
     const deployed = await run(dir, "device", "demo", "deploy", "--json");
     const result = JSON.parse(deployed.stdout);
     assert.equal(result.ok, true);
-    assert.ok(result.runId);
+    assert.ok(result.meta.runId);
     const built = await run(dir, "device", "demo", "build", "--json");
     assert.match(
-      JSON.parse(built.stdout).artifacts[0].sha256,
+      JSON.parse(built.stdout).data.artifacts[0].sha256,
       /^[a-f0-9]{64}$/,
     );
     const jsonl = await run(dir, "device", "demo", "deploy", "--jsonl");
@@ -931,17 +932,19 @@ test("installed CLI surface initializes and runs the demo", async () => {
       .map((line) => JSON.parse(line));
     assert.ok(
       events.every(
-        (event) => event.schema === "benchpilot.event" && event.version === 2,
+        (event) => event.schema === "benchpilot.event" && event.version === 3,
       ),
     );
-    assert.equal(events.at(-1).event.type, "operation.completed");
+    assert.equal(events.at(-1).event.type, "command.completed");
     assert.equal(
       events.filter((event) =>
-        /operation\.(completed|failed)/.test(event.event.type),
+        /command\.(completed|failed)/.test(event.event.type),
       ).length,
       1,
     );
-    assert.ok(events.some((event) => event.event.type === "stage.started"));
+    assert.ok(
+      events.some((event) => event.event.type === "operation.stage.started"),
+    );
     const commandJsonl = await run(dir, "config", "validate", "--jsonl");
     const commandEvents = commandJsonl.stdout
       .trim()
@@ -1086,12 +1089,12 @@ test("declarative demo executes build, deploy, and capture", async () => {
       (await run(dir, "device", "demo", "build", "--json")).stdout,
     );
     assert.equal(built.ok, true);
-    assert.equal(built.data.kind, "build");
-    assert.match(built.artifacts[0].sha256, /^[a-f0-9]{64}$/);
+    assert.equal(built.data.subject.capability, "build");
+    assert.match(built.data.artifacts[0].sha256, /^[a-f0-9]{64}$/);
     const deployed = JSON.parse(
       (await run(dir, "device", "demo", "deploy", "--json")).stdout,
     );
-    assert.deepEqual(Object.keys(deployed.data), ["build", "flash", "reset"]);
+    assert.equal(deployed.data.subject.capability, "deploy");
     assert.deepEqual(
       JSON.parse((await run(dir, "approval", "list", "--json")).stdout).data
         .approvals,
@@ -1103,14 +1106,14 @@ test("declarative demo executes build, deploy, and capture", async () => {
       .trim()
       .split("\n")
       .map((line) => JSON.parse(line));
-    assert.equal(lines.at(-1).event.type, "operation.completed");
+    assert.equal(lines.at(-1).event.type, "command.completed");
     assert.equal(
       lines.filter((line) =>
-        /operation\.(completed|failed)/.test(line.event.type),
+        /command\.(completed|failed)/.test(line.event.type),
       ).length,
       1,
     );
-    assert.equal(lines.at(-1).data.result.data.telemetry, 42);
+    assert.equal(lines.at(-1).event.result.data.output.telemetry, 42);
     const runList = JSON.parse(
       (await run(dir, "run", "list", "--json")).stdout,
     );
@@ -1134,7 +1137,7 @@ test("declarative demo executes build, deploy, and capture", async () => {
       (await run(dir, "device", "demo", "inspect", "--json")).stdout,
     );
     assert.equal(inspection.ok, true);
-    assert.equal(inspection.data.kind, "info");
+    assert.equal(inspection.data.subject.capability, "inspect");
     const secretInspection = JSON.parse(
       (
         await run(
@@ -1179,7 +1182,8 @@ test("declarative demo executes build, deploy, and capture", async () => {
         )
       ).stdout,
     );
-    assert.equal(dangerous.dangerousEffectStarted, true);
+    assert.equal(dangerous.ok, true);
+    assert.equal(dangerous.data.subject.capability, "dangerous-reset");
     const doctor = JSON.parse(
       (await run(dir, "adapter", "demo", "doctor", "--json")).stdout,
     );
@@ -1305,7 +1309,7 @@ test("jsonl streams operation events before a delayed operation finishes", async
       });
       child.once("error", reject);
     });
-    assert.match(firstOutput, /operation\.started/);
+    assert.match(firstOutput, /command\.started/);
     assert.equal(exited, false);
     await new Promise((resolve, reject) => {
       child.once("close", (code) => (code === 0 ? resolve() : reject(code)));
@@ -1344,13 +1348,21 @@ test("jsonl emits one failed terminal event after cleanup", async () => {
       .trim()
       .split("\n")
       .map((line) => JSON.parse(line));
-    assert.ok(events.some((event) => event.event.type === "stage.failed"));
-    assert.ok(events.some((event) => event.event.type === "cleanup.started"));
-    assert.ok(events.some((event) => event.event.type === "cleanup.completed"));
-    assert.equal(events.at(-1).event.type, "operation.failed");
+    assert.ok(
+      events.some((event) => event.event.type === "operation.stage.failed"),
+    );
+    assert.ok(
+      events.some((event) => event.event.type === "operation.cleanup.started"),
+    );
+    assert.ok(
+      events.some(
+        (event) => event.event.type === "operation.cleanup.completed",
+      ),
+    );
+    assert.equal(events.at(-1).event.type, "command.failed");
     assert.equal(
       events.filter((event) =>
-        /operation\.(completed|failed)/.test(event.event.type),
+        /command\.(completed|failed)/.test(event.event.type),
       ).length,
       1,
     );
@@ -1400,7 +1412,7 @@ test("declarative demo aborts an action when the operation times out", async () 
   }
 });
 
-test("system JSONL emits child device events and one system terminal event", async () => {
+test("system JSONL emits child device events and one canonical terminal result", async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "benchpilot-system-jsonl-"));
   try {
     await writeFile(
@@ -1424,20 +1436,18 @@ test("system JSONL emits child device events and one system terminal event", asy
       .trim()
       .split("\n")
       .map((line) => JSON.parse(line));
+    assert.equal(events[0].event.type, "command.started");
+    assert.equal(events.at(-1).event.type, "command.completed");
     assert.equal(
-      events.filter(
-        (event) => event.event.type === "system.operation.completed",
-      ).length,
+      events.filter((event) => event.event.type === "command.completed").length,
       1,
     );
-    assert.equal(
-      events.filter((event) => event.event.type === "command.result").length,
-      0,
-    );
+    assert.equal(events.at(-1).event.result.kind, "operation");
+    assert.equal(events.at(-1).event.result.data.subject.scope, "system");
     assert.ok(
       events.some(
         (event) =>
-          event.event.type === "device.operation.completed" &&
+          event.event.type === "operation.device.completed" &&
           event.context.system === "test" &&
           event.context.device === "left",
       ),
@@ -1485,15 +1495,16 @@ test("a failed system status waits for every child before its terminal event", a
       .trim()
       .split("\n")
       .map((line) => JSON.parse(line));
-    assert.equal(events.at(-1).event.type, "system.operation.failed");
+    assert.equal(events.at(-1).event.type, "command.failed");
     assert.equal(
-      events.filter((event) => event.event.type === "system.operation.failed")
-        .length,
+      events.filter((event) => event.event.type === "command.failed").length,
       1,
     );
+    assert.equal(events.at(-1).event.result.kind, "operation");
+    assert.equal(events.at(-1).event.result.data.execution.status, "failed");
     const slowCompleted = events.findIndex(
       (event) =>
-        event.event.type === "device.operation.completed" &&
+        event.event.type === "operation.device.completed" &&
         event.context.device === "slow",
     );
     assert.ok(slowCompleted >= 0);
@@ -1527,7 +1538,7 @@ test("injected adapter executes through the dynamic CLI route", async () => {
         encoding: "utf8",
       },
     );
-    assert.equal(JSON.parse(result.stdout).data.echoed, "ok");
+    assert.equal(JSON.parse(result.stdout).data.output.echoed, "ok");
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -1540,7 +1551,7 @@ test("dry-run creates no run, lock, approval, or artifact state", async () => {
     const plan = JSON.parse(
       (await run(dir, "device", "demo", "build", "--dry-run", "--json")).stdout,
     );
-    assert.equal(plan.dryRun, true);
+    assert.equal(plan.data.execution.dryRun, true);
     const dryRunEvents = (
       await run(dir, "device", "demo", "build", "--dry-run", "--jsonl")
     ).stdout
@@ -1549,9 +1560,11 @@ test("dry-run creates no run, lock, approval, or artifact state", async () => {
       .map((line) => JSON.parse(line));
     assert.deepEqual(
       dryRunEvents.map((event) => event.event.type),
-      ["command.result"],
+      ["command.started", "command.completed"],
     );
-    assert.deepEqual(dryRunEvents[0].data.result, plan);
+    assert.equal(dryRunEvents.at(-1).event.result.ok, true);
+    assert.equal(dryRunEvents.at(-1).event.result.kind, "operation");
+    assert.equal(dryRunEvents.at(-1).event.result.data.execution.dryRun, true);
     assert.deepEqual(
       JSON.parse((await run(dir, "run", "list", "--json")).stdout).data.runs,
       [],

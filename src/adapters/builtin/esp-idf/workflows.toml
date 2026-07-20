@@ -2,20 +2,27 @@ schema = "benchpilot.adapter.workflows"
 schema_version = 1
 
 [workflows.status]
-timeout = "30s"
+timeout = "2m"
 stop_on_failure = true
 [[workflows.status.steps]]
-id = "project"
-uses = "action:status"
+id = "detect"
+uses = "action:detect-esptool"
+label = { key = "progress.status.detect", fallback = "Detect esptool" }
 with = {}
 [[workflows.status.steps]]
-id = "python"
-uses = "action:python-version"
+id = "flash-v5"
+uses = "action:flash-id-v5"
+progress_id = "device"
+label = { key = "progress.status.device", fallback = "Read device status" }
 with = {}
+when = { path = "tool.esptool.probe.major", operator = "equals", value = 5 }
 [[workflows.status.steps]]
-id = "idf"
-uses = "action:idf-version"
+id = "flash-v4"
+uses = "action:flash-id-v4"
+progress_id = "device"
+label = { key = "progress.status.device", fallback = "Read device status" }
 with = {}
+when = { path = "tool.esptool.probe.major", operator = "equals", value = 4 }
 
 [workflows.info]
 timeout = "2m"
@@ -23,48 +30,74 @@ stop_on_failure = true
 [[workflows.info.steps]]
 id = "detect"
 uses = "action:detect-esptool"
+label = { key = "progress.info.detect", fallback = "Detect esptool" }
 with = {}
 [[workflows.info.steps]]
 id = "chip-v5"
 uses = "action:chip-id-v5"
+progress_id = "chip"
+label = { key = "progress.info.chip", fallback = "Read chip identity" }
 with = {}
 when = { path = "tool.esptool.probe.major", operator = "equals", value = 5 }
 [[workflows.info.steps]]
 id = "chip-v4"
 uses = "action:chip-id-v4"
+progress_id = "chip"
+label = { key = "progress.info.chip", fallback = "Read chip identity" }
 with = {}
 when = { path = "tool.esptool.probe.major", operator = "equals", value = 4 }
 [[workflows.info.steps]]
 id = "mac-v5"
 uses = "action:read-mac-v5"
+progress_id = "mac"
+label = { key = "progress.info.mac", fallback = "Read device MAC address" }
 with = {}
 when = { path = "tool.esptool.probe.major", operator = "equals", value = 5 }
 [[workflows.info.steps]]
 id = "mac-v4"
 uses = "action:read-mac-v4"
+progress_id = "mac"
+label = { key = "progress.info.mac", fallback = "Read device MAC address" }
 with = {}
 when = { path = "tool.esptool.probe.major", operator = "equals", value = 4 }
 [[workflows.info.steps]]
 id = "flash-v5"
 uses = "action:flash-id-v5"
+progress_id = "flash"
+label = { key = "progress.info.flash", fallback = "Read flash identity" }
 with = {}
 when = { path = "tool.esptool.probe.major", operator = "equals", value = 5 }
 [[workflows.info.steps]]
 id = "flash-v4"
 uses = "action:flash-id-v4"
+progress_id = "flash"
+label = { key = "progress.info.flash", fallback = "Read flash identity" }
 with = {}
 when = { path = "tool.esptool.probe.major", operator = "equals", value = 4 }
 
 [workflows.build]
 timeout = "30m"
 stop_on_failure = true
+output = "metadata"
 [[workflows.build.steps]]
 id = "build"
 uses = "action:build"
+label = { key = "progress.build.compile", fallback = "Build project" }
 with = {}
 [[workflows.build.steps]]
 id = "metadata"
 uses = "action:build-metadata"
+label = { key = "progress.build.metadata", fallback = "Read build metadata" }
+with = {}
+
+[workflows.size]
+timeout = "5m"
+stop_on_failure = true
+output = "size"
+[[workflows.size.steps]]
+id = "size"
+uses = "action:size"
+label = { key = "progress.size.read", fallback = "Read firmware size" }
 with = {}
 
 [workflows.deploy]
@@ -73,10 +106,12 @@ stop_on_failure = true
 [[workflows.deploy.steps]]
 id = "build"
 uses = "action:build"
+label = { key = "progress.deploy.compile", fallback = "Build project" }
 with = {}
 [[workflows.deploy.steps]]
 id = "flash"
 uses = "action:flash"
+label = { key = "progress.deploy.flash", fallback = "Flash device" }
 with = {}
 
 [workflows.reset]
@@ -85,14 +120,19 @@ stop_on_failure = true
 [[workflows.reset.steps]]
 id = "detect"
 uses = "action:detect-esptool"
+label = { key = "progress.reset.detect", fallback = "Detect esptool" }
 with = {}
 [[workflows.reset.steps]]
 id = "reset-v5"
 uses = "action:reset-v5"
+progress_id = "reset"
+label = { key = "progress.reset.device", fallback = "Reset device" }
 with = {}
 when = { path = "tool.esptool.probe.major", operator = "equals", value = 5 }
 [[workflows.reset.steps]]
 id = "reset-v4"
 uses = "action:reset-v4"
+progress_id = "reset"
+label = { key = "progress.reset.device", fallback = "Reset device" }
 with = {}
 when = { path = "tool.esptool.probe.major", operator = "equals", value = 4 }

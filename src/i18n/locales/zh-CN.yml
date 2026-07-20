@@ -621,3 +621,34 @@ upgradeResult:
   status:
     available: "可更新"
     current: "已是最新"
+capabilityResult:
+  execution:
+    title: "执行"
+  output:
+    title: "输出"
+    empty: "没有结构化输出。"
+  artifacts:
+    title: "产物"
+    empty: "没有产物。"
+  diagnostics:
+    title: "诊断"
+    empty: "没有诊断。"
+    recovery: "建议："
+    level:
+      info: "信息"
+      warning: "警告"
+      error: "错误"
+  members:
+    title: "成员"
+    empty: "没有成员结果。"
+  status: "状态"
+  key: "键"
+  name: "名称"
+  run: "运行记录"
+  duration: "耗时"
+  value: "值"
+operationProgress:
+  preparing: "准备中"
+  running: "正在运行"
+  cleaning: "正在清理"
+  completing: "正在完成"

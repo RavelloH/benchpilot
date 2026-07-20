@@ -15,6 +15,7 @@ import type {
   BusinessLogFactory,
   OperationLogger,
 } from "../reporting/business-log.js";
+import type { OperationOutcome } from "./operation-outcome.js";
 
 export interface OperationContext {
   signal: AbortSignal;
@@ -75,4 +76,6 @@ export interface OperationExecutionOptions {
   safetyConfirmed?: boolean;
   /** The CLI completed human safety and approval confirmation before execution. */
   executionMode?: "interactive";
+  /** Receives locale-neutral lifecycle facts after cleanup and Run finalization. */
+  onOutcome?(outcome: OperationOutcome): void;
 }

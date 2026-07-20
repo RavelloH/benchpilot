@@ -1,1 +1,5 @@
-export { parseOutput, type ParserResult } from "../../contract/rules.js";
+export {
+  parseOutput,
+  shouldEmitProgress,
+  type ParserResult,
+} from "../../contract/rules.js";

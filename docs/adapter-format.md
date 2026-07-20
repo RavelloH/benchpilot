@@ -14,10 +14,17 @@ identifiers are lowercase kebab-case. Rules cannot contain shell command
 strings or JavaScript expressions.
 
 The compiler loads catalog files into the Bundle and runtime translation falls
-back to `en` when the requested locale is absent. Full catalog parity, typed
-adapter MessageRefs, and declarative `views.toml` output definitions belong to
-the deferred Device/System Capability-output migration and are not part of
-Format v1 today.
+back to `en` when the requested locale is absent. Any Adapter that supplies a
+message catalog must supply `i18n/en.toml`; every additional locale must have
+the same leaf keys. `views.toml` is part of
+Format v1: it may provide a screen-only `detail` View with selectors into a
+Capability output schema, or a `tree` View for a secret-free output object.
+Every title and label has an Adapter message key plus an English fallback.
+Views cannot include code, ANSI text, arbitrary formatters, or selectors for
+unknown or secret schema fields. JSON Result v3 and JSONL Event v3 never
+contain View metadata or localized labels.
+View message keys are also checked against each Adapter catalog by the
+compiler.
 
 `adapter:validate` writes diagnostics as JSON to stdout and exits non-zero for
 errors. `adapter:compile` emits deterministic Bundle v2 files under

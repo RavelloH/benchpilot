@@ -8,7 +8,10 @@ import {
   Json,
   requiresApproval,
 } from "../core.js";
-import { LegacyEventReporter } from "./output/legacy-event-reporter.js";
+import { DeferredOperationReporter } from "./output/deferred-operation-reporter.js";
+import { ScreenOperationReporter } from "./output/screen-operation-reporter.js";
+import { capabilityResultFromSystem } from "./output/capability-result.js";
+import { renderCapabilityResult } from "./output/capability-renderer.js";
 import { loadBuiltinAdapters } from "../adapters/runtime/builtin-adapters.js";
 import { openApplicationRequest } from "../application/request-scope.js";
 import { readGlobalLocale } from "../application/config/locale.js";
@@ -20,9 +23,12 @@ import {
   commandOptionFlags,
   optionEnabled,
 } from "./option-parser.js";
-import { humanErrorMessage } from "./output-renderer.js";
 import { renderDataPage } from "./output/data-page-renderer.js";
-import { commandFailureResult, renderFailure } from "./output/failure.js";
+import {
+  commandFailureResult,
+  humanErrorMessage,
+  renderFailure,
+} from "./output/failure.js";
 import { detectAgent } from "./agent/detector.js";
 import { interactionDecision } from "./interaction/policy.js";
 import {
@@ -84,7 +90,6 @@ import {
   deviceScanDataPage,
   systemDetailDataPage,
   systemListDataPage,
-  systemOperationDataPage,
 } from "./data/resource.js";
 import {
   configExplainDataPage,
@@ -202,6 +207,16 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
     );
     terminal = terminalSurface;
     const agent = detectAgent();
+    const screenOperationReporter =
+      !flags.json && !flags.jsonl && !flags.agent && !agent && stdout.isTTY
+        ? new ScreenOperationReporter(
+            terminalSurface,
+            undefined,
+            undefined,
+            undefined,
+            terminalTheme(colorEnabled(flags, stdout.isTTY)),
+          )
+        : undefined;
     const showWordmark = shouldShowWordmark(stdout.isTTY);
     const interactive = (locale: Locale, helpPath: string[]) => {
       const decision = interactionDecision({
@@ -310,6 +325,8 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
         },
       );
       let document;
+      let adapterHelpMessages:
+        import("./help/projector.js").AdapterHelpMessageResolver | undefined;
       try {
         document = await staticHelp.document(target, {
           includeDynamicValues: includeAll,
@@ -329,6 +346,10 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
           document = await helpScope.commandGraph.help.document(target, {
             includeDynamicValues: includeAll,
           });
+          adapterHelpMessages = (adapter, key, fallback) =>
+            helpScope.application.registry
+              .get(adapter)
+              .translate?.(locale, key) ?? fallback;
         } catch (dynamicError) {
           if (dynamicError instanceof CommandResolutionError)
             throw new BenchPilotError(
@@ -345,7 +366,10 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
           throw dynamicError;
         }
       }
-      return { data: projectHelpDocument(document, locale), locale };
+      return {
+        data: projectHelpDocument(document, locale, adapterHelpMessages),
+        locale,
+      };
     };
     const renderDefinitionHelp = async (
       target: readonly string[],
@@ -465,6 +489,10 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
     )
       return;
     const declared = adapters ?? (await loadBuiltinAdapters());
+    const operationReporter =
+      flags.jsonl && (parts[0] === "device" || parts[0] === "system")
+        ? new DeferredOperationReporter(stdout)
+        : undefined;
     const scope = await openApplicationRequest({
       cwd: process.cwd(),
       configPath: flags.config as string | undefined,
@@ -476,7 +504,7 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
       },
       adapters: declared,
       nodeVersion: process.versions.node,
-      reporter: flags.jsonl ? new LegacyEventReporter(stdout) : undefined,
+      reporter: operationReporter ?? screenOperationReporter,
       businessLogs: new RLogBusinessLogFactory(),
     });
     const {
@@ -596,6 +624,17 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
       ?.locale;
     const locale = isLocale(configuredLocale) ? configuredLocale : "en";
     presentationLocale = locale;
+    screenOperationReporter?.configure(
+      {
+        preparing: t(locale, "operationProgress.preparing"),
+        running: t(locale, "operationProgress.running"),
+        cleaning: t(locale, "operationProgress.cleaning"),
+        completing: t(locale, "operationProgress.completing"),
+      },
+      (adapterId, key, fallback) =>
+        application.registry.get(adapterId).translate?.(locale, key) ??
+        fallback,
+    );
     const canConfirmOperationInteractively =
       !flags.agent &&
       !agent &&
@@ -1496,6 +1535,11 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
                 requiresApproval(approvalLevel(config.value), mode),
             }
           : {}),
+        ...(operationReporter ? { reporter: operationReporter } : {}),
+        output: stdout,
+        locale,
+        color: colorEnabled(flags, stdout.isTTY),
+        columns: stdout.columns ?? 80,
       })
     )
       return;
@@ -1677,23 +1721,33 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
         )
           return;
       }
-      const result = await systems.execute(parts[1], parts[2], input, {
+      const command = {
+        id: "system.execute",
+        path: parts.slice(0, 3),
+      };
+      operationReporter?.configure(command);
+      const outcome = await systems.executeDetailed(parts[1], parts[2], input, {
         ...(canConfirmOperationInteractively &&
         definition.safety.mode !== "normal"
           ? { executionMode: "interactive" as const }
           : {}),
         safetyConfirmed,
       });
-      if (!flags.jsonl)
-        renderDataPage({
-          command: { id: "system.execute", path: parts.slice(0, 3) },
-          page: systemOperationDataPage(
-            result as Parameters<typeof systemOperationDataPage>[0],
-          ),
-          flags,
-          locale,
-          color: colorEnabled(flags, stdout.isTTY),
-        });
+      const result = capabilityResultFromSystem({ command, result: outcome });
+      renderCapabilityResult({
+        result,
+        flags,
+        output: stdout,
+        reporter: operationReporter,
+        locale,
+        color: colorEnabled(flags, stdout.isTTY),
+        columns: stdout.columns ?? 80,
+      });
+      screenOperationReporter?.complete();
+      if (!result.ok)
+        process.exitCode =
+          outcome.results.find((member) => member.outcome?.primaryError)
+            ?.outcome?.primaryError?.exitCode ?? 5;
       return;
     }
     if (
@@ -1761,32 +1815,18 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
           ? e
           : new BenchPilotError("INTERNAL_ERROR", 8, (e as Error).message);
     const flags = replay?.flags || {};
-    const legacyOperation = ["device", "system"].includes(invokedPath[0] || "");
     const command = {
       id:
         resolvedCommandId ??
         (invokedPath.length ? invokedPath.join(".") : "root"),
       path: [...invokedPath],
     };
-    const result = legacyOperation
-      ? (err as BenchPilotError & { result?: Json }).result || {
-          schema: "benchpilot.result",
-          version: 2,
-          ok: false,
-          kind: err.kind,
-          diagnosticId: err.diagnosticId,
-          message: err.message,
-          retryable: err.retryable,
-          stage: err.stage,
-          recovery: err.recovery,
-          details: err.details,
-        }
-      : commandFailureResult({
-          command,
-          error: err,
-          kind: isInteractionFailure(err.kind) ? "interaction" : "data",
-          startedAt: commandStartedAt,
-        });
+    const result = commandFailureResult({
+      command,
+      error: err,
+      kind: isInteractionFailure(err.kind) ? "interaction" : "data",
+      startedAt: commandStartedAt,
+    });
     const needsHelp = [
       "AGENT_INTERACTION_UNSUPPORTED",
       "INTERACTIVE_MACHINE_OUTPUT_UNSUPPORTED",
@@ -1803,7 +1843,6 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
       result,
       command,
       flags,
-      legacyOperation,
       terminalEmitted: Boolean(
         (err as BenchPilotError & { operationTerminalReported?: boolean })
           .operationTerminalReported,

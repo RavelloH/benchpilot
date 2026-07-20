@@ -29,6 +29,8 @@ export interface Capability {
   inputSchema?: RuntimeSchema<Json>;
   outputSchema?: RuntimeSchema<Json>;
   redactInput?(input: Json): Json;
+  /** Removes schema-marked secrets before lifecycle facts leave the Core. */
+  redactOutput?(output: Json): Json;
   defaultTimeoutMs: number;
   lockMode: "none" | "exclusive";
   createsRun: boolean;

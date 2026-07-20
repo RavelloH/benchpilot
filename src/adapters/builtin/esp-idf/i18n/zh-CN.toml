@@ -13,21 +13,139 @@ discoveryUnavailable = "无法初始化被动设备发现。"
 
 [capability.build]
 summary = "构建固件或应用产物。"
+description = "构建已配置的 ESP-IDF 项目并保存生成的产物。"
 [capability.capture]
 summary = "采集设备日志或诊断输出。"
+description = "从已配置的设备串口采集有边界限制的输出。"
+[capability.capture.safety]
+confirm = "确认此串口采集操作的安全要求。"
+effect = "会打开串口进行有边界限制的采集；USB 串口适配器打开端口时可能使目标设备复位。"
+[capability.capture.option.duration_seconds]
+summary = "采集的最长持续时间（秒）。"
+[capability.capture.option.baud]
+summary = "采集时使用的串口波特率。"
+[capability.capture.option.max_lines]
+summary = "最多采集的行数。"
+[capability.capture.option.max_bytes]
+summary = "最多采集的字节数。"
+[capability.capture.option.timestamp]
+summary = "为每一行采集内容添加 UTC 时间戳。"
 [capability.clean]
 summary = "清理常规构建产物。"
+description = "清理已配置项目的常规构建输出目录。"
 [capability.deploy]
 summary = "构建并部署到设备。"
+description = "构建项目，然后将生成的固件烧录到目标设备。"
+[capability.deploy.safety]
+confirm = "确认此构建并烧录操作的安全要求。"
+effect = "将构建并覆盖当前 ESP32-S3 的应用固件。"
 [capability.flash]
 summary = "烧录固件到设备。"
+description = "将生成的固件烧录到已配置的目标设备。"
+[capability.flash.safety]
+confirm = "确认此覆盖固件操作的安全要求。"
+effect = "将覆盖当前 ESP32-S3 的应用固件。"
 [capability.fullclean]
 summary = "清理全部生成的构建状态。"
+description = "清理已配置项目的全部生成构建状态。"
+[capability.fullclean.safety]
+confirm = "确认此完整构建清理操作的安全要求。"
+effect = "会删除已配置的项目构建目录，但不会删除 sdkconfig 或源文件。"
 [capability.info]
-summary = "查看项目、设备和工具链信息。"
+summary = "查看设备详细信息。"
+description = "读取已连接目标设备的芯片、MAC 地址和闪存详细信息。"
+[capability.info.safety]
+confirm = "确认此设备连接操作的安全要求。"
+effect = "连接目标设备并由 esptool 识别时，可能切换 DTR/RTS。"
 [capability.reset]
 summary = "复位设备。"
+description = "通过 esptool 对已连接的目标设备执行硬复位。"
+[capability.reset.safety]
+confirm = "确认此设备复位操作的安全要求。"
+effect = "会使用 esptool 连接设备，并在命令结束后对目标设备执行硬复位。"
 [capability.size]
 summary = "查看固件或应用大小。"
+description = "读取已配置项目的固件大小报告。"
 [capability.status]
 summary = "查看当前设备状态。"
+description = "读取已连接 ESP 目标设备的身份和闪存信息。"
+[capability.status.safety]
+confirm = "确认此设备连接操作的安全要求。"
+effect = "连接目标设备并由 esptool 读取状态时，可能切换 DTR/RTS。"
+
+[view.status]
+title = "设备状态"
+[view.info]
+title = "ESP-IDF 信息"
+[view.info.key]
+version = "版本"
+major = "主版本"
+chip = "芯片"
+revision = "修订版本"
+mac = "MAC 地址"
+flash_manufacturer = "闪存厂商"
+flash_device = "闪存型号"
+flash_size = "闪存容量"
+[view.build]
+title = "构建摘要"
+[view.clean]
+completed = "构建产物已清理。"
+[view.fullclean]
+completed = "全部生成的构建状态已清理。"
+[view.size]
+title = "固件大小"
+[view.flash]
+title = "烧录输出"
+[view.reset]
+completed = "设备已复位。"
+[view.deploy]
+title = "部署输出"
+[view.capture]
+title = "采集摘要"
+[view.field]
+target = "目标"
+idf_version = "ESP-IDF"
+project_name = "项目"
+project_version = "版本"
+application_bin = "应用镜像"
+flash_size = "闪存容量"
+flash_file_count = "烧录文件"
+python_version = "Python"
+flash_code = "代码闪存"
+flash_data = "数据闪存"
+ram = "内存"
+image = "镜像"
+lines = "行数"
+bytes = "字节数"
+stop_reason = "停止原因"
+
+[progress.info]
+detect = "检测 esptool"
+chip = "读取芯片标识"
+mac = "读取设备 MAC 地址"
+flash = "读取闪存标识"
+[progress.size]
+read = "读取固件大小"
+[progress.status]
+detect = "检测 esptool"
+device = "读取设备状态"
+[progress.build]
+compile = "构建项目"
+compiling = "编译源文件"
+metadata = "读取构建元数据"
+configure = "配置 CMake 项目"
+artifact = "生成固件产物"
+[progress.deploy]
+compile = "构建项目"
+flash = "烧录设备"
+[progress.reset]
+detect = "检测 esptool"
+device = "复位设备"
+[progress.flash]
+connect = "连接 ESP 目标设备"
+image = "烧录镜像"
+write = "写入固件"
+verify = "校验烧录数据"
+reset = "复位目标设备"
+[error]
+device_not_found = "所选串口上的 ESP 设备没有响应。请检查端口并重新连接开发板。"

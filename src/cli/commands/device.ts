@@ -1,4 +1,4 @@
-import type { Capability, Json } from "../../core.js";
+import type { Capability } from "../../core.js";
 import type { DeviceUseCases } from "../../application/devices/use-case.js";
 import type { CommandCatalog } from "../../application/commands/catalog.js";
 import {
@@ -7,7 +7,15 @@ import {
   type RawOption,
 } from "../option-parser.js";
 import type { Flags } from "../parser.js";
-import { write } from "../output-renderer.js";
+import { capabilityResultFromOperation } from "../output/capability-result.js";
+import { renderCapabilityResult } from "../output/capability-renderer.js";
+import type { DeferredOperationReporter } from "../output/deferred-operation-reporter.js";
+import type { Locale } from "../../i18n/index.js";
+import type { AdapterCapabilityView } from "../../adapters/contract/views.js";
+
+type AdapterWithCapabilityViews = {
+  readonly capabilityViews?: Readonly<Record<string, AdapterCapabilityView>>;
+};
 
 interface DeviceCommandContext {
   parts: string[];
@@ -25,6 +33,11 @@ interface DeviceCommandContext {
   requiresApproval?: (
     mode: "normal" | "caution" | "destructive" | "irreversible",
   ) => boolean;
+  reporter?: DeferredOperationReporter;
+  output: { write(value: string): unknown };
+  locale: Locale;
+  color: boolean;
+  columns: number;
 }
 
 export async function handleDeviceCommand({
@@ -38,6 +51,11 @@ export async function handleDeviceCommand({
   confirmSafety,
   confirmApproval,
   requiresApproval,
+  reporter,
+  output,
+  locale,
+  color,
+  columns,
 }: DeviceCommandContext): Promise<boolean> {
   if (parts[0] === "device" && parts[1]) {
     if (parts.length === 2) {
@@ -74,7 +92,12 @@ export async function handleDeviceCommand({
       requiresApproval?.(definition.safety.mode) === true;
     if (approvalRequired && confirmApproval && !(await confirmApproval()))
       return true;
-    const result = await devices.execute({
+    const command = {
+      id: "device.execute",
+      path: ["device", parts[1], capability],
+    };
+    reporter?.configure(command);
+    const outcome = await devices.executeDetailed({
       device: parts[1],
       capability,
       capabilityInput: input,
@@ -83,17 +106,22 @@ export async function handleDeviceCommand({
         ? { executionMode: "interactive" as const }
         : {}),
     });
-    const r = result as Json;
-    if (capability === "info" && !flags.json && !flags.jsonl)
-      write(result, flags, `${JSON.stringify(r.data ?? {}, null, 2)}\n`);
-    else
-      write(
-        result,
-        flags,
-        r.dryRun
-          ? `${capability} dry-run plan created.`
-          : `${capability} completed${r.runId ? ` (run ${String(r.runId)})` : ""}.`,
-      );
+    const result = capabilityResultFromOperation({ command, outcome });
+    renderCapabilityResult({
+      result,
+      flags,
+      output,
+      reporter,
+      locale,
+      color,
+      columns,
+      view: (resolved.adapter as AdapterWithCapabilityViews).capabilityViews?.[
+        capability
+      ],
+      adapterId: resolved.adapter.id,
+      translate: resolved.adapter.translate,
+    });
+    if (!result.ok) process.exitCode = outcome.primaryError?.exitCode ?? 5;
     return true;
   }
   return false;

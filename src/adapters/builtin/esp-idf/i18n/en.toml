@@ -1,0 +1,150 @@
+[view.status]
+title = "Device status"
+[view.info]
+title = "ESP-IDF information"
+[view.info.key]
+version = "Version"
+major = "Major version"
+chip = "Chip"
+revision = "Revision"
+mac = "MAC address"
+flash_manufacturer = "Flash manufacturer"
+flash_device = "Flash device"
+flash_size = "Flash size"
+[view.build]
+title = "Build summary"
+[view.clean]
+completed = "Build artifacts cleaned."
+[view.fullclean]
+completed = "Generated build state cleaned."
+[view.size]
+title = "Firmware size"
+[view.flash]
+title = "Flash output"
+[view.reset]
+completed = "Device reset completed."
+[view.deploy]
+title = "Deploy output"
+[view.capture]
+title = "Capture summary"
+[view.field]
+target = "Target"
+idf_version = "ESP-IDF"
+project_name = "Project"
+project_version = "Version"
+application_bin = "Application"
+flash_size = "Flash size"
+flash_file_count = "Flash files"
+python_version = "Python"
+flash_code = "Flash code"
+flash_data = "Flash data"
+ram = "RAM"
+image = "Image"
+lines = "Lines"
+bytes = "Bytes"
+stop_reason = "Stop reason"
+[doctor]
+bundleReady = "Adapter bundle is ready."
+requiredToolResolved = "Required tool is ready."
+optionalToolResolved = "Optional tool is ready."
+requiredToolFailed = "Required tool check failed. Configure the ESP-IDF path or set IDF_PATH."
+optionalToolUnavailable = "Optional tool is unavailable."
+environmentResolved = "Runtime environment resolved."
+environmentFailed = "Could not resolve the ESP-IDF environment. Set IDF_PATH and IDF_PYTHON_ENV_PATH, or configure an export script."
+discoveryDisabled = "Device discovery is disabled."
+discoverySourceFailed = "One or more device discovery sources failed."
+discoveryAvailable = "Passive device discovery is available."
+discoveryUnavailable = "Could not initialize passive device discovery."
+
+[capability.build]
+summary = "Build firmware or application artifacts."
+description = "Build the configured ESP-IDF project and save its generated artifacts."
+[capability.capture]
+summary = "Capture device logs or diagnostic output."
+description = "Capture bounded serial output from the configured device port."
+[capability.capture.safety]
+confirm = "Confirm the serial capture safety requirement."
+effect = "Opens the serial port for a bounded capture; USB serial adapters may reset the target when the port opens."
+[capability.capture.option.duration_seconds]
+summary = "Maximum capture duration in seconds."
+[capability.capture.option.baud]
+summary = "Serial baud rate used for the capture."
+[capability.capture.option.max_lines]
+summary = "Maximum number of captured lines."
+[capability.capture.option.max_bytes]
+summary = "Maximum number of captured bytes."
+[capability.capture.option.timestamp]
+summary = "Prefix each captured line with a UTC timestamp."
+[capability.clean]
+summary = "Remove normal build output."
+description = "Remove the normal build output directory for the configured project."
+[capability.deploy]
+summary = "Build and deploy to the device."
+description = "Build the project, then flash the generated firmware to the target."
+[capability.deploy.safety]
+confirm = "Confirm the build-and-flash safety requirement."
+effect = "This will build and overwrite the current ESP32-S3 application firmware."
+[capability.flash]
+summary = "Flash firmware to the device."
+description = "Flash the generated firmware to the configured target."
+[capability.flash.safety]
+confirm = "Confirm the firmware overwrite safety requirement."
+effect = "This will overwrite the current ESP32-S3 application firmware."
+[capability.fullclean]
+summary = "Remove all generated build state."
+description = "Remove all generated build state for the configured project."
+[capability.fullclean.safety]
+confirm = "Confirm the full build cleanup safety requirement."
+effect = "Deletes the configured project build directory but never sdkconfig or source files."
+[capability.info]
+summary = "Inspect detailed device information."
+description = "Read detailed chip, MAC address, and flash information from the connected target."
+[capability.info.safety]
+confirm = "Confirm the device connection safety requirement."
+effect = "Connects to the target and may toggle DTR/RTS while esptool identifies it."
+[capability.reset]
+summary = "Reset the device."
+description = "Hard-reset the connected target through esptool."
+[capability.reset.safety]
+confirm = "Confirm the device reset safety requirement."
+effect = "Connects with esptool and hard-resets the target after the command."
+[capability.size]
+summary = "Report firmware or application size."
+description = "Read the configured project's firmware size report."
+[capability.status]
+summary = "Inspect current device status."
+description = "Read the connected ESP target identity and flash information."
+[capability.status.safety]
+confirm = "Confirm the device connection safety requirement."
+effect = "Connects to the target and may toggle DTR/RTS while esptool reads its status."
+
+[progress.info]
+detect = "Detect esptool"
+chip = "Read chip identity"
+mac = "Read device MAC address"
+flash = "Read flash identity"
+[progress.size]
+read = "Read firmware size"
+[progress.status]
+detect = "Detect esptool"
+device = "Read device status"
+[progress.build]
+compile = "Build project"
+compiling = "Compile source files"
+metadata = "Read build metadata"
+configure = "Configure CMake project"
+artifact = "Generate firmware artifact"
+[progress.deploy]
+compile = "Build project"
+flash = "Flash device"
+[progress.reset]
+detect = "Detect esptool"
+device = "Reset device"
+[progress.flash]
+connect = "Connect to ESP target"
+image = "Flash image"
+write = "Write firmware"
+verify = "Verify flashed data"
+reset = "Reset target"
+[error]
+device_not_found = "No ESP target responded on the selected port. Check the port and reconnect the board."

@@ -17,28 +17,6 @@ ports = [{"port": item.device, "description": text(item.description), "hwid": te
 print(json.dumps({"devices": ports}, sort_keys=True))''' }
 ]
 
-[actions.status]
-type = "process"
-tool = "python"
-cwd = "${project.root}"
-timeout = "30s"
-parser = "status-json"
-arguments = [
-  { kind = "literal", value = "-c" },
-  { kind = "literal", value = '''import json, os, sys
-root = os.getcwd(); build = os.path.join(root, sys.argv[1])
-target = ""
-sdkconfig = os.path.join(root, "sdkconfig")
-if os.path.isfile(sdkconfig):
-  with open(sdkconfig, encoding="utf-8", errors="replace") as stream:
-    for line in stream:
-      if line.startswith("CONFIG_IDF_TARGET="):
-        target = line.partition("=")[2].strip().strip('"')
-        break
-print(json.dumps({"project": root, "cmake_lists": os.path.isfile(os.path.join(root, "CMakeLists.txt")), "sdkconfig": os.path.isfile(sdkconfig), "target": target, "build_dir": sys.argv[1], "project_description": os.path.isfile(os.path.join(build, "project_description.json")), "flasher_args": os.path.isfile(os.path.join(build, "flasher_args.json"))}, sort_keys=True))''' },
-  { kind = "value", value = "${config.build_dir}" }
-]
-
 [actions.python-version]
 type = "process"
 tool = "python"
@@ -80,7 +58,18 @@ arguments = [
 build = os.path.join(os.getcwd(), sys.argv[1])
 def load(name):
   with open(os.path.join(build, name), encoding="utf-8") as stream: return json.load(stream)
-print(json.dumps({"project_description": load("project_description.json"), "flasher_args": load("flasher_args.json")}, sort_keys=True))''' },
+description = load("project_description.json")
+flasher = load("flasher_args.json")
+settings = flasher.get("flash_settings", {})
+print(json.dumps({
+  "project_name": str(description.get("project_name", "")),
+  "project_version": str(description.get("project_version", "")),
+  "target": str(description.get("target", "")),
+  "idf_version": str(description.get("git_revision", "")),
+  "application_bin": str(description.get("app_bin", "")),
+  "flash_size": str(settings.get("flash_size", "")),
+  "flash_file_count": len(flasher.get("flash_files", {}))
+}, sort_keys=True))''' },
   { kind = "value", value = "${config.build_dir}" }
 ]
 

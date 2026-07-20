@@ -6,12 +6,14 @@ catalog_version = 1
 enabled = true
 handler = "workflow:status"
 input_schema = "empty"
-output_schema = "status"
-creates_run = false
-timeout = "30s"
-lock = "none"
+output_schema = "info"
+creates_run = true
+timeout = "2m"
+lock = "device"
 [capabilities.status.safety]
-mode = "normal"
+mode = "caution"
+flag = "dangerously-status"
+description = "Connects to the target and may toggle DTR/RTS while esptool reads its status."
 [capabilities.status.platforms]
 windows = true
 linux = true
@@ -83,7 +85,7 @@ macos = true
 
 [capabilities.size]
 enabled = true
-handler = "action:size"
+handler = "workflow:size"
 input_schema = "empty"
 output_schema = "size"
 creates_run = true

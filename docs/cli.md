@@ -4,7 +4,7 @@ Global color flags use a positive internal value: `--color` enables color and `-
 
 `benchpilot device <instance> <capability> --help` derives its safety and schema
 details from the resolved capability. `--jsonl` is an event stream rather than a
-mix of logs and result objects. Migrated static commands use `benchpilot.event`
+mix of logs and result objects. Commands use `benchpilot.event`
 v3 frames, beginning with `command.started` and ending with exactly one
 `command.completed` or `command.failed` frame. The terminal frame embeds the
 same `benchpilot.result` v3 object produced by `--json`.
@@ -15,9 +15,8 @@ The stable resource roots are `adapter`, `device`, `system`, `run`, `lock`, and 
 
 Operation streams include approval, stage, cleanup and lock lifecycle events.
 Non-operation commands finish with `command.completed` or `command.failed`.
-The device and system Capability operation stream is still on the separately
-tracked legacy bridge; its protocol must not be used as the contract for
-migrated static commands.
+Device and system member events use the same stream with `context.system` and
+`context.device`; their terminal Result is identical to `--json`.
 
 `benchpilot device scan` is passive and does not open a serial device or run an
 Adapter Probe. `--probe` and `--confirm-device-probe` are rejected: a probe must

@@ -5,9 +5,42 @@ import {
   type CommandResultV3,
   type JsonObject,
 } from "../../contracts/index.js";
-import { BenchPilotError, coreErrorDefinition, type Json } from "../../core.js";
+import { BenchPilotError, coreErrorDefinition } from "../../core.js";
 import type { Flags } from "../parser.js";
 import { processOutputSink, type OutputSink } from "./sink.js";
+import {
+  isMessageKey,
+  t,
+  type Locale,
+  type MessageKey,
+} from "../../i18n/index.js";
+
+const localizedErrorReason = (
+  locale: Locale,
+  kind: string,
+  fallback: string,
+) => {
+  const key = coreErrorDefinition(kind)?.reason.key;
+  if (isMessageKey(key)) return t(locale, key);
+  return locale === "zh-CN"
+    ? t(locale, "error.reason.untranslated", { kind })
+    : fallback;
+};
+
+/** Human-only localization; machine DTO messages are deliberately untouched. */
+export const humanErrorMessage = (
+  locale: Locale,
+  kind: string,
+  fallback: string,
+) => {
+  const category = coreErrorDefinition(kind)?.category.key;
+  const categoryKey: MessageKey = isMessageKey(category)
+    ? category
+    : "error.unknown";
+  return t(locale, categoryKey, {
+    message: localizedErrorReason(locale, kind, fallback),
+  });
+};
 
 export const commandFailureResult = (input: {
   readonly command: CommandReference;
@@ -46,10 +79,9 @@ export const commandFailureResult = (input: {
 
 /** Emits canonical command failures while preserving the deferred Operation bridge. */
 export const renderFailure = (input: {
-  readonly result: CommandResultV3 | Json;
+  readonly result: CommandResultV3;
   readonly command: CommandReference;
   readonly flags: Flags;
-  readonly legacyOperation: boolean;
   readonly terminalEmitted: boolean;
   readonly humanMessage: string;
   readonly help?: string;
@@ -61,24 +93,15 @@ export const renderFailure = (input: {
     return;
   }
   if (input.flags.jsonl && !input.terminalEmitted) {
-    if (input.legacyOperation)
-      sink.stdout.write(
-        `${JSON.stringify({ schema: "benchpilot.event", version: 2, event: { type: "operation.failed", timestamp: new Date().toISOString() }, context: {}, data: { error: input.result } })}\n`,
-      );
-    else {
-      const encoder = new CliEventEncoder({ command: input.command });
-      sink.stdout.write(
-        `${[
-          encoder.encode({ type: "command.started" }),
-          encoder.encode({
-            type: "command.failed",
-            result: input.result as CommandResultV3,
-          }),
-        ]
-          .map((event) => JSON.stringify(event))
-          .join("\n")}\n`,
-      );
-    }
+    const encoder = new CliEventEncoder({ command: input.command });
+    sink.stdout.write(
+      `${[
+        encoder.encode({ type: "command.started" }),
+        encoder.encode({ type: "command.failed", result: input.result }),
+      ]
+        .map((event) => JSON.stringify(event))
+        .join("\n")}\n`,
+    );
     return;
   }
   sink.stderr.write(`${input.humanMessage}\n`);

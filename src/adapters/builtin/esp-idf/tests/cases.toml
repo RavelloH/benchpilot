@@ -33,17 +33,17 @@ target = "idf-build"
 context = {}
 stdout_fixture = "fixtures/build.txt"
 exit_code = 0
-expect = { success = true, result = {}, progress = [{ event = "esp-idf.configure", data = { stage = "Configuring" } }, { event = "esp-idf.build.progress", data = { current = 12, total = 20 } }, { event = "esp-idf.build.artifact", data = { artifact = "application bin" } }] }
+expect = { success = true, result = {}, progress = [{ event = "esp-idf.configure", data = { stage = "CMake", label = { key = "progress.build.configure", fallback = "Configure CMake project" }, state = "running" } }, { event = "esp-idf.build.progress", data = { current = 12, total = 20, label = { key = "progress.build.compiling", fallback = "Compile source files" }, state = "running" } }, { event = "esp-idf.build.artifact", data = { artifact = "app.bin", label = { key = "progress.build.artifact", fallback = "Generate firmware artifact" }, state = "completed" } }] }
 
 [[cases]]
-id = "parse-status-output"
+id = "parse-flash-progress"
 type = "parse-output"
-platform = "linux"
-target = "status-json"
+platform = "windows"
+target = "idf-flash"
 context = {}
-stdout_fixture = "fixtures/status.json"
+stdout_fixture = "fixtures/flash-progress.txt"
 exit_code = 0
-expect = { success = true, result = { project = "/work/benchpilot-smoke", cmake_lists = true, sdkconfig = true, build_dir = "build", target = "esp32s3", project_description = true, flasher_args = true } }
+expect = { success = true, result = {}, progress = [{ event = "esp-idf.flash.progress", data = { address = "0x00020000", percent = 25, current = 512, total = 2048, label = { key = "progress.flash.write", fallback = "Write firmware" }, state = "running", reentrant = true, cycle = { id = "flash-image", start_field = "current", start_value = 0, label = { key = "progress.flash.image", fallback = "Flash image" } } } }, { event = "esp-idf.flash.verifying", data = { stage = "Verifying written data", label = { key = "progress.flash.verify", fallback = "Verify flashed data" }, state = "running", cycle = { id = "flash-image", start_field = "current", start_value = 0, label = { key = "progress.flash.image", fallback = "Flash image" } } } }, { event = "esp-idf.flash.verifying", data = { stage = "Hash of data verified", label = { key = "progress.flash.verify", fallback = "Verify flashed data" }, state = "completed", cycle = { id = "flash-image", start_field = "current", start_value = 0, label = { key = "progress.flash.image", fallback = "Flash image" } }, cycleComplete = true } }] }
 
 [[cases]]
 id = "parse-flash-port-busy"
@@ -74,6 +74,16 @@ context = {}
 stdout_fixture = "fixtures/size.txt"
 exit_code = 0
 expect = { success = true, result = { flash_code_bytes = 65470, flash_data_bytes = 37004, ram_bytes = 47581, diram_bytes = 47581, iram_bytes = 16384, image_bytes = 164011 } }
+
+[[cases]]
+id = "parse-build-metadata"
+type = "parse-output"
+platform = "windows"
+target = "metadata-json"
+context = {}
+stdout_fixture = "fixtures/metadata.json"
+exit_code = 0
+expect = { success = true, result = { project_name = "demo", project_version = "1.2.3", target = "esp32s3", idf_version = "v6.0", application_bin = "demo.bin", flash_size = "16MB", flash_file_count = 4 } }
 
 [[cases]]
 id = "parse-capture-output"
@@ -124,12 +134,28 @@ context = {}
 expect = { steps = ["build", "flash"] }
 
 [[cases]]
+id = "plan-build"
+type = "plan-workflow"
+platform = "windows"
+target = "build"
+context = {}
+expect = { steps = ["build", "metadata"] }
+
+[[cases]]
 id = "plan-status"
 type = "plan-workflow"
 platform = "windows"
 target = "status"
+context = { tool = { esptool = { probe = { major = 5 } } } }
+expect = { steps = ["detect", "flash-v5"] }
+
+[[cases]]
+id = "plan-size"
+type = "plan-workflow"
+platform = "windows"
+target = "size"
 context = {}
-expect = { steps = ["project", "python", "idf"] }
+expect = { steps = ["size"] }
 
 [[cases]]
 id = "plan-reset-v5"

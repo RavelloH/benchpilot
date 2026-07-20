@@ -65,6 +65,34 @@ export interface ParserResult {
   success: boolean;
 }
 
+export const shouldEmitProgress = (
+  rule: RuleObject,
+  data: RuleObject,
+  samples: Map<string, number>,
+) => {
+  const sample = object(rule.sample);
+  const field = typeof sample.field === "string" ? sample.field : undefined;
+  const every = typeof sample.every === "number" ? sample.every : undefined;
+  if (!field || !every || every < 1) return true;
+  const current = data[field];
+  if (typeof current !== "number" || !Number.isFinite(current)) return true;
+  const finalField =
+    typeof sample.final_field === "string" ? sample.final_field : undefined;
+  const final = finalField ? data[finalField] : undefined;
+  const key = String(rule.id);
+  const previous = samples.get(key);
+  if (
+    previous === undefined ||
+    current < previous ||
+    current - previous >= every ||
+    current === final
+  ) {
+    samples.set(key, current);
+    return true;
+  }
+  return false;
+};
+
 export const parseOutput = (
   parser: RuleObject,
   stdout: string,
@@ -119,6 +147,7 @@ export const parseOutput = (
       requiredMissing.push(String(rule.id));
     if (extracted !== undefined) result[String(rule.target)] = extracted;
   }
+  const progressSamples = new Map<string, number>();
   const progress = (
     Array.isArray(parser.progress) ? parser.progress : []
   ).flatMap((rawRule) => {
@@ -128,16 +157,33 @@ export const parseOutput = (
         sourceText(rule.source, output, errorOutput).matchAll(
           new RegExp(String(rule.pattern), "g"),
         ),
-        (match) => ({
-          event: rule.event,
-          data: Object.fromEntries(
-            Object.entries(object(rule.fields)).map(([name, kind]) => [
-              name,
-              castValue(match.groups?.[name] ?? "", kind as CastKind),
-            ]),
-          ),
-        }),
-      );
+        (match) => {
+          const label = object(rule.label);
+          const data = {
+            ...Object.fromEntries(
+              Object.entries(object(rule.fields)).map(([name, kind]) => [
+                name,
+                castValue(match.groups?.[name] ?? "", kind as CastKind),
+              ]),
+            ),
+            ...(typeof label.key === "string" &&
+            typeof label.fallback === "string"
+              ? { label: { key: label.key, fallback: label.fallback } }
+              : {}),
+            ...(rule.state === "running" || rule.state === "completed"
+              ? { state: rule.state }
+              : {}),
+            ...(rule.reentrant === true ? { reentrant: true } : {}),
+            ...(Object.keys(object(rule.cycle)).length
+              ? { cycle: object(rule.cycle) }
+              : {}),
+            ...(rule.cycle_complete === true ? { cycleComplete: true } : {}),
+          };
+          return shouldEmitProgress(rule, data, progressSamples)
+            ? [{ event: rule.event, data }]
+            : [];
+        },
+      ).flat();
     } catch {
       return [];
     }

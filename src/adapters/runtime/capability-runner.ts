@@ -226,6 +226,9 @@ export class DeclarativeCapabilityRunner {
         deadline.limit(durationMs(workflow.timeout)),
       );
       result = object(context.result);
+      const outputStep =
+        typeof workflow.output === "string" ? workflow.output : undefined;
+      if (outputStep) result = object(result[outputStep]);
       if (!Object.keys(result).length) result = execution as RuleObject;
     } else
       throw new AdapterRuntimeError(
@@ -364,8 +367,29 @@ export class DeclarativeCapabilityRunner {
           plan,
           parser,
           signal,
-          (event, data) =>
-            operation.emitEvent(event, redactor.redactValue(data) as Json),
+          (event, data) => {
+            const step = object(actionContext.step);
+            const workflowId =
+              typeof step.workflowId === "string" ? step.workflowId : undefined;
+            const stepId = typeof step.id === "string" ? step.id : undefined;
+            const displayId =
+              typeof step.displayId === "string" ? step.displayId : undefined;
+            operation.emitEvent(
+              event,
+              redactor.redactValue({
+                ...data,
+                ...(workflowId && stepId
+                  ? {
+                      workflowStep: {
+                        workflowId,
+                        stepId,
+                        ...(displayId ? { displayId } : {}),
+                      },
+                    }
+                  : {}),
+              }) as Json,
+            );
+          },
           operation.logger,
           dangerous
             ? () =>
