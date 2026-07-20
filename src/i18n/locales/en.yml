@@ -1,6 +1,6 @@
 cli:
   interaction:
-    agent: "This command requires an interactive human session and cannot be run by an agent or with --agent."
+    agent: "This invocation requires interactive completion or human confirmation. Agent mode can still run commands with complete arguments that do not require interaction."
     terminal: "This command requires an interactive terminal."
     machine: "This command requires interactive input and cannot be used with machine output."
     cancelled: "Interaction cancelled."
@@ -459,6 +459,8 @@ menu:
     all: "Remove all run records"
   field:
     deviceName: "device name"
+  device:
+    addDiscoveryEmpty: "Enabled adapters could not automatically discover a device. Select an adapter to add one manually."
 screen:
   root:
     interactive: "Interactive mode"
@@ -601,7 +603,7 @@ error:
     approvalGuardBusy: "The approval state is being updated by another process."
     fileGuardBusy: "The persisted state is being updated by another process."
     interactionCancelled: "The interaction was cancelled."
-    agentInteractionUnsupported: "This operation requires a human interactive session and cannot run in Agent mode."
+    agentInteractionUnsupported: "This invocation requires interactive completion or human confirmation. Agent mode can still run commands with complete arguments that do not require interaction."
     interactiveTerminalRequired: "This operation requires an interactive terminal."
     interactiveMachineOutputUnsupported: "Interactive mode cannot be used with machine output."
     untranslated: "The operation failed (error code: {kind})."

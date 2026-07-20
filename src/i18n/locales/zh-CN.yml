@@ -1,6 +1,6 @@
 cli:
   interaction:
-    agent: "此命令需要人类交互会话，Agent 或 --agent 模式不应直接调用。"
+    agent: "当前调用需要交互补全或人工确认。Agent 模式仍可执行已提供完整参数且无需交互确认的命令。"
     terminal: "此命令需要可交互的终端。"
     machine: "此命令需要交互式输入，不能与机器输出模式一起使用。"
     cancelled: "交互已取消。"
@@ -459,6 +459,8 @@ menu:
     all: "删除全部操作记录"
   field:
     deviceName: "设备名称"
+  device:
+    addDiscoveryEmpty: "已启用的适配器未能自动发现设备。请手动选择适配器添加。"
 screen:
   root:
     interactive: "交互模式"
@@ -601,7 +603,7 @@ error:
     approvalGuardBusy: "其他进程正在更新审批状态。"
     fileGuardBusy: "其他进程正在更新持久化状态。"
     interactionCancelled: "交互已取消。"
-    agentInteractionUnsupported: "该操作需要人类交互，不能在 Agent 模式下执行。"
+    agentInteractionUnsupported: "当前调用需要交互补全或人工确认。Agent 模式仍可执行已提供完整参数且无需交互确认的命令。"
     interactiveTerminalRequired: "该操作需要可交互的终端。"
     interactiveMachineOutputUnsupported: "交互模式不能与机器输出格式一起使用。"
     untranslated: "操作失败（错误代码：{kind}）。"

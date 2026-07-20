@@ -46,6 +46,15 @@ test("help screen and machine output consume one projected HelpData", async () =
   assert.match(screen.join(""), /说明\n  读取、解释、校验并安全编辑配置。/);
   assert.match(screen.join(""), /config set <key> <value>/);
   assert.match(screen.join(""), /全局选项/);
+  const lines = screen.join("").split("\n");
+  const command = lines.find((line) => line.includes("读取配置值"));
+  const global = lines.find((line) => line.includes("输出单个 JSON 结果"));
+  assert.ok(command);
+  assert.ok(global);
+  assert.equal(
+    command.indexOf("读取配置值"),
+    global.indexOf("输出单个 JSON 结果"),
+  );
 
   const json = [];
   new OutputEngine({
@@ -63,6 +72,28 @@ test("help screen and machine output consume one projected HelpData", async () =
     key: "command.config.root",
     text: "查看和管理配置",
   });
+});
+
+test("init help renders field values from one projected HelpData", async () => {
+  const document = await new HelpDocumentService(
+    commandCatalogDefinition,
+    provider,
+    {
+      values: async ({ provider: providerId }) =>
+        providerId === "available-adapters" ? ["demo", "esp-idf"] : [],
+    },
+  ).document(["init"]);
+  const data = projectHelpDocument(document, "zh-CN");
+  const screen = [];
+  new OutputEngine({
+    mode: "screen",
+    locale: "zh-CN",
+    color: false,
+    columns: 80,
+    output: { write: (value) => screen.push(value) },
+  }).render(helpOutputDefinition(data, false));
+  assert.match(screen.join(""), /CLI 语言 \(en, zh-CN\)/);
+  assert.match(screen.join(""), /适配器标识符 \(demo, esp-idf\)/);
 });
 
 test("complete help renders nested commands in one definition-driven index", async () => {

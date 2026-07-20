@@ -41,6 +41,10 @@ export interface CommandFieldDefinition {
   readonly schema?: Json;
   /** Human placeholder used by declarative field views. */
   readonly placeholder?: string;
+  /** Static machine values accepted for this field. */
+  readonly enum?: readonly string[];
+  /** Read-only provider used to expose available field values in Help. */
+  readonly choiceProvider?: string;
 }
 
 export interface CommandOutputReference {

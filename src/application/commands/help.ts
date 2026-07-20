@@ -11,6 +11,18 @@ import type {
 } from "./definition.js";
 import { CommandResolver, type ResolvedCommand } from "./resolver.js";
 
+export type HelpFieldDefinition = CommandFieldDefinition & {
+  readonly choices?: readonly string[];
+};
+
+export interface HelpFieldChoiceProvider {
+  values(input: {
+    readonly provider: string;
+    readonly definition: CommandDefinition;
+    readonly field: CommandFieldDefinition;
+  }): Promise<readonly string[]>;
+}
+
 export interface HelpCommandEntry {
   readonly id: string;
   readonly path: readonly string[];
@@ -44,9 +56,9 @@ export interface HelpDocument {
   readonly usage: readonly string[];
   readonly summary: MessageRef;
   readonly description?: MessageRef;
-  readonly arguments: readonly CommandFieldDefinition[];
-  readonly options: readonly CommandFieldDefinition[];
-  readonly globalOptions: readonly CommandFieldDefinition[];
+  readonly arguments: readonly HelpFieldDefinition[];
+  readonly options: readonly HelpFieldDefinition[];
+  readonly globalOptions: readonly HelpFieldDefinition[];
   readonly groups: readonly HelpCommandGroup[];
   readonly children: readonly HelpCommandEntry[];
   readonly examples: readonly CommandExample[];
@@ -109,6 +121,7 @@ export class HelpDocumentService {
   constructor(
     private readonly catalog: CommandCatalogDefinition,
     private readonly provider: DynamicCommandProvider,
+    private readonly fieldChoices?: HelpFieldChoiceProvider,
   ) {
     this.resolver = new CommandResolver(catalog.commands, provider);
   }
@@ -141,8 +154,8 @@ export class HelpDocumentService {
       ...(definition.description
         ? { description: definition.description }
         : {}),
-      arguments: definition.arguments,
-      options: definition.options,
+      arguments: await this.fields(definition, definition.arguments),
+      options: await this.fields(definition, definition.options),
       globalOptions: this.catalog.globalOptions,
       groups: [],
       children,
@@ -189,6 +202,29 @@ export class HelpDocumentService {
       Object.entries(resolved.captures).flatMap(([name, value]) =>
         typeof value === "string" ? [[name, value]] : [],
       ),
+    );
+  }
+
+  private async fields(
+    definition: CommandDefinition,
+    fields: readonly CommandFieldDefinition[],
+  ): Promise<readonly HelpFieldDefinition[]> {
+    return Promise.all(
+      fields.map(async (field) => {
+        const choices = field.enum
+          ? field.enum
+          : field.choiceProvider && this.fieldChoices
+            ? await this.fieldChoices.values({
+                provider: field.choiceProvider,
+                definition,
+                field,
+              })
+            : undefined;
+        return {
+          ...field,
+          ...(choices?.length ? { choices: [...choices] } : {}),
+        };
+      }),
     );
   }
 

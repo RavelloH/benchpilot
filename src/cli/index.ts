@@ -289,9 +289,25 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
     ) => {
       const locale = await loadPresentationLocale();
       const emptyProvider = { values: async () => [] };
+      const helpFieldChoices = {
+        "available-adapters": async () =>
+          [
+            ...new Set(
+              (adapters ?? (await loadBuiltinAdapters())).map(
+                (adapter) => adapter.id,
+              ),
+            ),
+          ].sort((left, right) => left.localeCompare(right)),
+      } as const;
       const staticHelp = new HelpDocumentService(
         commandCatalogDefinition,
         emptyProvider,
+        {
+          values: async ({ provider }) =>
+            provider in helpFieldChoices
+              ? helpFieldChoices[provider as keyof typeof helpFieldChoices]()
+              : [],
+        },
       );
       let document;
       try {
@@ -376,24 +392,6 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
       })
     )
       return;
-    if (
-      await handleUpgradeCommand({
-        path: parts,
-        loadLocale: loadPresentationLocale,
-        executable: process.argv[1] || "",
-        interaction: () => interactive(presentationLocale, ["upgrade"]),
-        selected: writeSelectedCommand,
-        render: ({ command, page }) =>
-          renderDataPage({
-            command,
-            page,
-            flags,
-            locale: presentationLocale,
-            color: colorEnabled(flags, stdout.isTTY),
-          }),
-      })
-    )
-      return;
     const home = await handleHomeCommand({
       path: parts,
       loadLocale: loadPresentationLocale,
@@ -419,6 +417,24 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
       if (!home.nextPath) return;
       parts = [...home.nextPath];
     }
+    if (
+      await handleUpgradeCommand({
+        path: parts,
+        loadLocale: loadPresentationLocale,
+        executable: process.argv[1] || "",
+        interaction: () => interactive(presentationLocale, ["upgrade"]),
+        selected: writeSelectedCommand,
+        render: ({ command, page }) =>
+          renderDataPage({
+            command,
+            page,
+            flags,
+            locale: presentationLocale,
+            color: colorEnabled(flags, stdout.isTTY),
+          }),
+      })
+    )
+      return;
     if (
       await handleInitCommand({
         path: parts,
@@ -867,8 +883,7 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
     };
     const chooseDiscoveredDevice = async (session: InteractionSession) => {
       const discovered = await queries.scanDevices();
-      if (!discovered.devices.length)
-        fail("DEVICE_NOT_FOUND", 3, "No discoverable devices are available.");
+      if (!discovered.devices.length) return undefined;
       const candidates = discovered.devices.map((device, index) => {
         const value = device as Record<string, unknown>;
         const fields = value.fields as Record<string, unknown> | undefined;
@@ -916,6 +931,41 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
         ...(typeof fields?.port === "string" ? { port: fields.port } : {}),
       };
     };
+    const completeDeviceAdd = async (
+      session: InteractionSession,
+    ): Promise<{
+      readonly adapter: string;
+      readonly name: string;
+      readonly identity?: string;
+      readonly port?: string;
+    }> => {
+      const discovered = await chooseDiscoveredDevice(session);
+      if (discovered)
+        return {
+          ...discovered,
+          name: await session.value(t(locale, "menu.field.deviceName")),
+        };
+      const adapters = queries.listAdapters().adapters;
+      if (!adapters.length)
+        fail("UNKNOWN_ADAPTER", 3, "No enabled adapters are available.");
+      terminalSurface.write(
+        `${terminalTheme(colorEnabled(flags, stdout.isTTY)).warning(t(locale, "menu.device.addDiscoveryEmpty"))}\n\n`,
+      );
+      const width = Math.max(
+        ...adapters.map((adapter) => displayWidth(adapter.id)),
+      );
+      const adapter = await session.choose(
+        adapters.map((candidate) => ({
+          value: candidate.id,
+          label: commandChoice(candidate.id, candidate.summary, width),
+        })),
+        { commandPath: ["device", "add"] },
+      );
+      return {
+        adapter,
+        name: await session.value(t(locale, "menu.field.deviceName")),
+      };
+    };
     await navigateDynamicRecord();
     const staticGroupNavigation = {
       language: async (session: InteractionSession) => {
@@ -961,13 +1011,13 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
         if (id === "list" || id === "scan") {
           parts.push(id);
         } else if (id === "add") {
-          const device = await chooseDiscoveredDevice(session);
+          const device = await completeDeviceAdd(session);
           parts.push(id);
           commandFlags = {
             ...commandFlags,
             adapter: device.adapter,
-            identity: device.identity,
-            name: await session.value(t(locale, "menu.field.deviceName")),
+            ...(device.identity ? { identity: device.identity } : {}),
+            name: device.name,
             ...(device.port !== undefined ? { port: device.port } : {}),
           };
         } else if (id === "remove") {
@@ -1133,16 +1183,20 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
       parts[0] === "device" &&
       parts.length === 2 &&
       !["list", "scan"].includes(parts[1]!) &&
-      !(parts[1] === "add" && typeof commandFlags.identity === "string")
+      !(
+        parts[1] === "add" &&
+        typeof commandFlags.adapter === "string" &&
+        typeof commandFlags.name === "string"
+      )
     ) {
       const session = interactive(locale, parts);
       if (parts[1] === "add") {
-        const device = await chooseDiscoveredDevice(session);
+        const device = await completeDeviceAdd(session);
         commandFlags = {
           ...commandFlags,
           adapter: device.adapter,
-          identity: device.identity,
-          name: await session.value(t(locale, "menu.field.deviceName")),
+          ...(device.identity ? { identity: device.identity } : {}),
+          name: device.name,
           ...(device.port !== undefined ? { port: device.port } : {}),
         };
       } else if (parts[1] === "remove") {

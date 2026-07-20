@@ -197,7 +197,10 @@ const fieldListComponent: HelpScreenComponent<HelpViewBlock> = {
       theme.heading(titles[definition.source]()),
       fields(context.data, definition.source).map((field) => {
         const label = fieldName(field);
-        return `${renderOption(padExact(label, width(context, definition.widthGroup)), theme)}  ${field.summary.text}`;
+        const choices = field.choices?.length
+          ? ` (${field.choices.join(", ")})`
+          : "";
+        return `${renderOption(padExact(label, width(context, definition.widthGroup)), theme)}  ${field.summary.text}${choices}`;
       }),
     );
   },

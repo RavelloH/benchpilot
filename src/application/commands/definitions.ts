@@ -314,8 +314,11 @@ export const staticCommandDefinitions: readonly CommandDefinition[] = [
     },
     options: [
       option("project-name", "field.projectName", { required: true }),
-      option("locale", "field.locale"),
-      option("adapter", "field.adapterId", { repeatable: true }),
+      option("locale", "field.locale", { enum: ["en", "zh-CN"] }),
+      option("adapter", "field.adapterId", {
+        repeatable: true,
+        choiceProvider: "available-adapters",
+      }),
     ],
     interactionRecipe: {
       steps: [

@@ -1,7 +1,7 @@
 import type { JsonObject, JsonValue } from "../../contracts/index.js";
 import type { MessageRef } from "../../contracts/message-ref.js";
-import type { CommandFieldDefinition } from "../../application/commands/definition.js";
 import type {
+  HelpFieldDefinition,
   HelpCommandEntry,
   HelpDocument,
 } from "../../application/commands/help.js";
@@ -17,6 +17,7 @@ export type HelpFieldData = JsonObject & {
   kind: "argument" | "option";
   summary: LocalizedMessageData;
   negatable?: boolean;
+  choices?: string[];
 };
 
 export type HelpGroupData = JsonObject & {
@@ -91,7 +92,7 @@ const messageData = (
 });
 
 const fieldData = (
-  field: CommandFieldDefinition,
+  field: HelpFieldDefinition,
   locale: Locale,
 ): HelpFieldData => ({
   name: field.name,
@@ -107,6 +108,7 @@ const fieldData = (
   ...(field.secret ? { secret: true } : {}),
   ...(field.schema ? { schema: jsonValue(field.schema) } : {}),
   ...(field.placeholder ? { placeholder: field.placeholder } : {}),
+  ...(field.choices ? { choices: [...field.choices] } : {}),
 });
 
 const childData = (child: HelpCommandEntry, locale: Locale): HelpChildData => ({

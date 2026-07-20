@@ -108,6 +108,26 @@ test("HelpDocument includes parent context and partial child information", async
   assert.equal(config.description.key, "help.group.config");
 });
 
+test("init help projects static and provider-backed option values", async () => {
+  const service = new HelpDocumentService(
+    commandCatalogDefinition,
+    provider([]),
+    {
+      values: async ({ provider: providerId }) =>
+        providerId === "available-adapters" ? ["demo", "esp-idf"] : [],
+    },
+  );
+  const document = await service.document(["init"]);
+  assert.deepEqual(
+    document.options.find((field) => field.name === "locale")?.choices,
+    ["en", "zh-CN"],
+  );
+  assert.deepEqual(
+    document.options.find((field) => field.name === "adapter")?.choices,
+    ["demo", "esp-idf"],
+  );
+});
+
 test("help output schemas match canonical command DTOs", () => {
   const expected = {
     "language.list": "benchpilot.language-list",

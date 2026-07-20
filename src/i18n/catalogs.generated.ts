@@ -63,7 +63,7 @@ export const catalogs = {
     "approval.status.pending": "Pending",
     "approval.status.rejected": "Rejected",
     "cli.interaction.agent":
-      "This command requires an interactive human session and cannot be run by an agent or with --agent.",
+      "This invocation requires interactive completion or human confirmation. Agent mode can still run commands with complete arguments that do not require interaction.",
     "cli.interaction.cancelled": "Interaction cancelled.",
     "cli.interaction.machine":
       "This command requires interactive input and cannot be used with machine output.",
@@ -218,7 +218,7 @@ export const catalogs = {
     "error.operation": "Operation error: {message}",
     "error.reason.adapterNotFound": "The requested adapter was not found.",
     "error.reason.agentInteractionUnsupported":
-      "This operation requires a human interactive session and cannot run in Agent mode.",
+      "This invocation requires interactive completion or human confirmation. Agent mode can still run commands with complete arguments that do not require interaction.",
     "error.reason.approvalAlreadyClaimed":
       "This approval is already claimed by another operation.",
     "error.reason.approvalChallengeFailed":
@@ -506,6 +506,8 @@ export const catalogs = {
     "menu.approval.listAll": "List all approval requests",
     "menu.back": "Back",
     "menu.choose": "Choose the next action",
+    "menu.device.addDiscoveryEmpty":
+      "Enabled adapters could not automatically discover a device. Select an adapter to add one manually.",
     "menu.exit": "Exit",
     "menu.exitConfirm": "Press Esc again to exit",
     "menu.field.deviceName": "device name",
@@ -674,7 +676,7 @@ export const catalogs = {
     "approval.status.pending": "待审批",
     "approval.status.rejected": "已拒绝",
     "cli.interaction.agent":
-      "此命令需要人类交互会话，Agent 或 --agent 模式不应直接调用。",
+      "当前调用需要交互补全或人工确认。Agent 模式仍可执行已提供完整参数且无需交互确认的命令。",
     "cli.interaction.cancelled": "交互已取消。",
     "cli.interaction.machine":
       "此命令需要交互式输入，不能与机器输出模式一起使用。",
@@ -823,7 +825,7 @@ export const catalogs = {
     "error.operation": "操作错误：{message}",
     "error.reason.adapterNotFound": "找不到指定适配器。",
     "error.reason.agentInteractionUnsupported":
-      "该操作需要人类交互，不能在 Agent 模式下执行。",
+      "当前调用需要交互补全或人工确认。Agent 模式仍可执行已提供完整参数且无需交互确认的命令。",
     "error.reason.approvalAlreadyClaimed": "该审批已被其他操作认领。",
     "error.reason.approvalChallengeFailed": "设备身份验证未通过。",
     "error.reason.approvalChallengeUnavailable":
@@ -1068,6 +1070,8 @@ export const catalogs = {
     "menu.approval.listAll": "列出所有审批请求",
     "menu.back": "上一步",
     "menu.choose": "选择下一步操作",
+    "menu.device.addDiscoveryEmpty":
+      "已启用的适配器未能自动发现设备。请手动选择适配器添加。",
     "menu.exit": "退出",
     "menu.exitConfirm": "再次按下 ESC 退出",
     "menu.field.deviceName": "设备名称",
