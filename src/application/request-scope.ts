@@ -1,7 +1,6 @@
 import {
   type Adapter,
   BenchPilotError,
-  type BenchPilotEventWriter,
   type Json,
   enabledAdapterIds,
   LockManager,
@@ -10,6 +9,8 @@ import {
   ApprovalManager,
   type ResolvedConfig,
   RunManager,
+  type OperationReporter,
+  type BusinessLogFactory,
 } from "../core.js";
 import { loadApplicationConfig } from "./config/loader.js";
 import { createApplication } from "./application.js";
@@ -39,14 +40,31 @@ import {
   type ConfigurationCommandUseCases,
 } from "./config/command-use-case.js";
 import { CommandCatalog } from "./commands/catalog.js";
+import {
+  commandCatalogDefinition,
+  globalOptionDefinitions,
+  staticCommandDefinitions,
+} from "./commands/definitions.js";
+import { ApplicationDynamicCommandProvider } from "./commands/dynamic-provider.js";
+import { CommandResolver } from "./commands/resolver.js";
+import { CommandArgvParser } from "./commands/parser.js";
+import { HelpDocumentService } from "./commands/help.js";
+import { CommandInteractionService } from "./commands/interaction.js";
+import { createApplicationCommandDispatcher } from "./commands/application-dispatcher.js";
 
 export interface ApplicationRequest {
   cwd: string;
   configPath?: string;
-  flags: Json;
+  operation?: {
+    timeout?: unknown;
+    dryRun?: boolean;
+    session?: string;
+    benchpilotVersion?: string;
+  };
   adapters: Adapter[];
   nodeVersion: string;
-  eventWriter?: BenchPilotEventWriter;
+  reporter?: OperationReporter;
+  businessLogs: BusinessLogFactory;
 }
 
 export interface ApplicationRequestScope {
@@ -63,6 +81,16 @@ export interface ApplicationRequestScope {
   configuration: ConfigurationUseCases;
   configurationCommands: ConfigurationCommandUseCases;
   catalog: CommandCatalog;
+  commandGraph: {
+    definitions: typeof staticCommandDefinitions;
+    globalOptions: typeof globalOptionDefinitions;
+    provider: ApplicationDynamicCommandProvider;
+    resolver: CommandResolver;
+    parser: CommandArgvParser;
+    help: HelpDocumentService;
+    interaction: CommandInteractionService;
+    dispatcher: ReturnType<typeof createApplicationCommandDispatcher>;
+  };
 }
 
 /** Builds process-independent request services. CLI supplies only explicit input. */
@@ -98,8 +126,9 @@ export async function openApplicationRequest(
     registry: application.registry,
     config,
     project,
-    flags: request.flags,
-    eventWriter: request.eventWriter,
+    defaults: request.operation,
+    reporter: request.reporter,
+    businessLogs: request.businessLogs,
     lifecycle,
   });
   const runtime = createRuntimeUseCases({ paths, project, config, lifecycle });
@@ -141,6 +170,30 @@ export async function openApplicationRequest(
       return (await systems.describe(id)).capabilities;
     },
   });
+  const provider = new ApplicationDynamicCommandProvider({
+    queries,
+    systems,
+    runtime,
+  });
+  const commandGraph = {
+    definitions: staticCommandDefinitions,
+    globalOptions: globalOptionDefinitions,
+    provider,
+    resolver: new CommandResolver(staticCommandDefinitions, provider),
+    parser: new CommandArgvParser(
+      staticCommandDefinitions,
+      globalOptionDefinitions,
+      provider,
+    ),
+    help: new HelpDocumentService(commandCatalogDefinition, provider),
+    interaction: new CommandInteractionService(staticCommandDefinitions),
+    dispatcher: createApplicationCommandDispatcher({
+      configuration: configurationCommands,
+      runtime: runtimeCommands,
+      queries,
+      resolvedConfig: config,
+    }),
+  };
   return {
     application,
     paths,
@@ -155,5 +208,6 @@ export async function openApplicationRequest(
     configuration,
     configurationCommands,
     catalog,
+    commandGraph,
   };
 }

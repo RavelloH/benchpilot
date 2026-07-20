@@ -1,0 +1,13 @@
+BenchPilot 项目已初始化。
+
+项目
+  项目名称    Demo
+  项目 ID     demo
+  已启用适配器 esp-idf, demo
+
+已套用现有 BenchPilot 项目配置。
+
+项目
+  项目名称    Demo
+  项目 ID     demo
+  已启用适配器 esp-idf, demo

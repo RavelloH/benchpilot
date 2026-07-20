@@ -1,0 +1,15 @@
+已安装适配器
+  esp-idf     1.2.3     ESP-IDF adapter
+  demo        0.1.0     Demo adapter
+
+已配置设备
+  board-a       esp-idf
+  board-b       demo
+
+已配置系统
+  pair          board-a, board-b
+
+操作记录
+  记录 ID                           状态      命令
+  run-001                           已成功    device board-a status
+  run-002                           已失败    device board-b flash

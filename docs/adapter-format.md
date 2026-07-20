@@ -13,6 +13,12 @@ paths such as `doctor.environmentFailed`; `en` is the fallback locale. All
 identifiers are lowercase kebab-case. Rules cannot contain shell command
 strings or JavaScript expressions.
 
+The compiler loads catalog files into the Bundle and runtime translation falls
+back to `en` when the requested locale is absent. Full catalog parity, typed
+adapter MessageRefs, and declarative `views.toml` output definitions belong to
+the deferred Device/System Capability-output migration and are not part of
+Format v1 today.
+
 `adapter:validate` writes diagnostics as JSON to stdout and exits non-zero for
 errors. `adapter:compile` emits deterministic Bundle v2 files under
 `dist/adapters/bundles`.

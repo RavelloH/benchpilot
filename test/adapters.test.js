@@ -148,7 +148,7 @@ test("bulk compilation excludes the template and writes the builtin index", asyn
     );
     assert.deepEqual(
       index.map((entry) => entry.id),
-      ["demo", "esp-idf"],
+      ["esp-idf"],
     );
     for (const entry of index) {
       const bundle = JSON.parse(
@@ -478,7 +478,7 @@ test("template compilation boundary fixture excludes the template bundle", async
       JSON.parse(await readFile(join(output, "index.json"), "utf8")).map(
         (entry) => entry.id,
       ),
-      ["demo", "esp-idf"],
+      ["esp-idf"],
     );
     await assert.rejects(readFile(join(output, fixture.absent), "utf8"));
   } finally {

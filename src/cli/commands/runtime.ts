@@ -1,361 +1,130 @@
-import {
-  fail,
-  type Json,
-  type LockLiveness,
-  type LockRecord,
-} from "../../core.js";
+import type { CommandIntent } from "../../application/commands/contracts.js";
+import type { CommandDispatcher } from "../../application/commands/dispatcher.js";
 import type { RuntimeCommandUseCases } from "../../application/runtime/command-use-case.js";
+import type { LockLiveness, LockRecord } from "../../core.js";
 import type { Locale } from "../../i18n/index.js";
 import {
-  approvalChangeDataPage,
   approvalDetailDataPage,
-  approvalListDataPage,
+  type ApprovalScreenPresentation,
 } from "../data/approval.js";
-import {
-  lockClearDataPage,
-  lockClearStaleDataPage,
-  lockDetailDataPage,
-  lockListDataPage,
-} from "../data/lock.js";
-import {
-  runArtifactsDataPage,
-  runDetailDataPage,
-  runListDataPage,
-  runLogDataPage,
-} from "../data/run.js";
-import { brief, fullHelp } from "../help-renderer.js";
+import { lockDetailDataPage } from "../data/lock.js";
+import { outcomeDataPage } from "../data/outcome-page.js";
+import { renderDataPage } from "../output/data-page-renderer.js";
 import type { Flags } from "../parser.js";
-import { write, writeDataPage } from "../output-renderer.js";
-import type { PresentationView } from "../presentation/page.js";
 
 interface RuntimeCommandContext {
-  parts: string[];
-  flags: Flags;
-  commandFlags: Json;
-  locale: Locale;
-  color: boolean;
-  presentationView: PresentationView;
-  runtimeCommands: RuntimeCommandUseCases;
-  approvalPresentation?: {
-    projectId?: string;
-    projectName?: string;
-  };
-  confirmApproval: (input: {
+  readonly flags: Flags;
+  readonly intent: CommandIntent;
+  readonly dispatcher: CommandDispatcher;
+  readonly locale: Locale;
+  readonly color: boolean;
+  readonly runtimeCommands: RuntimeCommandUseCases;
+  readonly approvalPresentation?: ApprovalScreenPresentation;
+  readonly confirmApproval: (input: {
     approvalId: string;
     action: "approve" | "reject";
   }) => Promise<boolean>;
-  confirmLockClear?: (input: {
+  readonly confirmLockClear?: (input: {
     lockId: string;
     state: LockRecord["state"];
     liveness: LockLiveness;
   }) => Promise<boolean>;
 }
 
-export async function handleRuntimeCommand({
-  parts,
-  flags,
-  commandFlags,
-  locale,
-  color,
-  presentationView,
-  runtimeCommands,
-  approvalPresentation,
-  confirmApproval,
-  confirmLockClear,
-}: RuntimeCommandContext): Promise<boolean> {
-  if (parts[0] === "run" && parts[1] === "list") {
-    if (parts.length !== 2)
-      fail("USAGE_ERROR", 2, "run list takes no arguments.");
-    const result = (
-      await runtimeCommands.execute({
-        action: "runs.list",
-        status: commandFlags.status as Json | undefined,
-        limit: commandFlags.limit as Json | undefined,
-      })
-    ).data as unknown as { runs: readonly { id: string; manifest?: Json }[] };
-    writeDataPage({
-      page: runListDataPage(result),
-      flags,
-      locale,
-      view: presentationView,
-      color,
-    });
-    return true;
-  }
-  if (parts[0] === "run" && parts[1] === "prune") {
-    if (parts.length !== 2)
-      fail("USAGE_ERROR", 2, "run prune takes no arguments.");
-    write(
-      (
-        await runtimeCommands.execute({
-          action: "runs.prune",
-          olderThan: commandFlags["older-than"] as Json | undefined,
-          keep: commandFlags.keep as Json | undefined,
-          dangerouslyRemoveAllRuns:
-            commandFlags["dangerously-remove-all-runs"] === true,
-        })
-      ).data,
-      flags,
-    );
-    return true;
-  }
-  if (parts[0] === "run") {
-    if (parts.length === 1) {
-      write(fullHelp(["run"]), flags, brief("run"));
-      return true;
-    }
-    if (!parts[1]) fail("USAGE_ERROR", 2, "run requires an identifier.");
-    if (parts.length === 2) {
-      write(
-        fullHelp(["run"]),
-        flags,
-        "benchpilot run <run-id> — Commands: show, logs, artifacts\n",
-      );
-      return true;
-    }
-    if (parts[2] === "show") {
-      const result = (
-        await runtimeCommands.execute({ action: "run.show", id: parts[1] })
-      ).data as unknown as { manifest?: Json; result?: Json };
-      writeDataPage({
-        page: runDetailDataPage(result),
-        flags,
-        locale,
-        view: presentationView,
-        color,
-      });
-    } else if (parts[2] === "logs") {
-      const result = (
-        await runtimeCommands.execute({ action: "run.logs", id: parts[1] })
-      ).data as { runId: string; log: string };
-      writeDataPage({
-        page: runLogDataPage(result),
-        flags,
-        locale,
-        view: presentationView,
-        color,
-      });
-    } else if (parts[2] === "artifacts") {
-      const result = (
-        await runtimeCommands.execute({
-          action: "run.artifacts",
-          id: parts[1],
-        })
-      ).data as { runId: string; artifacts: readonly string[] };
-      writeDataPage({
-        page: runArtifactsDataPage(result),
-        flags,
-        locale,
-        view: presentationView,
-        color,
-      });
-    } else fail("USAGE_ERROR", 2, "Unknown run command.");
-    return true;
-  }
-  if (parts[0] === "lock" && parts[1] === "list") {
-    if (parts.length !== 2)
-      fail("USAGE_ERROR", 2, "lock list takes no arguments.");
-    const result = (
-      await runtimeCommands.execute({
-        action: "locks.list",
-      })
-    ).data as unknown as {
-      locks: (LockRecord & { liveness: LockLiveness })[];
-      corrupt: { lockId: string; directory: string; entries: string[] }[];
-    };
-    writeDataPage({
-      page: lockListDataPage(result),
-      flags,
-      locale,
-      view: presentationView,
-      color,
-    });
-    return true;
-  }
-  if (parts[0] === "lock" && parts[1] === "clear-stale") {
-    if (parts.length !== 2)
-      fail("USAGE_ERROR", 2, "lock clear-stale takes no arguments.");
-    const result = (
-      await runtimeCommands.execute({
-        action: "locks.clear-stale",
-      })
-    ).data as { cleared: string[] };
-    writeDataPage({
-      page: lockClearStaleDataPage(result.cleared),
-      flags,
-      locale,
-      view: presentationView,
-      color,
-    });
-    return true;
-  }
-  if (parts[0] === "lock") {
-    if (parts.length === 1) {
-      write(fullHelp(["lock"]), flags, brief("lock"));
-      return true;
-    }
-    if (!parts[1]) fail("USAGE_ERROR", 2, "lock requires an identifier.");
-    if (parts.length === 2) {
-      write(
-        fullHelp(["lock"]),
-        flags,
-        "benchpilot lock <lock-id> — Commands: show, clear\n",
-      );
-      return true;
-    }
-    if (parts[2] === "show" || parts[2] === "inspect") {
-      const record = (
-        await runtimeCommands.execute({
+/** Executes the three administrative recipes that require a human confirmation. */
+export async function handleRuntimeCommand(
+  context: RuntimeCommandContext,
+): Promise<boolean> {
+  const { intent } = context;
+  if (intent.commandId === "lock.clear") {
+    const lockId = String(intent.input.lock);
+    let clearActive = intent.options["dangerously-clear-active-lock"] === true;
+    let clearQuarantined =
+      intent.options["dangerously-clear-quarantined-lock"] === true;
+    if (!clearActive && !clearQuarantined) {
+      const inspected = (
+        await context.runtimeCommands.execute({
           action: "lock.show",
-          id: parts[1],
+          id: lockId,
         })
       ).data as unknown as LockRecord & { liveness: LockLiveness };
-      writeDataPage({
-        page: lockDetailDataPage(record),
-        flags,
-        locale,
-        view: presentationView,
-        color,
-      });
-    } else if (parts[2] === "clear") {
-      let dangerouslyClearActiveLock = Boolean(
-        commandFlags["dangerously-clear-active-lock"],
-      );
-      let dangerouslyClearQuarantinedLock = Boolean(
-        commandFlags["dangerously-clear-quarantined-lock"],
-      );
-      if (!dangerouslyClearActiveLock && !dangerouslyClearQuarantinedLock) {
-        const inspected = (
-          await runtimeCommands.execute({
-            action: "lock.show",
-            id: parts[1],
-          })
-        ).data as unknown as LockRecord & { liveness: LockLiveness };
-        const needsConfirmation =
+      const needsConfirmation =
+        inspected.state === "quarantined" ||
+        inspected.state === "quarantine-failed" ||
+        inspected.liveness !== "stale";
+      if (needsConfirmation && context.confirmLockClear) {
+        renderDataPage({
+          command: { id: "lock.inspect", path: ["lock", lockId, "inspect"] },
+          page: lockDetailDataPage(inspected),
+          flags: context.flags,
+          locale: context.locale,
+          color: context.color,
+        });
+        if (
+          !(await context.confirmLockClear({
+            lockId,
+            state: inspected.state,
+            liveness: inspected.liveness,
+          }))
+        )
+          return true;
+        clearQuarantined =
           inspected.state === "quarantined" ||
-          inspected.state === "quarantine-failed" ||
-          inspected.liveness !== "stale";
-        if (needsConfirmation && confirmLockClear) {
-          writeDataPage({
-            page: lockDetailDataPage(inspected),
-            flags,
-            locale,
-            view: presentationView,
-            color,
-          });
-          if (
-            !(await confirmLockClear({
-              lockId: parts[1],
-              state: inspected.state,
-              liveness: inspected.liveness,
-            }))
-          )
-            return true;
-          dangerouslyClearQuarantinedLock =
-            inspected.state === "quarantined" ||
-            inspected.state === "quarantine-failed";
-          dangerouslyClearActiveLock = !dangerouslyClearQuarantinedLock;
-        }
+          inspected.state === "quarantine-failed";
+        clearActive = !clearQuarantined;
       }
-      const result = (
-        await runtimeCommands.execute({
-          action: "lock.clear",
-          id: parts[1],
-          dangerouslyClearActiveLock,
-          dangerouslyClearQuarantinedLock,
-        })
-      ).data as unknown as { cleared: LockRecord };
-      writeDataPage({
-        page: lockClearDataPage(result.cleared),
-        flags,
-        locale,
-        view: presentationView,
-        color,
-      });
-    } else fail("USAGE_ERROR", 2, "Unknown lock command.");
-    return true;
-  }
-  if (parts[0] === "approval" && parts[1] === "list") {
-    if (parts.length !== 2)
-      fail("USAGE_ERROR", 2, "approval list takes no arguments.");
-    const approvals = (
-      await runtimeCommands.execute({ action: "approvals.list" })
-    ).data as unknown as {
-      approvals: import("../../core.js").ApprovalRecord[];
+    }
+    const nextIntent: CommandIntent = {
+      ...intent,
+      options: {
+        ...intent.options,
+        "dangerously-clear-active-lock": clearActive,
+        "dangerously-clear-quarantined-lock": clearQuarantined,
+      },
     };
-    writeDataPage({
-      page: approvalListDataPage(approvals.approvals),
-      flags,
-      locale,
-      view: presentationView,
-      color,
+    const outcome = await context.dispatcher.dispatch(nextIntent);
+    renderDataPage({
+      command: { id: intent.commandId, path: [...intent.path] },
+      page: outcomeDataPage(nextIntent, outcome),
+      flags: context.flags,
+      locale: context.locale,
+      color: context.color,
     });
     return true;
   }
-  if (parts[0] === "approval") {
-    if (parts.length === 1) {
-      write(fullHelp(["approval"]), flags, brief("approval"));
-      return true;
-    }
-    if (!parts[1]) fail("USAGE_ERROR", 2, "approval requires an identifier.");
-    if (parts.length === 2) {
-      write(
-        fullHelp(["approval"]),
-        flags,
-        "benchpilot approval <approval-id> — Commands: inspect, approve, reject\n",
-      );
-      return true;
-    }
+
+  if (
+    intent.commandId === "approval.approve" ||
+    intent.commandId === "approval.reject"
+  ) {
+    const approvalId = String(intent.input.approval);
+    const action =
+      intent.commandId === "approval.approve" ? "approve" : "reject";
     const approval = (
-      await runtimeCommands.execute({
+      await context.runtimeCommands.execute({
         action: "approval.inspect",
-        id: parts[1],
+        id: approvalId,
       })
-    ).data as unknown as import("../../core.js").ApprovalRecord;
-    const inspect = () =>
-      writeDataPage({
-        page: approvalDetailDataPage(approval, approvalPresentation),
-        flags,
-        locale,
-        view: presentationView,
-        color,
-      });
-    if (parts[2] === "inspect") inspect();
-    else if (parts[2] === "reject") {
-      inspect();
-      if (!(await confirmApproval({ approvalId: parts[1], action: "reject" })))
-        return true;
-      const result = (
-        await runtimeCommands.execute({
-          action: "approval.reject",
-          id: parts[1],
-        })
-      ).data as { id: string; status: "rejected" };
-      writeDataPage({
-        page: approvalChangeDataPage(result),
-        flags,
-        locale,
-        view: presentationView,
-        color,
-      });
-    } else if (parts[2] === "approve") {
-      inspect();
-      if (!(await confirmApproval({ approvalId: parts[1], action: "approve" })))
-        return true;
-      const result = (
-        await runtimeCommands.execute({
-          action: "approval.approve",
-          id: parts[1],
-        })
-      ).data as { id: string; status: "approved" };
-      writeDataPage({
-        page: approvalChangeDataPage(result),
-        flags,
-        locale,
-        view: presentationView,
-        color,
-      });
-    } else fail("USAGE_ERROR", 2, "Unknown approval command.");
+    ).data as unknown as Parameters<typeof approvalDetailDataPage>[0];
+    renderDataPage({
+      command: {
+        id: "approval.inspect",
+        path: ["approval", approvalId, "inspect"],
+      },
+      page: approvalDetailDataPage(approval, context.approvalPresentation),
+      flags: context.flags,
+      locale: context.locale,
+      color: context.color,
+    });
+    if (!(await context.confirmApproval({ approvalId, action }))) return true;
+    const outcome = await context.dispatcher.dispatch(intent);
+    renderDataPage({
+      command: { id: intent.commandId, path: [...intent.path] },
+      page: outcomeDataPage(intent, outcome),
+      flags: context.flags,
+      locale: context.locale,
+      color: context.color,
+    });
     return true;
   }
   return false;

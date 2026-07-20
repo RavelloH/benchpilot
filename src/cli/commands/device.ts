@@ -1,4 +1,4 @@
-import type { Json } from "../../core.js";
+import type { Capability, Json } from "../../core.js";
 import type { DeviceUseCases } from "../../application/devices/use-case.js";
 import type { CommandCatalog } from "../../application/commands/catalog.js";
 import {
@@ -8,7 +8,6 @@ import {
 } from "../option-parser.js";
 import type { Flags } from "../parser.js";
 import { write } from "../output-renderer.js";
-import { t, type Locale } from "../../i18n/index.js";
 
 interface DeviceCommandContext {
   parts: string[];
@@ -16,7 +15,11 @@ interface DeviceCommandContext {
   rawOptions: RawOption[];
   devices: DeviceUseCases;
   catalog: CommandCatalog;
-  locale: Locale;
+  localizeCapabilities: (
+    adapterId: string,
+    capabilities: readonly Capability[],
+  ) => Capability[];
+  renderHelp: (path: readonly string[], includeAll?: boolean) => Promise<void>;
   confirmSafety?: () => Promise<boolean>;
   confirmApproval?: () => Promise<boolean>;
   requiresApproval?: (
@@ -30,57 +33,24 @@ export async function handleDeviceCommand({
   rawOptions,
   devices,
   catalog,
-  locale,
+  localizeCapabilities,
+  renderHelp,
   confirmSafety,
   confirmApproval,
   requiresApproval,
 }: DeviceCommandContext): Promise<boolean> {
   if (parts[0] === "device" && parts[1]) {
-    const device = await devices.describe(parts[1], locale);
     if (parts.length === 2) {
-      const help = {
-        schema: "benchpilot.help" as const,
-        version: 2 as const,
-        path: parts,
-        summary: device.adapter.summary,
-        description: device.adapter.summary,
-        options: [],
-        inputSchema: { type: "object" },
-        outputSchema: { type: "object" },
-        safety: { mode: "normal" },
-      };
-      write(
-        help,
-        flags,
-        `benchpilot device ${parts[1]} — ${device.adapter.summary}\n\n${t(locale, "help.commands")}:\n${device.capabilities
-          .map((x) => `  ${x.id.padEnd(17)} ${x.summary}`)
-          .join("\n")}\n`,
-      );
+      await renderHelp(parts, true);
       return true;
     }
     const capability = parts[2];
-    const { capability: definition } = await devices.capability(
-      parts[1],
-      capability,
-      locale,
-    );
+    const resolved = await devices.capability(parts[1], capability);
+    const definition = localizeCapabilities(resolved.adapter.id, [
+      resolved.capability,
+    ])[0]!;
     if (flags.help) {
-      const help = {
-        schema: "benchpilot.help",
-        version: 2,
-        path: parts,
-        summary: definition.summary,
-        description: definition.description || definition.summary,
-        options: (definition.options || []).filter(
-          (option) => option.hidden !== true,
-        ),
-        inputSchema: definition.inputSchema?.describe() || { type: "object" },
-        outputSchema: definition.outputSchema?.describe() || {
-          type: "object",
-        },
-        safety: definition.safety,
-      };
-      write(help, flags, `${definition.id} — ${definition.summary}\n`);
+      await renderHelp(parts, true);
       return true;
     }
     await catalog.executable(["device", parts[1], capability]);
@@ -92,14 +62,13 @@ export async function handleDeviceCommand({
     );
     const interactiveExecution =
       definition.safety.mode !== "normal" && confirmSafety !== undefined;
+    let safetyConfirmed = definition.safety.mode === "normal";
     if (definition.safety.mode !== "normal" && definition.safety.flag) {
       if (confirmSafety) {
         if (!(await confirmSafety())) return true;
+        safetyConfirmed = true;
       } else
-        flags[definition.safety.flag] = optionEnabled(
-          rawOptions,
-          definition.safety.flag,
-        );
+        safetyConfirmed = optionEnabled(rawOptions, definition.safety.flag);
     }
     const approvalRequired =
       requiresApproval?.(definition.safety.mode) === true;
@@ -109,6 +78,7 @@ export async function handleDeviceCommand({
       device: parts[1],
       capability,
       capabilityInput: input,
+      safetyConfirmed,
       ...(interactiveExecution
         ? { executionMode: "interactive" as const }
         : {}),

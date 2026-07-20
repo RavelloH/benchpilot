@@ -69,7 +69,68 @@ export const catalogs = {
       "This command requires interactive input and cannot be used with machine output.",
     "cli.interaction.terminal":
       "This command requires an interactive terminal.",
-    "command.upgrade": "Check for and upgrade the BenchPilot CLI",
+    "command.adapter.doctor": "Run adapter diagnostics",
+    "command.adapter.list": "List installed adapters",
+    "command.adapter.resource": "Select an installed adapter",
+    "command.adapter.root": "Inspect installed device adapters",
+    "command.adapter.show": "Show adapter details",
+    "command.approval.approve": "Approve a pending request",
+    "command.approval.inspect": "Inspect an approval request",
+    "command.approval.list": "List approval requests",
+    "command.approval.reject": "Reject a pending request",
+    "command.approval.resource": "Select an approval request",
+    "command.approval.root": "Inspect and handle approval requests",
+    "command.config.explain": "Explain where a configuration value comes from",
+    "command.config.get": "Read a configuration value",
+    "command.config.resolved": "Show the fully resolved configuration",
+    "command.config.root": "View and manage configuration",
+    "command.config.set": "Write a configuration value",
+    "command.config.unset": "Remove a configuration value",
+    "command.config.validate": "Validate the current configuration",
+    "command.device.add": "Add a discovered device to the project",
+    "command.device.execute": "Execute a device capability",
+    "command.device.list": "List configured devices",
+    "command.device.remove": "Remove a configured device",
+    "command.device.resource": "Select a configured device",
+    "command.device.root": "Discover, configure, and operate devices",
+    "command.device.scan": "Passively discover devices",
+    "command.doctor": "Check the local environment and installed adapters",
+    "command.help": "Show detailed command help",
+    "command.home": "Open the interactive command menu",
+    "command.init": "Initialize a BenchPilot project",
+    "command.language.get": "Show the current CLI language",
+    "command.language.list": "List supported languages",
+    "command.language.root": "View or set the CLI language",
+    "command.language.set": "Set the global CLI language",
+    "command.lock.clear": "Clear a resource lock",
+    "command.lock.clearStale": "Clear stale resource locks",
+    "command.lock.inspect": "Inspect lock liveness and ownership",
+    "command.lock.list": "List resource locks",
+    "command.lock.resource": "Select a resource lock",
+    "command.lock.root": "Inspect physical resource locks",
+    "command.lock.show": "Show lock details",
+    "command.run.artifacts": "List operation artifacts",
+    "command.run.list": "List operation records",
+    "command.run.logs": "Show operation logs",
+    "command.run.prune": "Remove old operation records",
+    "command.run.resource": "Select an operation record",
+    "command.run.root": "Inspect operation records",
+    "command.run.show": "Show operation record details",
+    "command.system.create": "Create a multi-device system",
+    "command.system.delete": "Delete a multi-device system",
+    "command.system.execute": "Execute a system capability",
+    "command.system.list": "List configured systems",
+    "command.system.member.add": "Add a device to a system",
+    "command.system.member.remove": "Remove a device from a system",
+    "command.system.member.root": "Manage system members",
+    "command.system.resource": "Select a configured system",
+    "command.system.root": "Configure and operate multi-device systems",
+    "command.system.show": "Show system details",
+    "command.upgrade.check": "Check for available upgrades",
+    "command.upgrade.latest": "Upgrade to the latest published version",
+    "command.upgrade.root": "Check for and upgrade the BenchPilot CLI",
+    "command.upgrade.version": "Upgrade to a selected published version",
+    "command.version": "Show BenchPilot and runtime versions",
     "configCatalog.approvalLevel.bypass.description":
       "Do not request approval for automated operations.",
     "configCatalog.approvalLevel.bypass.name": "Bypass approvals",
@@ -165,10 +226,14 @@ export const catalogs = {
     "error.reason.approvalChallengeUnavailable":
       "The approval does not contain a physical device identity challenge.",
     "error.reason.approvalExpired": "This approval has expired.",
+    "error.reason.approvalGuardBusy":
+      "The approval state is being updated by another process.",
     "error.reason.approvalNotFound": "The requested approval was not found.",
     "error.reason.approvalStateInvalid": "This approval is not pending.",
     "error.reason.cleanupFailed": "A critical cleanup step failed.",
     "error.reason.cleanupTimeout": "A cleanup step timed out.",
+    "error.reason.commandUnavailable":
+      "The requested command is currently unavailable.",
     "error.reason.configExists":
       "The configuration file already exists and cannot be overwritten.",
     "error.reason.configKeyNotFound":
@@ -177,28 +242,46 @@ export const catalogs = {
       "This configuration item cannot be saved in the requested scope.",
     "error.reason.dangerousConfirmationRequired":
       "This operation is missing its required explicit safety confirmation option.",
+    "error.reason.dangerousEffectMarkerMissing":
+      "A dangerous operation completed without marking when its physical effect began.",
     "error.reason.deviceBusy":
       "The target device is currently held by another operation.",
     "error.reason.deviceIdentityUnavailable":
       "A stable physical device identity is required before locking.",
     "error.reason.deviceNotFound": "The requested device was not found.",
+    "error.reason.deviceProbeCapabilityRequired":
+      "Active device probing must run through a declared capability.",
     "error.reason.deviceQuarantined":
       "The device is quarantined and cannot be operated.",
     "error.reason.duplicateAdapter":
       "An adapter with this identifier is already registered.",
+    "error.reason.fileGuardBusy":
+      "The persisted state is being updated by another process.",
     "error.reason.humanApprovalRequired":
       "Human approval is required before this operation can run.",
+    "error.reason.initTargetExists":
+      "Initialization would overwrite an existing project file.",
     "error.reason.interactionCancelled": "The interaction was cancelled.",
     "error.reason.interactiveMachineOutputUnsupported":
       "Interactive mode cannot be used with machine output.",
     "error.reason.interactiveTerminalRequired":
       "This operation requires an interactive terminal.",
     "error.reason.internalError": "An unexpected internal error occurred.",
+    "error.reason.invalidAdapterConfig":
+      "The adapter configuration is invalid.",
     "error.reason.invalidAdapterDefinition":
       "The adapter definition is invalid or incompatible.",
+    "error.reason.invalidAdapterSelection":
+      "The enabled adapter selection is invalid.",
     "error.reason.invalidApprovalId": "The approval identifier is invalid.",
+    "error.reason.invalidApprovalLevel":
+      "The configured approval level is invalid.",
     "error.reason.invalidArtifact":
       "The artifact is invalid, unavailable, or outside the permitted run directory.",
+    "error.reason.invalidCapabilityInput":
+      "The capability input does not match its declared schema.",
+    "error.reason.invalidCapabilityOutput":
+      "The capability output does not match its declared schema.",
     "error.reason.invalidConfig": "The configuration is invalid.",
     "error.reason.invalidDeviceConfig": "The device configuration is invalid.",
     "error.reason.invalidDuration": "The duration value is invalid.",
@@ -213,14 +296,24 @@ export const catalogs = {
     "error.reason.invalidToml": "The configuration file is not valid TOML.",
     "error.reason.lockCorrupt":
       "The physical resource lock record is corrupted.",
+    "error.reason.lockGuardBusy":
+      "The lock state is being updated by another process.",
     "error.reason.lockNotFound":
       "The requested physical resource lock was not found.",
     "error.reason.lockOwnershipLost": "Resource lock ownership was lost.",
     "error.reason.lockQuarantined": "The resource lock is quarantined.",
+    "error.reason.lockRecoveryNotFound":
+      "The requested lock recovery record was not found.",
     "error.reason.operationAborted": "The operation was aborted.",
+    "error.reason.operationSessionStateInvalid":
+      "The operation lifecycle entered an invalid state.",
     "error.reason.operationTimeout": "The operation timed out.",
+    "error.reason.processCleanupTimeout":
+      "The child process could not be terminated before cleanup timed out.",
     "error.reason.projectNotFound":
       "A BenchPilot project is required for project state commands.",
+    "error.reason.quarantineFailed":
+      "The physical resource could not be safely quarantined.",
     "error.reason.systemCapabilityUnavailable":
       "This operation is not safely available on every system member.",
     "error.reason.systemMemberExists":
@@ -231,8 +324,12 @@ export const catalogs = {
       "A multi-device system must retain at least one member.",
     "error.reason.systemNotFound":
       "The requested multi-device system was not found.",
+    "error.reason.systemOperationFailed":
+      "One or more system members failed the requested operation.",
     "error.reason.unknownAdapter": "The requested adapter was not found.",
     "error.reason.unknownCommand": "The requested command was not found.",
+    "error.reason.unsupportedAdapterApiVersion":
+      "The adapter requires an unsupported API version.",
     "error.reason.unsupportedCapability":
       "The requested capability is not supported by this device.",
     "error.reason.unsupportedConfigVersion":
@@ -254,54 +351,60 @@ export const catalogs = {
     "error.unknown": "Command failed: {message}",
     "error.upgrade": "Upgrade error: {message}",
     "error.usage": "Usage error: {message}",
+    "field.adapterId": "Adapter identifier",
+    "field.agent": "Require non-interactive execution",
+    "field.all": "Include all command details",
+    "field.approvalId": "Approval request identifier",
+    "field.capability": "Capability identifier",
+    "field.clearActiveLock": "Confirm clearing an active or unknown lock",
+    "field.clearQuarantinedLock": "Confirm clearing a quarantined lock",
+    "field.color": "Enable or disable terminal colors",
+    "field.commandPath": "Command path",
+    "field.configKey": "Configuration key",
+    "field.configPath": "Use an explicit configuration file",
+    "field.configValue": "Configuration value",
+    "field.deviceInstance": "Configured device instance",
+    "field.deviceName": "Configured device name",
+    "field.devices": "System member devices",
+    "field.dryRun": "Plan without changing physical or persisted state",
+    "field.help": "Show help for the resolved command",
+    "field.identity": "Stable device identity",
+    "field.json": "Output one JSON result",
+    "field.jsonl": "Stream JSON Lines events",
+    "field.keep": "Keep the newest records",
+    "field.limit": "Limit the number of records",
+    "field.locale": "CLI locale",
+    "field.lockId": "Resource lock identifier",
+    "field.olderThan": "Remove records older than this duration",
+    "field.origin": "Include the value origin",
+    "field.port": "Device port",
+    "field.projectName": "Project name",
+    "field.quiet": "Suppress nonessential screen output",
+    "field.removeAllRuns": "Remove every operation record",
+    "field.runId": "Operation record identifier",
+    "field.save": "Save the diagnostic report",
+    "field.scopeGlobal": "Use global configuration",
+    "field.scopeLocal": "Use project-local configuration",
+    "field.scopeProject": "Use project configuration",
+    "field.session": "Attach a caller session identifier",
+    "field.status": "Filter by operation status",
+    "field.systemName": "System identifier",
+    "field.targetVersion": "Target BenchPilot version",
+    "field.timeout": "Override the operation timeout",
+    "field.verbose": "Show public diagnostics",
+    "field.versionFlag": "Show version information",
     "help.arguments": "ARGUMENTS",
-    "help.argumentsText": "See command path.",
-    "help.command.adapter":
-      "View adapter details or run environment diagnostics",
-    "help.command.add": "Add a device",
-    "help.command.approval": "View, approve, or reject an approval request",
-    "help.command.clear-stale": "Remove stale locks",
-    "help.command.config": "Read, explain, validate and edit configuration",
-    "help.command.create": "Create a multi-device system",
-    "help.command.delete": "Delete a multi-device system",
-    "help.command.device":
-      "Discover, manage, and control individual devices (list, scan, deploy...)",
     "help.command.doctor":
       "Check the local environment, dependencies, and external tools",
-    "help.command.explain": "Explain value provenance",
-    "help.command.get": "Get a resolved configuration value",
     "help.command.help": "Show detailed help for a command",
     "help.command.home": "Open the guided interactive interface",
     "help.command.init":
       "Initialize a BenchPilot project in the current directory",
-    "help.command.language": "View or set the global CLI language",
-    "help.command.list": "List resources",
-    "help.command.lock": "View or clear a physical-resource lock",
-    "help.command.member": "Add or remove a system member",
-    "help.command.prune": "Remove old run records",
-    "help.command.remove": "Remove a device",
-    "help.command.resolved": "Show resolved configuration",
-    "help.command.run":
-      "View an operation record's details, logs, and artifacts",
-    "help.command.scan": "Discover registered adapter devices",
-    "help.command.set": "Set a configuration value",
-    "help.command.system":
-      "Manage and control multi-device systems (list, deploy...)",
-    "help.command.unset": "Unset a configuration value",
-    "help.command.validate": "Validate configuration",
     "help.command.version": "Show BenchPilot and runtime version information",
     "help.commands": "Commands",
-    "help.configuration": "CONFIGURATION",
-    "help.configurationText":
-      "global, project, local, explicit file and BENCHPILOT_* variables are merged.",
     "help.description": "DESCRIPTION",
-    "help.descriptionText":
-      "Command definitions drive parsing, help, validation, safety and execution.",
     "help.errorKinds": "ERROR KINDS",
     "help.examples": "EXAMPLES",
-    "help.exitCodes": "EXIT CODES",
-    "help.exitCodesText":
-      "0 success; 2 usage; 3 configuration/resource; 4 lock; 5 operation; 6 timeout; 7 safety; 8 internal.",
     "help.globalOptions": "Global options",
     "help.group.adapter": "Inspect an adapter.",
     "help.group.approval": "Inspect or resolve one human approval request.",
@@ -309,26 +412,21 @@ export const catalogs = {
       "Read, explain, validate and safely edit configuration.",
     "help.group.device":
       "Operate a configured device through its capabilities.",
+    "help.group.help":
+      "Inspect command usage, arguments, options, safety, and output contracts.",
     "help.group.home": "Open the interactive command home.",
     "help.group.language": "View or set the global CLI language.",
     "help.group.lock": "Inspect or clear one lock.",
     "help.group.root": "Agent-first device lifecycle CLI. Made by RavelloH.",
     "help.group.run": "Inspect a recorded operation.",
     "help.group.system": "Orchestrate a configured system.",
+    "help.group.upgrade":
+      "Check available BenchPilot versions and install a selected release.",
     "help.group.version": "Show version information.",
-    "help.more": "Run '{command} --help' for complete help.",
-    "help.name": "NAME",
     "help.options": "OPTIONS",
     "help.output": "OUTPUT",
-    "help.outputText":
-      "Human summary by default; --json result or --jsonl structured events.",
     "help.safety": "SAFETY",
-    "help.seeAlso": "SEE ALSO",
-    "help.synopsis": "SYNOPSIS",
     "help.usage": "Usage",
-    "help.workflow": "WORKFLOW",
-    "help.workflowText":
-      "Configuration → adapter → capability → operation runner → run record.",
     "init.adapters": "Select adapters to enable",
     "init.applied": "Applied existing BenchPilot project configuration.",
     "init.done": "Initialized BenchPilot project.",
@@ -337,6 +435,12 @@ export const catalogs = {
     "init.project": "Project",
     "init.projectId": "Project ID",
     "init.projectName": "Project name",
+    "languageResult.current.title": "Current CLI language",
+    "languageResult.list.empty": "No CLI languages are available.",
+    "languageResult.list.title": "Supported CLI languages",
+    "languageResult.locale": "Locale",
+    "languageResult.name": "Language",
+    "languageResult.updated.title": "CLI language updated",
     "lock.clear.confirmActive":
       "Clear this active lock? This may interrupt its holder.",
     "lock.clear.confirmQuarantined":
@@ -405,7 +509,6 @@ export const catalogs = {
     "menu.exit": "Exit",
     "menu.exitConfirm": "Press Esc again to exit",
     "menu.field.deviceName": "device name",
-    "menu.field.value": "configuration value",
     "menu.invalid": "Choose one of the listed options.",
     "menu.keysHelp": "↑↓ navigate · Enter select",
     "menu.lock.listAll": "List all locks",
@@ -454,19 +557,18 @@ export const catalogs = {
     "run.list.none": "No operation records are available.",
     "run.list.status": "Status",
     "run.list.title": "Operation records",
+    "run.prune.none": "No operation records were removed.",
+    "run.prune.title": "Removed operation records",
     "run.status.aborted": "Aborted",
     "run.status.failed": "Failed",
     "run.status.running": "Running",
     "run.status.succeeded": "Succeeded",
     "run.status.unknown": "Unknown",
     "screen.root.adapter": "Inspect, manage, and diagnose device adapters",
-    "screen.root.alias": "View and manage CLI command aliases",
     "screen.root.approval": "Inspect and handle human approval requests",
-    "screen.root.commonOptions": "Global options",
     "screen.root.config": "View and manage global and project configuration",
     "screen.root.configure": "Environment and integration",
     "screen.root.device": "Discover, configure, and operate devices",
-    "screen.root.docs": "Open BenchPilot documentation for users",
     "screen.root.execute": "Resources and orchestration",
     "screen.root.getStarted": "Get started",
     "screen.root.help": "Help",
@@ -484,12 +586,9 @@ export const catalogs = {
     "screen.root.repository":
       "Repository: https://github.com/RavelloH/benchpilot",
     "screen.root.run": "View operation records, execution logs, and artifacts",
-    "screen.root.setup": "Set up the project and local environment",
-    "screen.root.skill": "View skills for agents to invoke BenchPilot",
     "screen.root.system":
       "Configure, orchestrate, and operate multi-device systems",
     "screen.root.upgrade": "Check for and upgrade the BenchPilot CLI",
-    "screen.root.workflow": "Inspect, manage, and run automation workflows",
     "system.detail.capabilities": "Available operations",
     "system.detail.capabilitiesEmpty":
       "No compatible operations are available.",
@@ -504,6 +603,16 @@ export const catalogs = {
     "system.operation.success": "Completed",
     "system.operation.system": "System",
     "system.operation.title": "System operation",
+    "upgradeResult.check.title": "BenchPilot update",
+    "upgradeResult.currentVersion": "Current version",
+    "upgradeResult.latestVersion": "Latest version",
+    "upgradeResult.packageManager": "Package manager",
+    "upgradeResult.recommendedVersion": "{version} — Latest",
+    "upgradeResult.result.title": "BenchPilot upgraded",
+    "upgradeResult.status.available": "Update available",
+    "upgradeResult.status.current": "Up to date",
+    "upgradeResult.updateStatus": "Update status",
+    "upgradeResult.version": "Version",
   },
   "zh-CN": {
     "adapterResult.doctor.title": "适配器诊断",
@@ -570,7 +679,68 @@ export const catalogs = {
     "cli.interaction.machine":
       "此命令需要交互式输入，不能与机器输出模式一起使用。",
     "cli.interaction.terminal": "此命令需要可交互的终端。",
-    "command.upgrade": "检查并升级 BenchPilot CLI",
+    "command.adapter.doctor": "运行适配器诊断",
+    "command.adapter.list": "列出已安装适配器",
+    "command.adapter.resource": "选择已安装适配器",
+    "command.adapter.root": "检查已安装的设备适配器",
+    "command.adapter.show": "显示适配器详情",
+    "command.approval.approve": "批准待处理请求",
+    "command.approval.inspect": "检查审批请求",
+    "command.approval.list": "列出审批请求",
+    "command.approval.reject": "拒绝待处理请求",
+    "command.approval.resource": "选择审批请求",
+    "command.approval.root": "检查和处理审批请求",
+    "command.config.explain": "说明配置值的来源",
+    "command.config.get": "读取配置值",
+    "command.config.resolved": "显示完整的最终配置",
+    "command.config.root": "查看和管理配置",
+    "command.config.set": "写入配置值",
+    "command.config.unset": "删除配置值",
+    "command.config.validate": "校验当前配置",
+    "command.device.add": "将发现的设备加入项目",
+    "command.device.execute": "执行设备能力",
+    "command.device.list": "列出已配置设备",
+    "command.device.remove": "删除已配置设备",
+    "command.device.resource": "选择已配置设备",
+    "command.device.root": "发现、配置和操作设备",
+    "command.device.scan": "被动发现设备",
+    "command.doctor": "检查本地环境和已安装适配器",
+    "command.help": "显示详细命令帮助",
+    "command.home": "打开交互式命令菜单",
+    "command.init": "初始化 BenchPilot 项目",
+    "command.language.get": "显示当前 CLI 语言",
+    "command.language.list": "列出支持的语言",
+    "command.language.root": "查看或设置 CLI 语言",
+    "command.language.set": "设置全局 CLI 语言",
+    "command.lock.clear": "清除资源锁",
+    "command.lock.clearStale": "清理过期资源锁",
+    "command.lock.inspect": "检查锁存活状态和所有权",
+    "command.lock.list": "列出资源锁",
+    "command.lock.resource": "选择资源锁",
+    "command.lock.root": "检查物理资源锁",
+    "command.lock.show": "显示锁详情",
+    "command.run.artifacts": "列出操作产物",
+    "command.run.list": "列出操作记录",
+    "command.run.logs": "显示操作日志",
+    "command.run.prune": "删除旧操作记录",
+    "command.run.resource": "选择操作记录",
+    "command.run.root": "检查操作记录",
+    "command.run.show": "显示操作记录详情",
+    "command.system.create": "创建多设备系统",
+    "command.system.delete": "删除多设备系统",
+    "command.system.execute": "执行系统能力",
+    "command.system.list": "列出已配置系统",
+    "command.system.member.add": "向系统添加设备",
+    "command.system.member.remove": "从系统移除设备",
+    "command.system.member.root": "管理系统成员",
+    "command.system.resource": "选择已配置系统",
+    "command.system.root": "配置和操作多设备系统",
+    "command.system.show": "显示系统详情",
+    "command.upgrade.check": "检查可用升级",
+    "command.upgrade.latest": "升级到最新发布版本",
+    "command.upgrade.root": "检查并升级 BenchPilot CLI",
+    "command.upgrade.version": "升级到指定发布版本",
+    "command.version": "显示 BenchPilot 和运行时版本",
     "configCatalog.approvalLevel.bypass.description":
       "自动化操作不再请求审批。",
     "configCatalog.approvalLevel.bypass.name": "绕过审批",
@@ -659,31 +829,44 @@ export const catalogs = {
     "error.reason.approvalChallengeUnavailable":
       "审批中没有可用于验证的物理设备标识。",
     "error.reason.approvalExpired": "该审批请求已过期。",
+    "error.reason.approvalGuardBusy": "其他进程正在更新审批状态。",
     "error.reason.approvalNotFound": "找不到指定的审批请求。",
     "error.reason.approvalStateInvalid": "该审批当前不是待审批状态。",
     "error.reason.cleanupFailed": "关键清理步骤失败。",
     "error.reason.cleanupTimeout": "清理步骤执行超时。",
+    "error.reason.commandUnavailable": "请求的命令当前不可用。",
     "error.reason.configExists": "配置文件已存在，无法覆盖。",
     "error.reason.configKeyNotFound": "找不到指定的配置项。",
     "error.reason.configScopeInvalid": "该配置项不能保存到请求的作用域。",
     "error.reason.dangerousConfirmationRequired":
       "该操作缺少所需的显式安全确认选项。",
+    "error.reason.dangerousEffectMarkerMissing":
+      "危险操作完成时没有标记物理影响开始的时点。",
     "error.reason.deviceBusy": "目标设备正在被其他操作占用。",
     "error.reason.deviceIdentityUnavailable":
       "无法取得可安全加锁的稳定物理设备标识。",
     "error.reason.deviceNotFound": "找不到指定设备。",
+    "error.reason.deviceProbeCapabilityRequired":
+      "主动设备探测必须通过声明的操作执行。",
     "error.reason.deviceQuarantined": "设备已被隔离，暂时不能执行操作。",
     "error.reason.duplicateAdapter": "已存在使用相同标识符的适配器。",
+    "error.reason.fileGuardBusy": "其他进程正在更新持久化状态。",
     "error.reason.humanApprovalRequired": "该操作需要人工审批后才能执行。",
+    "error.reason.initTargetExists": "初始化会覆盖已有的项目文件。",
     "error.reason.interactionCancelled": "交互已取消。",
     "error.reason.interactiveMachineOutputUnsupported":
       "交互模式不能与机器输出格式一起使用。",
     "error.reason.interactiveTerminalRequired": "该操作需要可交互的终端。",
     "error.reason.internalError": "发生了未预期的内部错误。",
+    "error.reason.invalidAdapterConfig": "适配器配置无效。",
     "error.reason.invalidAdapterDefinition": "适配器定义无效或不兼容。",
+    "error.reason.invalidAdapterSelection": "启用的适配器选择无效。",
     "error.reason.invalidApprovalId": "审批标识符无效。",
+    "error.reason.invalidApprovalLevel": "配置的审批级别无效。",
     "error.reason.invalidArtifact":
       "执行产物无效、不可用，或不在允许的操作记录目录中。",
+    "error.reason.invalidCapabilityInput": "操作输入不符合其声明的结构。",
+    "error.reason.invalidCapabilityOutput": "操作输出不符合其声明的结构。",
     "error.reason.invalidConfig": "配置内容无效。",
     "error.reason.invalidDeviceConfig": "设备配置无效。",
     "error.reason.invalidDuration": "时长值无效。",
@@ -694,21 +877,30 @@ export const catalogs = {
     "error.reason.invalidSystemConfig": "多设备系统配置无效。",
     "error.reason.invalidToml": "配置文件不是有效的 TOML。",
     "error.reason.lockCorrupt": "物理资源锁记录已损坏。",
+    "error.reason.lockGuardBusy": "其他进程正在更新锁状态。",
     "error.reason.lockNotFound": "找不到指定的物理资源锁。",
     "error.reason.lockOwnershipLost": "已失去资源锁的所有权。",
     "error.reason.lockQuarantined": "该资源锁已被隔离。",
+    "error.reason.lockRecoveryNotFound": "找不到指定的锁恢复记录。",
     "error.reason.operationAborted": "操作已中止。",
+    "error.reason.operationSessionStateInvalid": "操作生命周期进入了无效状态。",
     "error.reason.operationTimeout": "操作执行超时。",
+    "error.reason.processCleanupTimeout": "清理超时前无法终止子进程。",
     "error.reason.projectNotFound":
       "项目状态命令需要在 BenchPilot 项目中执行。",
+    "error.reason.quarantineFailed": "无法安全隔离该物理资源。",
     "error.reason.systemCapabilityUnavailable":
       "该操作无法在系统的所有成员上安全执行。",
     "error.reason.systemMemberExists": "指定设备已是该系统成员。",
     "error.reason.systemMemberNotFound": "指定设备不是该系统成员。",
     "error.reason.systemMemberRequired": "多设备系统至少需要保留一个成员。",
     "error.reason.systemNotFound": "找不到指定的多设备系统。",
+    "error.reason.systemOperationFailed":
+      "一个或多个系统成员执行请求的操作失败。",
     "error.reason.unknownAdapter": "找不到指定适配器。",
     "error.reason.unknownCommand": "找不到指定命令。",
+    "error.reason.unsupportedAdapterApiVersion":
+      "适配器要求的 API 版本不受支持。",
     "error.reason.unsupportedCapability": "该设备不支持指定操作。",
     "error.reason.unsupportedConfigVersion": "不支持该配置文件版本。",
     "error.reason.untranslated": "操作失败（错误代码：{kind}）。",
@@ -727,71 +919,76 @@ export const catalogs = {
     "error.unknown": "命令失败：{message}",
     "error.upgrade": "升级错误：{message}",
     "error.usage": "用法错误：{message}",
+    "field.adapterId": "适配器标识符",
+    "field.agent": "要求非交互式执行",
+    "field.all": "包含所有命令详情",
+    "field.approvalId": "审批请求标识符",
+    "field.capability": "能力标识符",
+    "field.clearActiveLock": "确认清除活动或状态未知的锁",
+    "field.clearQuarantinedLock": "确认清除隔离锁",
+    "field.color": "启用或禁用终端颜色",
+    "field.commandPath": "命令路径",
+    "field.configKey": "配置键",
+    "field.configPath": "使用显式配置文件",
+    "field.configValue": "配置值",
+    "field.deviceInstance": "已配置设备实例",
+    "field.deviceName": "配置后的设备名称",
+    "field.devices": "系统成员设备",
+    "field.dryRun": "仅规划，不修改物理或持久化状态",
+    "field.help": "显示解析后命令的帮助",
+    "field.identity": "稳定设备标识",
+    "field.json": "输出单个 JSON 结果",
+    "field.jsonl": "流式输出 JSON Lines 事件",
+    "field.keep": "保留最新记录",
+    "field.limit": "限制记录数量",
+    "field.locale": "CLI 语言",
+    "field.lockId": "资源锁标识符",
+    "field.olderThan": "删除早于指定时长的记录",
+    "field.origin": "包含配置值来源",
+    "field.port": "设备端口",
+    "field.projectName": "项目名称",
+    "field.quiet": "隐藏非必要屏幕输出",
+    "field.removeAllRuns": "删除全部操作记录",
+    "field.runId": "操作记录标识符",
+    "field.save": "保存诊断报告",
+    "field.scopeGlobal": "使用全局配置",
+    "field.scopeLocal": "使用项目本地配置",
+    "field.scopeProject": "使用项目配置",
+    "field.session": "附加调用方会话标识",
+    "field.status": "按操作状态筛选",
+    "field.systemName": "系统标识符",
+    "field.targetVersion": "目标 BenchPilot 版本",
+    "field.timeout": "覆盖操作超时时间",
+    "field.verbose": "显示公共诊断信息",
+    "field.versionFlag": "显示版本信息",
     "help.arguments": "参数",
-    "help.argumentsText": "请参阅命令路径。",
-    "help.command.adapter": "查看适配器元数据并运行其环境诊断",
-    "help.command.add": "添加设备",
-    "help.command.approval": "查看一项审批，并在允许时批准或拒绝它",
-    "help.command.clear-stale": "删除过期锁",
-    "help.command.config": "读取、解释、校验和编辑配置",
-    "help.command.create": "创建多设备系统",
-    "help.command.delete": "删除多设备系统",
-    "help.command.device": "发现、管理和控制单一设备 (list, scan, deploy...)",
     "help.command.doctor": "检查本地环境、依赖和外部工具",
-    "help.command.explain": "解释配置值来源",
-    "help.command.get": "读取最终配置值",
     "help.command.help": "显示命令的详细帮助",
     "help.command.home": "打开引导式交互界面",
     "help.command.init": "在当前目录初始化 BenchPilot 项目",
-    "help.command.language": "查看或设置 CLI 的全局语言",
-    "help.command.list": "列出资源",
-    "help.command.lock": "查看或清除指定的物理资源锁",
-    "help.command.member": "添加或移除系统成员",
-    "help.command.prune": "删除旧操作记录",
-    "help.command.remove": "移除设备",
-    "help.command.resolved": "显示最终配置",
-    "help.command.run": "查看单条记录的详情、日志或产物",
-    "help.command.scan": "发现注册适配器的设备",
-    "help.command.set": "写入配置值",
-    "help.command.system": "管理和控制多设备组合系统 (list, deploy...)",
-    "help.command.unset": "删除配置值",
-    "help.command.validate": "校验配置",
     "help.command.version": "显示 BenchPilot 和运行时版本信息",
     "help.commands": "命令",
-    "help.configuration": "配置",
-    "help.configurationText":
-      "会合并全局、项目、本地、显式文件和 BENCHPILOT_* 环境变量。",
     "help.description": "说明",
-    "help.descriptionText": "命令定义统一驱动解析、帮助、校验、安全和执行。",
     "help.errorKinds": "错误类型",
     "help.examples": "示例",
-    "help.exitCodes": "退出码",
-    "help.exitCodesText":
-      "0 成功；2 用法；3 配置或资源；4 锁；5 操作；6 超时；7 安全；8 内部错误。",
     "help.globalOptions": "全局选项",
     "help.group.adapter": "查看一个适配器。",
     "help.group.approval": "查看或处理一项人工审批请求。",
     "help.group.config": "读取、解释、校验并安全编辑配置。",
     "help.group.device": "通过能力操作一个已配置设备。",
+    "help.group.help": "查看命令用法、参数、选项、安全策略和输出契约。",
     "help.group.home": "打开交互式命令首页。",
     "help.group.language": "查看或设置 CLI 的全局语言。",
     "help.group.lock": "查看或清除一个锁。",
     "help.group.root": "面向 Agent 的设备生命周期 CLI。Made by RavelloH。",
     "help.group.run": "查看一条操作记录。",
     "help.group.system": "编排一个已配置系统。",
+    "help.group.upgrade": "检查可用的 BenchPilot 版本并安装选定版本。",
     "help.group.version": "显示版本信息。",
-    "help.more": "运行“{command} --help”查看完整帮助。",
-    "help.name": "名称",
     "help.options": "选项",
     "help.output": "输出",
-    "help.outputText":
-      "默认输出人类摘要；--json 输出结果，--jsonl 输出结构化事件。",
     "help.safety": "安全",
-    "help.seeAlso": "另请参阅",
-    "help.synopsis": "概要",
     "help.usage": "用法",
-    "help.workflow": "工作流",
-    "help.workflowText": "配置 → 适配器 → 能力 → 操作运行器 → 操作记录。",
     "init.adapters": "选择要启用的适配器",
     "init.applied": "已套用现有 BenchPilot 项目配置。",
     "init.done": "BenchPilot 项目已初始化。",
@@ -800,6 +997,12 @@ export const catalogs = {
     "init.project": "项目",
     "init.projectId": "项目 ID",
     "init.projectName": "项目名称",
+    "languageResult.current.title": "当前 CLI 语言",
+    "languageResult.list.empty": "当前没有可用的 CLI 语言。",
+    "languageResult.list.title": "支持的 CLI 语言",
+    "languageResult.locale": "区域设置",
+    "languageResult.name": "语言",
+    "languageResult.updated.title": "CLI 语言已更新",
     "lock.clear.confirmActive":
       "确认清除这个活跃锁？这可能会中断其当前持有者。",
     "lock.clear.confirmQuarantined":
@@ -868,7 +1071,6 @@ export const catalogs = {
     "menu.exit": "退出",
     "menu.exitConfirm": "再次按下 ESC 退出",
     "menu.field.deviceName": "设备名称",
-    "menu.field.value": "配置值",
     "menu.invalid": "请选择列出的选项之一。",
     "menu.keysHelp": "↑↓ 选择 · Enter 确认",
     "menu.lock.listAll": "列出所有锁",
@@ -917,19 +1119,18 @@ export const catalogs = {
     "run.list.none": "当前没有操作记录。",
     "run.list.status": "状态",
     "run.list.title": "操作记录",
+    "run.prune.none": "没有删除任何操作记录。",
+    "run.prune.title": "已删除的操作记录",
     "run.status.aborted": "已中止",
     "run.status.failed": "已失败",
     "run.status.running": "进行中",
     "run.status.succeeded": "已成功",
     "run.status.unknown": "未知",
     "screen.root.adapter": "查看、管理和诊断设备适配器",
-    "screen.root.alias": "查看和管理 CLI 命令别名",
     "screen.root.approval": "查看和处理人工审批请求",
-    "screen.root.commonOptions": "全局选项",
     "screen.root.config": "查看和管理全局及项目配置",
     "screen.root.configure": "环境与接入",
     "screen.root.device": "发现、配置和操作设备",
-    "screen.root.docs": "打开面向用户的 BenchPilot 文档",
     "screen.root.execute": "资源与编排",
     "screen.root.getStarted": "开始使用",
     "screen.root.help": "帮助",
@@ -947,11 +1148,8 @@ export const catalogs = {
     "screen.root.repository":
       "项目仓库：https://github.com/RavelloH/benchpilot",
     "screen.root.run": "查看操作记录、执行日志和产物",
-    "screen.root.setup": "配置项目和本地环境",
-    "screen.root.skill": "查看供 Agent 调用 BenchPilot 的技能说明",
     "screen.root.system": "配置、编排和操作多设备系统",
     "screen.root.upgrade": "检查并升级 BenchPilot CLI",
-    "screen.root.workflow": "查看、管理和运行自动化工作流",
     "system.detail.capabilities": "可用操作",
     "system.detail.capabilitiesEmpty": "当前没有可在所有成员上执行的兼容操作。",
     "system.detail.description": "说明",
@@ -965,8 +1163,72 @@ export const catalogs = {
     "system.operation.success": "已完成",
     "system.operation.system": "系统",
     "system.operation.title": "系统操作",
+    "upgradeResult.check.title": "BenchPilot 更新",
+    "upgradeResult.currentVersion": "当前版本",
+    "upgradeResult.latestVersion": "最新版本",
+    "upgradeResult.packageManager": "包管理器",
+    "upgradeResult.recommendedVersion": "{version} — 最新",
+    "upgradeResult.result.title": "BenchPilot 已升级",
+    "upgradeResult.status.available": "可更新",
+    "upgradeResult.status.current": "已是最新",
+    "upgradeResult.updateStatus": "更新状态",
+    "upgradeResult.version": "版本",
   },
 } as const;
 
 export type Locale = keyof typeof catalogs;
 export type MessageKey = keyof typeof catalogs.en;
+
+export interface MessageValuesByKey {
+  readonly "approval.actionUnavailable": {
+    readonly status: string | number | boolean;
+  };
+  readonly "approval.command.device": {
+    readonly capability: string | number | boolean;
+  };
+  readonly "approval.command.other": {
+    readonly command: string | number | boolean;
+  };
+  readonly "approval.command.system": {
+    readonly capability: string | number | boolean;
+  };
+  readonly "doctor.adapter": { readonly adapter: string | number | boolean };
+  readonly "doctor.adaptersEnabled": {
+    readonly count: string | number | boolean;
+  };
+  readonly "error.approval": { readonly message: string | number | boolean };
+  readonly "error.configuration": {
+    readonly message: string | number | boolean;
+  };
+  readonly "error.device": { readonly message: string | number | boolean };
+  readonly "error.interaction": { readonly message: string | number | boolean };
+  readonly "error.internal": { readonly message: string | number | boolean };
+  readonly "error.lock": { readonly message: string | number | boolean };
+  readonly "error.operation": { readonly message: string | number | boolean };
+  readonly "error.reason.untranslated": {
+    readonly kind: string | number | boolean;
+  };
+  readonly "error.safety": { readonly message: string | number | boolean };
+  readonly "error.system": { readonly message: string | number | boolean };
+  readonly "error.unknown": { readonly message: string | number | boolean };
+  readonly "error.upgrade": { readonly message: string | number | boolean };
+  readonly "error.usage": { readonly message: string | number | boolean };
+  readonly "lock.clearStale.remaining": {
+    readonly count: string | number | boolean;
+  };
+  readonly "menu.value": { readonly name: string | number | boolean };
+  readonly "upgradeResult.recommendedVersion": {
+    readonly version: string | number | boolean;
+  };
+}
+
+export type MessageKeyWithValues = keyof MessageValuesByKey;
+export type MessageValuesFor<Key extends MessageKey> =
+  Key extends MessageKeyWithValues
+    ? MessageValuesByKey[Key]
+    : Record<never, never>;
+export type MessageArgumentsFor<Key extends MessageKey> = MessageKey extends Key
+  ? [values?: Record<string, string | number | boolean | undefined>]
+  : Key extends MessageKeyWithValues
+    ? [values: MessageValuesFor<NoInfer<Key>>]
+    : [values?: undefined];

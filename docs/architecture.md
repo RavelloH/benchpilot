@@ -2,13 +2,23 @@
 
 Core owns physical-resource safety. Capabilities execute through the Operation Runner, which acquires Locks, claims approvals, records cleanup, and finalizes the Run. Cleanup runs before lock-lease stop, approval finalization, Lock release or quarantine, log close, and Run finalization. Adapters are explicit registrations and receive validated configuration services rather than selecting behavior by board model in Core.
 
-The v2 boundary has five layers: CLI Presentation → Application / Use Cases →
+The CLI boundary has five layers: CLI Interface → Application / Use Cases →
 Core Safety & Lifecycle → Adapter Runtime → Adapter Definitions / Toolchain.
-CLI presentation converts argv and human interaction into Application requests;
-it owns no device operation, configuration mutation, Run, Lock, or Approval
-business logic. Application owns command semantics and dynamic catalogs; Core
-owns safety and lifecycle. Built-in adapters are loaded only from compiled
-Bundle v2 files, and the declarative runtime exposes their capabilities.
+The Command Graph is the source of command paths, fields, help, dynamic child
+catalogs, and interaction metadata. CLI presentation converts resolved command
+intents into Application requests; it owns no device operation, configuration
+mutation, Run, Lock, or Approval business logic. Application owns command
+semantics and dynamic catalogs; Core owns safety and lifecycle. Built-in
+adapters are loaded only from compiled Bundle v2 files, and the declarative
+runtime exposes their capabilities.
+
+For migrated static commands, the Output Engine consumes one locale-neutral
+semantic data object and renders Screen, `benchpilot.result` v3 JSON, or
+`benchpilot.event` v3 JSONL frames. `MessageRef` keeps user-facing text typed
+and resolved in the CLI, while Application and Core return locale-neutral data.
+RLog is an infrastructure sink for business logs, captures, and Run audit; it
+is deliberately separate from public JSONL. Device and system Capability output
+continues to use a temporary legacy bridge pending its dedicated migration.
 `OperationRunner` applies safety, creates the Run, configures RLog, acquires a
 physical-identity lock, executes with cancellation/timeout, persists a result,
 and releases resources in `finally`. A lock ownership loss aborts the same

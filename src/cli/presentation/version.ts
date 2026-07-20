@@ -2,10 +2,9 @@ import {
   benchPilotWordmark as smallWordmark,
   benchPilotWordmarkLarge as largeWordmark,
 } from "./brand.js";
-import { screenPresentation, type CliNode } from "./page.js";
+import { renderScreenNodes, type CliScreenNode } from "./page.js";
 import { terminalTheme } from "./theme.js";
 
-const visibleEverywhere = ["screen", "json", "jsonl"] as const;
 const LARGE_WORDMARK_COLUMNS = Math.max(
   ...largeWordmark
     .trim()
@@ -24,7 +23,7 @@ export function versionPage(
   color = false,
   showWordmark = true,
   columns?: number,
-): readonly CliNode[] {
+): readonly CliScreenNode[] {
   const theme = terminalTheme(color);
   const wordmark =
     columns === undefined || columns >= LARGE_WORDMARK_COLUMNS
@@ -34,8 +33,6 @@ export function versionPage(
     ...(showWordmark
       ? [
           {
-            name: "logo",
-            visibility: ["screen"] as const,
             // Keep the source wordmark intact: its leading newline and spaces
             // are part of the alignment shared with the interactive home.
             text: theme.brand(wordmark),
@@ -43,17 +40,11 @@ export function versionPage(
         ]
       : []),
     {
-      name: "version",
-      visibility: visibleEverywhere,
       children: [
         {
-          name: "cli",
-          visibility: visibleEverywhere,
           text: theme.heading(`BenchPilot v${input.cliVersion}`),
         },
         {
-          name: "node",
-          visibility: visibleEverywhere,
           text: theme.muted(`Node.js ${input.nodeVersion}`),
         },
       ],
@@ -67,5 +58,5 @@ export function renderVersion(
   showWordmark = true,
   columns?: number,
 ) {
-  return screenPresentation(versionPage(input, color, showWordmark, columns));
+  return renderScreenNodes(versionPage(input, color, showWordmark, columns));
 }

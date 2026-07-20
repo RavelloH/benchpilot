@@ -38,49 +38,19 @@ export class DeviceUseCases {
     return { adapter, runtime };
   }
 
-  private localizeCapabilities(
-    adapter: Awaited<ReturnType<DeviceUseCases["resolve"]>>["adapter"],
-    capabilities: ReturnType<
-      Awaited<ReturnType<DeviceUseCases["resolve"]>>["runtime"]["capabilities"]
-    >,
-    locale?: string,
-  ) {
-    const translate = adapter.translate;
-    if (!locale || !translate) return capabilities;
-    return capabilities.map((capability) => ({
-      ...capability,
-      summary:
-        translate(locale, `capability.${capability.id}.summary`) ??
-        capability.summary,
-      ...(capability.description
-        ? {
-            description:
-              translate(locale, `capability.${capability.id}.description`) ??
-              capability.description,
-          }
-        : {}),
-    }));
-  }
-
-  async describe(instance: string, locale?: string) {
+  async describe(instance: string) {
     const { adapter, runtime } = await this.resolve(instance);
     return {
       adapter: { id: adapter.id, summary: adapter.summary },
-      capabilities: this.localizeCapabilities(
-        adapter,
-        runtime.capabilities(),
-        locale,
-      ),
+      capabilities: runtime.capabilities(),
     };
   }
 
-  async capability(instance: string, capabilityId: string, locale?: string) {
+  async capability(instance: string, capabilityId: string) {
     const { adapter, runtime } = await this.resolve(instance);
-    const capability = this.localizeCapabilities(
-      adapter,
-      runtime.capabilities(),
-      locale,
-    ).find((item) => item.id === capabilityId);
+    const capability = runtime
+      .capabilities()
+      .find((item) => item.id === capabilityId);
     if (!capability)
       fail(
         "UNSUPPORTED_CAPABILITY",
@@ -94,6 +64,7 @@ export class DeviceUseCases {
     device: string;
     capability: string;
     capabilityInput: Json;
+    safetyConfirmed?: boolean;
     executionMode?: "interactive";
   }) {
     await this.capability(input.device, input.capability);
@@ -101,7 +72,10 @@ export class DeviceUseCases {
       input.device,
       input.capability,
       input.capabilityInput,
-      input.executionMode ? { executionMode: input.executionMode } : undefined,
+      {
+        safetyConfirmed: input.safetyConfirmed,
+        executionMode: input.executionMode,
+      },
     );
   }
 }

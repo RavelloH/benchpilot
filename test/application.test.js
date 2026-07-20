@@ -200,16 +200,38 @@ test("configuration command use case owns action validation and mutation input",
     commands.execute({ action: "unknown", scopes: [] }),
     (error) => error instanceof BenchPilotError && error.kind === "USAGE_ERROR",
   );
+  await assert.rejects(
+    commands.execute({
+      action: "set",
+      key: "project.name",
+      value: "Demo",
+      scopes: ["local"],
+      enforceCatalog: true,
+    }),
+    (error) =>
+      error instanceof BenchPilotError && error.kind === "CONFIG_SCOPE_INVALID",
+  );
+  await assert.rejects(
+    commands.execute({
+      action: "get",
+      key: "devices",
+      scopes: [],
+      enforceCatalog: true,
+    }),
+    (error) =>
+      error instanceof BenchPilotError && error.kind === "CONFIG_KEY_NOT_FOUND",
+  );
   const outcome = await commands.execute({
     action: "set",
     key: "project.name",
     value: "Demo",
-    scopes: ["local"],
+    scopes: [],
+    enforceCatalog: true,
   });
   assert.equal(outcome.kind, "config.set");
   assert.deepEqual(edits, [
     {
-      scopes: ["local"],
+      scopes: ["project"],
       key: "project.name",
       value: "Demo",
     },
@@ -492,7 +514,7 @@ test("system capability definition is read only after safe intersection", async 
   assert.deepEqual(selected, [{ device: "first", capability: "deploy" }]);
 });
 
-test("system capabilities use the display locale of a compatible member", async () => {
+test("system capability descriptions remain locale-neutral in Application", async () => {
   const systems = new SystemUseCases({
     config: {
       value: { systems: { fixture: { members: [{ device: "first" }] } } },
@@ -515,17 +537,15 @@ test("system capabilities use the display locale of a compatible member", async 
       },
     },
     devices: {
-      async describe(device, locale) {
-        assert.equal(device, "first");
-        assert.equal(locale, "zh-CN");
-        return {
-          capabilities: [{ id: "build", summary: "构建固件。" }],
-        };
+      async describe() {
+        assert.fail(
+          "system description must not request localized device data",
+        );
       },
     },
   });
-  const result = await systems.describe("fixture", "zh-CN");
-  assert.equal(result.capabilities[0].summary, "构建固件。");
+  const result = await systems.describe("fixture");
+  assert.equal(result.capabilities[0].summary, "Build firmware.");
 });
 
 test("system status executes its safe intersection in parallel", async () => {

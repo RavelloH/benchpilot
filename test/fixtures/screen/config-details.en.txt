@@ -1,0 +1,18 @@
+Configuration value
+  Key         approval.level
+  Value       "strict"
+  Origin      project: C:/project/benchpilot.toml
+
+Configuration validation
+  Status      Valid
+
+Configuration updated
+  Key         approval.level
+  Value       "strict"
+  Scope       Project
+  Path        C:/project/benchpilot.toml
+
+Configuration removed
+  Key         approval.level
+  Scope       Project
+  Path        C:/project/benchpilot.toml

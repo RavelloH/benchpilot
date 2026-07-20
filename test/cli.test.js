@@ -15,6 +15,7 @@ import { promisify } from "node:util";
 import { capabilityInput } from "../dist/cli/option-parser.js";
 import { parse } from "../dist/cli/parser.js";
 import { ApprovalManager, PathService } from "../dist/index.js";
+import { packageVersion } from "../dist/version.js";
 const exec = promisify(execFile);
 const cli = path.resolve("dist/cli/index.js");
 function cliEnv(dir) {
@@ -51,6 +52,19 @@ async function runAgent(dir, ...args) {
     encoding: "utf8",
   });
 }
+
+const machineError = (result) => {
+  let current = result;
+  while (current && typeof current === "object") {
+    if (current.error && typeof current.error === "object") {
+      current = current.error;
+      continue;
+    }
+    if (typeof current.kind === "string") return current;
+    current = current.data;
+  }
+  return result;
+};
 async function initDemo(dir) {
   await run(dir, "init", "--project-name", "Demo", "--locale", "en");
   await writeFile(
@@ -93,27 +107,28 @@ test("system commands manage member definitions and render details", async () =>
       (await run(dir, "system", "create", "pair", "demo", "second", "--json"))
         .stdout,
     );
-    assert.equal(created.key, "systems.pair");
+    assert.equal(created.data.key, "systems.pair");
     const detail = JSON.parse(
       (await run(dir, "system", "pair", "show", "--json")).stdout,
     );
     assert.deepEqual(
-      detail.system.members.map((member) => member.device),
+      detail.data.system.members.map((member) => member.device),
       ["demo", "second"],
     );
     await run(dir, "system", "member", "remove", "pair", "second", "--json");
     const listed = JSON.parse(
       (await run(dir, "system", "list", "--json")).stdout,
     );
-    assert.deepEqual(listed.items.find((item) => item.id === "pair").members, [
-      { device: "demo" },
-    ]);
+    assert.deepEqual(
+      listed.data.items.find((item) => item.id === "pair").members,
+      [{ device: "demo" }],
+    );
     await run(dir, "system", "delete", "pair", "--json");
     const afterDelete = JSON.parse(
       (await run(dir, "system", "list", "--json")).stdout,
     );
     assert.equal(
-      afterDelete.items.some((item) => item.id === "pair"),
+      afterDelete.data.items.some((item) => item.id === "pair"),
       false,
     );
   } finally {
@@ -163,12 +178,12 @@ test("root command prints help without starting an interactive session", async (
     assert.doesNotMatch(result.stdout, /████/);
     assert.equal(result.stderr, "");
     const machine = JSON.parse((await run(dir, "--json")).stdout);
-    assert.ok(Array.isArray(machine));
-    assert.equal(machine[0].name, "introduction");
-    assert.equal(machine[1].name, "command");
-    assert.equal("visibility" in machine[0], false);
-    assert.match(machine[0].text, /Agent-first device lifecycle CLI/);
-    assert.doesNotMatch(JSON.stringify(machine), /lineBreak|\\n/);
+    assert.equal(machine.schema, "benchpilot.result");
+    assert.equal(machine.version, 3);
+    assert.equal(machine.kind, "help");
+    assert.equal(machine.data.command.id, "root");
+    assert.match(machine.data.summary.text, /Agent-first device lifecycle CLI/);
+    assert.equal(machine.data.children.length, 14);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -180,13 +195,26 @@ test("language persists the global CLI locale", async () => {
     const listed = await run(dir, "language", "list");
     assert.match(listed.stdout, /en\s+English/);
     assert.match(listed.stdout, /zh-CN\s+简体中文/);
+    const listedJson = JSON.parse(
+      (await run(dir, "language", "list", "--json")).stdout,
+    );
+    assert.equal(listedJson.schema, "benchpilot.result");
+    assert.equal(listedJson.version, 3);
+    assert.equal(listedJson.command.id, "language.list");
+    assert.equal(listedJson.data.schema, "benchpilot.language-list");
     const updated = await run(dir, "language", "set", "zh-CN");
-    assert.equal(updated.stdout, "zh-CN\n");
+    assert.equal(
+      updated.stdout,
+      "CLI 语言已更新\n  区域设置    zh-CN\n  语言        简体中文\n",
+    );
     assert.match(
       await readFile(path.join(dir, ".benchpilot", "config.toml"), "utf8"),
       /locale = "zh-CN"/,
     );
-    assert.equal((await run(dir, "language", "get")).stdout, "zh-CN\n");
+    assert.equal(
+      (await run(dir, "language", "get")).stdout,
+      "当前 CLI 语言\n  区域设置    zh-CN\n  语言        简体中文\n",
+    );
     assert.match((await run(dir)).stdout, /面向 Agent 的设备生命周期 CLI/);
   } finally {
     await rm(dir, { recursive: true, force: true });
@@ -240,8 +268,8 @@ test("init applies an existing project configuration without prompting", async (
     assert.match(result.stdout, /Existing project/);
     await access(path.join(dir, ".benchpilot", "config.local.toml"));
     const machine = JSON.parse((await run(dir, "init", "--json")).stdout);
-    assert.equal(machine.existing, true);
-    assert.equal(machine.config.project.id, "existing-project");
+    assert.equal(machine.data.existing, true);
+    assert.equal(machine.data.config.project.id, "existing-project");
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -254,7 +282,9 @@ test("doctor reports project-local configuration and enabled adapter readiness",
   try {
     await run(dir, "init", "--project-name", "Doctor", "--locale", "en");
     const doctor = JSON.parse((await run(dir, "doctor", "--json")).stdout);
-    const checks = new Map(doctor.checks.map((check) => [check.id, check]));
+    const checks = new Map(
+      doctor.data.checks.map((check) => [check.id, check]),
+    );
     assert.equal(checks.get("project-local").status, "pass");
     assert.equal(checks.get("adapters").status, "warn");
   } finally {
@@ -294,24 +324,23 @@ test("color flags only affect human root output", async () => {
   }
 });
 
-test("home falls back to non-interactive Agent command syntax outside human TTY mode", async () => {
+test("home falls back to the ordinary root page when interaction is unavailable", async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "benchpilot-home-"));
   try {
     const human = await run(dir, "home", "--agent");
+    const root = await run(dir, "--agent");
+    assert.equal(human.stdout, root.stdout);
     assert.match(human.stdout, /Agent-first device lifecycle CLI/);
-    assert.doesNotMatch(human.stdout, /Open the guided interactive interface/);
-    assert.match(
-      human.stdout,
-      /benchpilot device <list\|scan\|device-instance>/,
-    );
+    assert.match(human.stdout, /Open the guided interactive interface/);
+    assert.match(human.stdout, /device\s+Discover, configure, and operate/);
     const machine = JSON.parse((await runAgent(dir, "home", "--json")).stdout);
-    assert.ok(Array.isArray(machine));
-    assert.equal(machine[0].name, "introduction");
-    assert.doesNotMatch(JSON.stringify(machine), /___/);
-    assert.doesNotMatch(JSON.stringify(machine), /"home"/);
-    assert.match(
+    assert.equal(machine.schema, "benchpilot.result");
+    assert.equal(machine.kind, "help");
+    assert.equal(machine.data.command.id, "root");
+    assert.equal(machine.data.view, "root-help");
+    assert.doesNotMatch(
       JSON.stringify(machine),
-      /benchpilot device <list\|scan\|device-instance>/,
+      /agentPresentation|"view":"agent"/,
     );
   } finally {
     await rm(dir, { recursive: true, force: true });
@@ -323,14 +352,26 @@ test("version command renders the large wordmark and supports machine output", a
   try {
     const human = await run(dir, "version");
     assert.doesNotMatch(human.stdout, /████/);
-    assert.match(human.stdout, /BenchPilot v0\.0\.0/);
+    assert.match(human.stdout, new RegExp(`BenchPilot v${packageVersion}`));
     const machine = JSON.parse((await run(dir, "version", "--json")).stdout);
+    assert.equal(machine.schema, "benchpilot.result");
+    assert.equal(machine.version, 3);
+    assert.deepEqual(machine.command, { id: "version", path: ["version"] });
+    assert.deepEqual(machine.data, {
+      schema: "benchpilot.version",
+      version: 1,
+      cliVersion: packageVersion,
+      nodeVersion: process.version,
+    });
+    const events = (await run(dir, "version", "--jsonl")).stdout
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
     assert.deepEqual(
-      machine.map((node) => node.name),
-      ["version"],
+      events.map((event) => event.event.type),
+      ["command.started", "snapshot", "command.completed"],
     );
-    assert.match(machine[0].children[0].text, /BenchPilot v0\.0\.0/);
-    assert.match(machine[0].children[1].text, new RegExp(process.version));
+    assert.deepEqual(events.at(-1).event.result.data, machine.data);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -344,31 +385,22 @@ test("root presentation JSONL frames a cleaned, ordered page snapshot", async ()
       .trim()
       .split("\n")
       .map((line) => JSON.parse(line));
-    assert.deepEqual(events[0], {
-      op: "start",
-      protocol: "benchpilot.presentation",
-      version: 1,
-      locale: "en",
-      view: "normal",
-    });
-    assert.equal(events.at(-1).op, "complete");
-    assert.equal(events.at(-1).count, events.length - 2);
+    assert.equal(events[0].schema, "benchpilot.event");
+    assert.equal(events[0].version, 3);
+    assert.equal(events[0].event.type, "command.started");
+    assert.equal(events.at(-1).event.type, "command.completed");
+    assert.equal(events.at(-1).event.result.kind, "help");
     assert.deepEqual(
-      events.slice(1, -1).map((event) => event.index),
-      Array.from({ length: events.length - 2 }, (_, index) => index),
+      events.map((event) => event.sequence),
+      [0, 1, 2],
     );
-    assert.deepEqual(Object.keys(events[1]).slice(0, 3), [
-      "op",
-      "index",
-      "key",
-    ]);
-    assert.doesNotMatch(raw, /lineBreak/);
-    const device = events.find(
-      (event) => event.key === "command.resources-and-orchestration.device",
+    assert.equal(events[1].event.type, "snapshot");
+    assert.equal(events[1].event.key, "help");
+    const device = events[1].event.value.children.find(
+      (entry) => entry.id === "device",
     );
-    assert.match(device.text, /^device /);
-    assert.doesNotMatch(device.text, /\u001B\[/);
-    assert.doesNotMatch(device.text, / {2,}|\t/);
+    assert.equal(device.summary.key, "command.device.root");
+    assert.doesNotMatch(raw, /\u001B\[/);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -383,26 +415,24 @@ test("root and version help pages take precedence over agent presentation", asyn
       .trim()
       .split("\n")
       .map((line) => JSON.parse(line));
-    assert.equal(root[0].view, "help");
-    assert.equal(root[1].key, "name");
+    assert.equal(root[0].event.type, "command.started");
+    assert.equal(root.at(-1).event.result.kind, "help");
     const detailed = JSON.parse(
       (await runAgent(dir, "--help", "--json")).stdout,
     );
-    const commands = detailed.find((node) => node.name === "commands");
-    assert.ok(commands);
-    assert.match(
-      JSON.stringify(commands),
-      /benchpilot run <run-id> logs \[options\]/,
-    );
+    const commands = detailed.data.children;
+    assert.ok(commands.length);
+    assert.match(JSON.stringify(commands), /command\.run\.root/);
     const version = JSON.parse(
       (await runAgent(dir, "version", "--help", "--json")).stdout,
     );
-    assert.equal(version[0].name, "name");
-    assert.ok(
-      version[0].children.some((node) => /benchpilot version/.test(node.text)),
-    );
+    assert.equal(version.kind, "help");
+    assert.equal(version.data.command.id, "version");
+    assert.deepEqual(version.data.usage, ["benchpilot version"]);
     const global = JSON.parse((await run(dir, "--version", "--json")).stdout);
-    assert.match(global[0].children[0].text, /BenchPilot v0\.0\.0/);
+    assert.equal(global.schema, "benchpilot.result");
+    assert.equal(global.version, 3);
+    assert.equal(global.data.cliVersion, packageVersion);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -419,13 +449,36 @@ test("static command help endpoints share the presentation protocol", async () =
     const fromFlag = JSON.parse(
       (await run(dir, "config", "--help", "--json")).stdout,
     );
-    assert.deepEqual(fromHelp, fromFlag);
-    assert.deepEqual(
-      fromHelp.slice(0, 2).map((node) => node.name),
-      ["name", "synopsis"],
+    assert.deepEqual(fromHelp.data, fromFlag.data);
+    assert.equal(fromHelp.schema, "benchpilot.result");
+    assert.equal(fromHelp.version, 3);
+    assert.equal(fromHelp.kind, "help");
+    assert.match(JSON.stringify(fromHelp.data), /benchpilot config get <key>/);
+    assert.doesNotMatch(JSON.stringify(fromHelp.data), /visibility|lineBreak/);
+    const helpCommand = JSON.parse(
+      (await run(dir, "help", "--help", "--json")).stdout,
     );
-    assert.match(JSON.stringify(fromHelp), /benchpilot config get <key>/);
-    assert.doesNotMatch(JSON.stringify(fromHelp), /visibility|lineBreak/);
+    assert.equal(helpCommand.data.command.id, "help");
+    assert.deepEqual(helpCommand.data.usage, ["benchpilot help [<path...>]"]);
+    assert.deepEqual(helpCommand.data.output, {
+      id: "help",
+      schema: "benchpilot.help",
+      version: 3,
+      view: "help",
+    });
+    const complete = JSON.parse(
+      (await run(dir, "help", "--all", "--json")).stdout,
+    );
+    assert.equal(complete.data.view, "all-help");
+    assert.ok(
+      complete.data.children.some(
+        (child) => child.usage === "benchpilot language set <locale>",
+      ),
+    );
+    const configGet = JSON.parse(
+      (await run(dir, "help", "config", "get", "--json")).stdout,
+    );
+    assert.equal(configGet.data.output.schema, "benchpilot.config-get");
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -458,10 +511,11 @@ test("lock list reports corrupt lock records without failing the whole listing",
     const result = JSON.parse(
       (await run(dir, "lock", "list", "--json")).stdout,
     );
-    assert.equal(result.schema, "benchpilot.lock-list");
-    assert.deepEqual(result.locks, []);
+    assert.equal(result.schema, "benchpilot.result");
+    assert.equal(result.data.schema, "benchpilot.lock-list");
+    assert.deepEqual(result.data.locks, []);
     assert.deepEqual(
-      result.corrupt.map((entry) => entry.id),
+      result.data.corrupt.map((entry) => entry.id),
       ["invalid-owner"],
     );
     const inspection = await run(
@@ -471,7 +525,7 @@ test("lock list reports corrupt lock records without failing the whole listing",
       "show",
       "--json",
     ).catch((error) => error);
-    assert.equal(JSON.parse(inspection.stdout).kind, "LOCK_CORRUPT");
+    assert.equal(JSON.parse(inspection.stdout).error.kind, "LOCK_CORRUPT");
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -512,19 +566,19 @@ test("lock show renders grouped details on screen", async () => {
     const listMachine = JSON.parse(
       (await run(dir, "lock", "list", "--json")).stdout,
     );
-    assert.equal(listMachine.locks[0].liveness, "stale");
-    assert.equal(listMachine.locks[0].state, "active");
+    assert.equal(listMachine.data.locks[0].liveness, "stale");
+    assert.equal(listMachine.data.locks[0].state, "active");
     const listFrames = (await run(dir, "lock", "list", "--jsonl")).stdout
       .trim()
       .split("\n")
       .map((line) => JSON.parse(line));
-    assert.deepEqual(listFrames[1], {
-      op: "snapshot",
-      index: 0,
-      key: `locks.${lockId}`,
-      value: listMachine.locks[0],
-    });
-    assert.deepEqual(listFrames.at(-1), { op: "complete", count: 1 });
+    assert.deepEqual(
+      listFrames.map((frame) => frame.event.type),
+      ["command.started", "snapshot", "command.completed"],
+    );
+    assert.equal(listFrames[1].event.key, `locks.${lockId}`);
+    assert.deepEqual(listFrames[1].event.value, listMachine.data.locks[0]);
+    assert.deepEqual(listFrames.at(-1).event.result.data, listMachine.data);
     const result = await run(dir, "lock", lockId, "show");
     assert.match(
       result.stdout,
@@ -540,7 +594,7 @@ test("lock show renders grouped details on screen", async () => {
     const machine = JSON.parse(
       (await run(dir, "lock", lockId, "show", "--json")).stdout,
     );
-    assert.deepEqual(machine, {
+    assert.deepEqual(machine.data, {
       schema: "benchpilot.lock-detail",
       version: 1,
       id: lockId,
@@ -567,18 +621,15 @@ test("lock show renders grouped details on screen", async () => {
       .trim()
       .split("\n")
       .map((line) => JSON.parse(line));
-    assert.equal(frames[0].protocol, "benchpilot.data");
-    assert.equal(frames[0].schema, "benchpilot.lock-detail");
-    assert.deepEqual(frames[1], {
-      op: "snapshot",
-      index: 0,
-      key: "result",
-      value: machine,
-    });
+    assert.equal(frames[0].schema, "benchpilot.event");
+    assert.equal(frames[0].event.type, "command.started");
+    assert.equal(frames[1].event.type, "snapshot");
+    assert.equal(frames[1].event.key, "result");
+    assert.deepEqual(frames[1].event.value, machine.data);
     const cleared = JSON.parse(
       (await run(dir, "lock", lockId, "clear", "--json")).stdout,
     );
-    assert.deepEqual(cleared, {
+    assert.deepEqual(cleared.data, {
       schema: "benchpilot.lock-clear",
       version: 1,
       lock: {
@@ -662,8 +713,11 @@ test("agent init without parameters is rejected without writing project files", 
       (error) => error,
     );
     const result = JSON.parse(machine.stdout);
-    assert.equal(result.kind, "AGENT_INTERACTION_UNSUPPORTED");
-    assert.equal(result.diagnosticId, "core.agent-interaction-unsupported");
+    assert.equal(result.error.kind, "AGENT_INTERACTION_UNSUPPORTED");
+    assert.equal(
+      result.error.diagnosticId,
+      "core.agent-interaction-unsupported",
+    );
     assert.equal(machine.stderr, "");
     const stream = await runAgent(dir, "init", "--jsonl").catch(
       (error) => error,
@@ -672,9 +726,14 @@ test("agent init without parameters is rejected without writing project files", 
       .trim()
       .split("\n")
       .map((line) => JSON.parse(line));
-    assert.equal(events.length, 1);
-    assert.equal(events[0].event.type, "command.failed");
-    assert.equal(events[0].data.error.kind, "AGENT_INTERACTION_UNSUPPORTED");
+    assert.deepEqual(
+      events.map((event) => event.event.type),
+      ["command.started", "command.failed"],
+    );
+    assert.equal(
+      events[1].event.result.error.kind,
+      "AGENT_INTERACTION_UNSUPPORTED",
+    );
     assert.equal(stream.stderr, "");
     await assert.rejects(access(path.join(dir, "benchpilot.toml")));
   } finally {
@@ -689,7 +748,7 @@ test("agent mode rejects interactive commands like an agent", async () => {
       (failure) => failure,
     );
     const result = JSON.parse(error.stdout);
-    assert.equal(result.kind, "AGENT_INTERACTION_UNSUPPORTED");
+    assert.equal(result.error.kind, "AGENT_INTERACTION_UNSUPPORTED");
     assert.equal(error.stderr, "");
     await assert.rejects(access(path.join(dir, "benchpilot.toml")));
   } finally {
@@ -710,7 +769,7 @@ test("agent approval confirmation is rejected before approval lookup", async () 
       "--json",
     ).catch((failure) => failure);
     const result = JSON.parse(error.stdout);
-    assert.equal(result.kind, "AGENT_INTERACTION_UNSUPPORTED");
+    assert.equal(result.error.kind, "AGENT_INTERACTION_UNSUPPORTED");
     assert.equal(error.stderr, "");
   } finally {
     await rm(dir, { recursive: true, force: true });
@@ -776,15 +835,15 @@ test("human command help uses the global locale", async () => {
   try {
     await run(dir, "init", "--project-name", "演示", "--locale", "zh-CN");
     assert.match((await run(dir)).stdout, /面向 Agent 的设备生命周期 CLI/);
-    assert.match((await run(dir, "help", "config")).stdout, /名称/);
+    assert.match((await run(dir, "help", "config")).stdout, /查看和管理配置/);
     assert.match(
       (await run(dir, "config", "--help")).stdout,
-      /读取、解释、校验/,
+      /说明配置值的来源/,
     );
     const machine = JSON.parse((await run(dir, "--help", "--json")).stdout);
-    assert.equal(machine[0].name, "name");
-    assert.match(machine[0].text, /名称/);
-    assert.match(machine[0].children[0].text, /面向 Agent 的设备生命周期 CLI/);
+    assert.equal(machine.kind, "help");
+    assert.equal(machine.data.summary.key, "help.group.root");
+    assert.match(machine.data.summary.text, /面向 Agent 的设备生命周期 CLI/);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -798,7 +857,7 @@ test("dynamic device help localizes its presentation labels", async () => {
     await initDemo(dir);
     await run(dir, "language", "set", "zh-CN");
     const result = await run(dir, "device", "demo", "--help");
-    assert.match(result.stdout, /命令:/);
+    assert.match(result.stdout, /命令/);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -815,7 +874,7 @@ test("unknown administrative subcommands are usage errors", async () => {
       const error = await run(dir, ...args, "--json").catch(
         (failure) => failure,
       );
-      assert.equal(JSON.parse(error.stdout).kind, "USAGE_ERROR");
+      assert.equal(JSON.parse(error.stdout).error.kind, "USAGE_ERROR");
     }
   } finally {
     await rm(dir, { recursive: true, force: true });
@@ -888,13 +947,20 @@ test("installed CLI surface initializes and runs the demo", async () => {
       .trim()
       .split("\n")
       .map((line) => JSON.parse(line));
-    assert.equal(commandEvents[0].protocol, "benchpilot.data");
-    assert.equal(commandEvents[0].schema, "benchpilot.config-validate");
-    assert.deepEqual(commandEvents[1].value, { valid: true });
+    assert.equal(commandEvents[0].schema, "benchpilot.event");
+    assert.equal(commandEvents[0].event.type, "command.started");
+    assert.deepEqual(commandEvents[1].event.value, { valid: true });
     const failedCommand = await run(dir, "config", "unknown", "--jsonl").catch(
       (error) => error,
     );
-    assert.equal(JSON.parse(failedCommand.stdout).event.type, "command.failed");
+    const failedEvents = failedCommand.stdout
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    assert.deepEqual(
+      failedEvents.map((event) => event.event.type),
+      ["command.started", "command.failed"],
+    );
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -907,9 +973,9 @@ test("configuration query commands use structured data pages", async () => {
     const resolved = JSON.parse(
       (await run(dir, "config", "resolved", "--json")).stdout,
     );
-    assert.equal(resolved.schema, "benchpilot.config-resolved");
-    assert.equal(resolved.config.project.name, "Demo");
-    assert.equal(resolved.origins["project.name"].scope, "project");
+    assert.equal(resolved.data.schema, "benchpilot.config-resolved");
+    assert.equal(resolved.data.config.project.name, "Demo");
+    assert.equal(resolved.data.origins["project.name"].scope, "project");
 
     const resolvedScreen = await run(dir, "config", "resolved");
     assert.match(resolvedScreen.stdout, /\n  version\n    Value\s+1/);
@@ -918,10 +984,10 @@ test("configuration query commands use structured data pages", async () => {
     const explanation = JSON.parse(
       (await run(dir, "config", "explain", "approval.level", "--json")).stdout,
     );
-    assert.equal(explanation.schema, "benchpilot.config-explain");
-    assert.equal(explanation.key, "approval.level");
+    assert.equal(explanation.data.schema, "benchpilot.config-explain");
+    assert.equal(explanation.data.key, "approval.level");
     assert.ok(
-      explanation.layers.some((layer) => layer.scope === "project-local"),
+      explanation.data.layers.some((layer) => layer.scope === "project-local"),
     );
 
     const screen = await run(dir, "config", "explain", "approval.level");
@@ -932,10 +998,10 @@ test("configuration query commands use structured data pages", async () => {
       (await run(dir, "config", "set", "project.name", "Updated", "--json"))
         .stdout,
     );
-    assert.equal(updated.schema, "benchpilot.config-set");
-    assert.equal(updated.key, "project.name");
-    assert.equal(updated.value, "Updated");
-    assert.equal(updated.scope, "project");
+    assert.equal(updated.data.schema, "benchpilot.config-set");
+    assert.equal(updated.data.key, "project.name");
+    assert.equal(updated.data.value, "Updated");
+    assert.equal(updated.data.scope, "project");
 
     const updateScreen = await run(
       dir,
@@ -950,20 +1016,20 @@ test("configuration query commands use structured data pages", async () => {
     const value = JSON.parse(
       (await run(dir, "config", "get", "project.name", "--json")).stdout,
     );
-    assert.equal(value.schema, "benchpilot.config-get");
-    assert.equal(value.value, "Updated");
-    assert.equal(value.origin.scope, "project");
+    assert.equal(value.data.schema, "benchpilot.config-get");
+    assert.equal(value.data.value, "Updated");
+    assert.equal(value.data.origin.scope, "project");
 
     const timeout = JSON.parse(
       (await run(dir, "config", "get", "defaults.timeout", "--json")).stdout,
     );
-    assert.equal(timeout.origin.scope, "default");
+    assert.equal(timeout.data.origin.scope, "default");
 
     const removed = JSON.parse(
       (await run(dir, "config", "unset", "defaults.timeout", "--json")).stdout,
     );
-    assert.equal(removed.schema, "benchpilot.config-unset");
-    assert.equal(removed.scope, "local");
+    assert.equal(removed.data.schema, "benchpilot.config-unset");
+    assert.equal(removed.data.scope, "local");
 
     const invalidScope = await run(
       dir,
@@ -974,7 +1040,10 @@ test("configuration query commands use structured data pages", async () => {
       "--local",
       "--json",
     ).catch((error) => error);
-    assert.equal(JSON.parse(invalidScope.stdout).kind, "CONFIG_SCOPE_INVALID");
+    assert.equal(
+      JSON.parse(invalidScope.stdout).error.kind,
+      "CONFIG_SCOPE_INVALID",
+    );
 
     const unmanaged = await run(
       dir,
@@ -983,14 +1052,19 @@ test("configuration query commands use structured data pages", async () => {
       "devices",
       "--json",
     ).catch((error) => error);
-    assert.equal(JSON.parse(unmanaged.stdout).kind, "CONFIG_KEY_NOT_FOUND");
+    assert.equal(
+      JSON.parse(unmanaged.stdout).error.kind,
+      "CONFIG_KEY_NOT_FOUND",
+    );
 
     const frames = (await run(dir, "config", "resolved", "--jsonl")).stdout
       .trim()
       .split("\n")
       .map((line) => JSON.parse(line));
-    assert.equal(frames[0].schema, "benchpilot.config-resolved");
-    assert.ok(frames.some((frame) => frame.key === "config.project.name"));
+    assert.equal(frames[0].schema, "benchpilot.event");
+    assert.ok(
+      frames.some((frame) => frame.event.key === "config.project.name"),
+    );
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -1003,9 +1077,9 @@ test("declarative demo executes build, deploy, and capture", async () => {
     const adapters = JSON.parse(
       (await run(dir, "adapter", "list", "--json")).stdout,
     );
-    assert.equal(adapters.schema, "benchpilot.adapter-list");
+    assert.equal(adapters.data.schema, "benchpilot.adapter-list");
     assert.deepEqual(
-      adapters.adapters.map((adapter) => adapter.id),
+      adapters.data.adapters.map((adapter) => adapter.id),
       ["demo"],
     );
     const built = JSON.parse(
@@ -1019,7 +1093,7 @@ test("declarative demo executes build, deploy, and capture", async () => {
     );
     assert.deepEqual(Object.keys(deployed.data), ["build", "flash", "reset"]);
     assert.deepEqual(
-      JSON.parse((await run(dir, "approval", "list", "--json")).stdout)
+      JSON.parse((await run(dir, "approval", "list", "--json")).stdout).data
         .approvals,
       [],
     );
@@ -1040,21 +1114,22 @@ test("declarative demo executes build, deploy, and capture", async () => {
     const runList = JSON.parse(
       (await run(dir, "run", "list", "--json")).stdout,
     );
-    assert.equal(runList.schema, "benchpilot.run-list");
-    assert.equal(runList.runs[0].status, "succeeded");
-    assert.equal(runList.runs[0].command, "device.capture");
-    const runId = runList.runs[0].id;
+    assert.equal(runList.data.schema, "benchpilot.run-list");
+    assert.equal(runList.data.runs[0].status, "succeeded");
+    assert.equal(runList.data.runs[0].command, "device.capture");
+    const runId = runList.data.runs[0].id;
     const runDetail = JSON.parse(
       (await run(dir, "run", runId, "show", "--json")).stdout,
     );
-    assert.equal(runDetail.schema, "benchpilot.run-detail");
-    assert.equal(runDetail.run.id, runId);
+    assert.equal(runDetail.data.schema, "benchpilot.run-detail");
+    assert.equal(runDetail.data.run.id, runId);
     const runFrames = (await run(dir, "run", "list", "--jsonl")).stdout
       .trim()
       .split("\n")
       .map((line) => JSON.parse(line));
-    assert.equal(runFrames[0].schema, "benchpilot.run-list");
-    assert.match(runFrames[1].key, /^runs\./);
+    assert.equal(runFrames[0].schema, "benchpilot.event");
+    assert.equal(runFrames[0].event.type, "command.started");
+    assert.match(runFrames[1].event.key, /^runs\./);
     const inspection = JSON.parse(
       (await run(dir, "device", "demo", "inspect", "--json")).stdout,
     );
@@ -1078,6 +1153,7 @@ test("declarative demo executes build, deploy, and capture", async () => {
       JSON.stringify(secretInspection).includes("never-write-this"),
       false,
     );
+    await run(dir, "config", "set", "approval.level", "strict");
     const pendingDangerous = await run(
       dir,
       "device",
@@ -1087,7 +1163,7 @@ test("declarative demo executes build, deploy, and capture", async () => {
       "--json",
     ).catch((error) => error);
     assert.equal(
-      JSON.parse(pendingDangerous.stdout).kind,
+      machineError(JSON.parse(pendingDangerous.stdout)).kind,
       "HUMAN_APPROVAL_REQUIRED",
     );
     await run(dir, "config", "set", "approval.level", "bypass");
@@ -1107,9 +1183,9 @@ test("declarative demo executes build, deploy, and capture", async () => {
     const doctor = JSON.parse(
       (await run(dir, "adapter", "demo", "doctor", "--json")).stdout,
     );
-    assert.equal(doctor.schema, "benchpilot.adapter-doctor");
+    assert.equal(doctor.data.schema, "benchpilot.adapter-doctor");
     assert.ok(
-      doctor.checks.some(
+      doctor.data.checks.some(
         (check) => check.id === "demo-tool-node" && check.status === "pass",
       ),
     );
@@ -1136,7 +1212,7 @@ test("secret approval bindings are redacted but matched by their real digest", a
       "--approve-secret-approval",
       "--json",
     ).catch((error) => error);
-    const requested = JSON.parse(pending.stdout);
+    const requested = machineError(JSON.parse(pending.stdout));
     assert.equal(requested.kind, "HUMAN_APPROVAL_REQUIRED");
     const paths = new PathService({
       ...process.env,
@@ -1176,9 +1252,17 @@ test("secret approval bindings are redacted but matched by their real digest", a
       "--approve-secret-approval",
       "--json",
     ).catch((error) => error);
-    assert.equal(JSON.parse(different.stdout).kind, "HUMAN_APPROVAL_REQUIRED");
+    assert.equal(
+      machineError(JSON.parse(different.stdout)).kind,
+      "HUMAN_APPROVAL_REQUIRED",
+    );
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await rm(dir, {
+      recursive: true,
+      force: true,
+      maxRetries: 5,
+      retryDelay: 100,
+    });
   }
 });
 
@@ -1202,7 +1286,7 @@ test("jsonl streams operation events before a delayed operation finishes", async
       [cli, "device", "demo", "deploy", "--jsonl"],
       {
         cwd: dir,
-        env: { ...process.env, TEMP: path.join(dir, "runtime") },
+        env: cliEnv(dir),
         stdio: ["ignore", "pipe", "pipe"],
       },
     );
@@ -1224,10 +1308,15 @@ test("jsonl streams operation events before a delayed operation finishes", async
     assert.match(firstOutput, /operation\.started/);
     assert.equal(exited, false);
     await new Promise((resolve, reject) => {
-      child.once("exit", (code) => (code === 0 ? resolve() : reject(code)));
+      child.once("close", (code) => (code === 0 ? resolve() : reject(code)));
     });
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await rm(dir, {
+      recursive: true,
+      force: true,
+      maxRetries: 5,
+      retryDelay: 100,
+    });
   }
 });
 
@@ -1294,13 +1383,16 @@ test("declarative demo aborts an action when the operation times out", async () 
       "10ms",
       "--json",
     ).catch((error) => error);
-    assert.equal(JSON.parse(failed.stdout).kind, "OPERATION_TIMEOUT");
     assert.equal(
-      JSON.parse(failed.stdout).diagnosticId,
+      machineError(JSON.parse(failed.stdout)).kind,
+      "OPERATION_TIMEOUT",
+    );
+    assert.equal(
+      machineError(JSON.parse(failed.stdout)).diagnosticId,
       "core.operation-timeout",
     );
     assert.deepEqual(
-      JSON.parse((await run(dir, "lock", "list", "--json")).stdout).locks,
+      JSON.parse((await run(dir, "lock", "list", "--json")).stdout).data.locks,
       [],
     );
   } finally {
@@ -1461,15 +1553,15 @@ test("dry-run creates no run, lock, approval, or artifact state", async () => {
     );
     assert.deepEqual(dryRunEvents[0].data.result, plan);
     assert.deepEqual(
-      JSON.parse((await run(dir, "run", "list", "--json")).stdout).runs,
+      JSON.parse((await run(dir, "run", "list", "--json")).stdout).data.runs,
       [],
     );
     assert.deepEqual(
-      JSON.parse((await run(dir, "lock", "list", "--json")).stdout).locks,
+      JSON.parse((await run(dir, "lock", "list", "--json")).stdout).data.locks,
       [],
     );
     assert.deepEqual(
-      JSON.parse((await run(dir, "approval", "list", "--json")).stdout)
+      JSON.parse((await run(dir, "approval", "list", "--json")).stdout).data
         .approvals,
       [],
     );
@@ -1507,18 +1599,21 @@ test("approval commands render structured screen, JSON, and itemized JSONL data"
     const list = JSON.parse(
       (await run(dir, "approval", "list", "--json")).stdout,
     );
-    assert.equal(list.schema, "benchpilot.approval-list");
-    assert.equal(list.approvals[0].id, approval.id);
-    assert.equal(list.approvals[0].binding.device.physicalId, "demo-device-01");
+    assert.equal(list.data.schema, "benchpilot.approval-list");
+    assert.equal(list.data.approvals[0].id, approval.id);
+    assert.equal(
+      list.data.approvals[0].binding.device.physicalId,
+      "demo-device-01",
+    );
     const events = (await run(dir, "approval", "list", "--jsonl")).stdout
       .trim()
       .split("\n")
       .map((line) => JSON.parse(line));
     assert.deepEqual(
-      events.map((event) => event.op),
-      ["start", "snapshot", "complete"],
+      events.map((event) => event.event.type),
+      ["command.started", "snapshot", "command.completed"],
     );
-    assert.equal(events[1].key, `approvals.${approval.id}`);
+    assert.equal(events[1].event.key, `approvals.${approval.id}`);
     const detail = await run(dir, "approval", approval.id, "inspect");
     assert.match(detail.stdout, /Approval details/);
     assert.match(detail.stdout, /Deploy/);

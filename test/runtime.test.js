@@ -45,6 +45,18 @@ import {
   PathService,
 } from "../dist/index.js";
 
+const recordingBusinessLogs = {
+  open() {
+    return {
+      debug() {},
+      info() {},
+      warn() {},
+      event() {},
+      async close() {},
+    };
+  },
+};
+
 const bundle = {
   schema: "benchpilot.adapter-bundle",
   schemaVersion: 2,
@@ -2245,10 +2257,10 @@ test("declarative adapters execute through the Core operation lifecycle", async 
     registry.register(createDeclarativeAdapter(runtime));
     const paths = new PathService({ TEMP: join(root, "runtime") }, "win32");
     const result = await new OperationRunner({
+      businessLogs: recordingBusinessLogs,
       paths,
       registry,
       project: { root, config: join(root, "benchpilot.toml") },
-      flags: { quiet: true },
       config: {
         value: {
           adapters: { demo: { token: "runtime-secret" } },

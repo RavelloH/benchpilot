@@ -1,0 +1,52 @@
+
+   ___                 _       ___ _ _       _   
+  / __\ ___ _ __   ___| |__   / _ (_) | ___ | |_ 
+ /__\/// _ \ '_ \ / __| '_ \ / /_)/ | |/ _ \| __|
+/ \/  \  __/ | | | (__| | | / ___/| | | (_) | |_ 
+\_____/\___|_| |_|\___|_| |_\/    |_|_|\___/ \__|
+
+Agent-first device lifecycle CLI. Made by RavelloH.
+
+Usage
+  benchpilot <command> [arguments] [options]
+
+Interactive mode
+  home             Open the guided interactive interface
+
+Get started
+  init             Initialize a BenchPilot project in the current directory
+  doctor           Check the local environment, dependencies, and external tools
+  language         View or set the global CLI language
+
+Environment and integration
+  config           View and manage global and project configuration
+  adapter          Inspect, manage, and diagnose device adapters
+
+Resources and orchestration
+  device           Discover, configure, and operate devices
+  system           Configure, orchestrate, and operate multi-device systems
+
+Audit and safety
+  run              View operation records, execution logs, and artifacts
+  approval         Inspect and handle human approval requests
+  lock             Inspect and manage physical resource locks
+
+Help
+  upgrade          Check for and upgrade the BenchPilot CLI
+  help             Show detailed help for a command
+  version          Show BenchPilot and runtime version information
+
+Global options
+  --json           Output the final result as JSON
+  --jsonl          Output structured events in JSON Lines format
+  --config <path>  Use the configuration file at the specified path
+  --agent          Run in agent mode for agents and automation
+  --help           Show detailed help for the current command
+
+EXAMPLES
+  $ benchpilot device scan
+  $ benchpilot device <device> status
+  $ benchpilot device <device> status --json
+
+Detailed help: benchpilot <command> --help
+Repository: https://github.com/RavelloH/benchpilot

@@ -1,13 +1,15 @@
 import { t, type Locale, type MessageKey } from "../i18n/index.js";
+import {
+  configurationCatalog as configurationSemantics,
+  type ConfigurationCatalogEntry as SemanticConfigurationCatalogEntry,
+} from "../application/config/catalog.js";
 import type { PromptChoice } from "./interaction/prompter.js";
 import { terminalTheme } from "./presentation/theme.js";
+import { displayWidth, padDisplay } from "./terminal/text.js";
 
-export interface ConfigurationCatalogEntry {
-  readonly key: string;
+export interface ConfigurationCatalogEntry extends SemanticConfigurationCatalogEntry {
   readonly name: MessageKey;
   readonly description: MessageKey;
-  readonly editor: "text" | "select" | "multi-select";
-  readonly scopes: readonly ("local" | "project" | "global")[];
   readonly choices?: readonly {
     readonly value: string;
     readonly name: MessageKey;
@@ -15,96 +17,79 @@ export interface ConfigurationCatalogEntry {
   }[];
 }
 
-/**
- * Stable, human-facing entry points for BenchPilot's built-in configuration.
- * Dynamic device instances and adapter-defined fields remain editable through
- * their containing tables rather than changing this interaction menu.
- */
-export const configurationCatalog = [
-  {
-    key: "project.id",
+const entryMessages: Record<
+  (typeof configurationSemantics)[number]["key"],
+  { readonly name: MessageKey; readonly description: MessageKey }
+> = {
+  "project.id": {
     name: "configCatalog.projectId.name",
     description: "configCatalog.projectId.description",
-    editor: "text",
-    scopes: ["project"],
   },
-  {
-    key: "project.name",
+  "project.name": {
     name: "configCatalog.projectName.name",
     description: "configCatalog.projectName.description",
-    editor: "text",
-    scopes: ["project"],
   },
-  {
-    key: "defaults.timeout",
+  "defaults.timeout": {
     name: "configCatalog.timeout.name",
     description: "configCatalog.timeout.description",
-    editor: "text",
-    scopes: ["local", "project", "global"],
   },
-  {
-    key: "adapters.enabled",
+  "adapters.enabled": {
     name: "configCatalog.enabledAdapters.name",
     description: "configCatalog.enabledAdapters.description",
-    editor: "multi-select",
-    scopes: ["project"],
   },
-  {
-    key: "approval.level",
+  "approval.level": {
     name: "configCatalog.approvalLevel.name",
     description: "configCatalog.approvalLevel.description",
-    editor: "select",
-    scopes: ["local", "global"],
-    choices: [
-      {
-        value: "strict",
-        name: "configCatalog.approvalLevel.strict.name",
-        description: "configCatalog.approvalLevel.strict.description",
-      },
-      {
-        value: "default",
-        name: "configCatalog.approvalLevel.default.name",
-        description: "configCatalog.approvalLevel.default.description",
-      },
-      {
-        value: "bypass",
-        name: "configCatalog.approvalLevel.bypass.name",
-        description: "configCatalog.approvalLevel.bypass.description",
-      },
-    ],
   },
-  {
-    key: "cli.locale",
+  "cli.locale": {
     name: "configCatalog.locale.name",
     description: "configCatalog.locale.description",
-    editor: "select",
-    scopes: ["global"],
-    choices: [
-      {
-        value: "en",
-        name: "configCatalog.locale.en.name",
-        description: "configCatalog.locale.en.description",
-      },
-      {
-        value: "zh-CN",
-        name: "configCatalog.locale.zhCN.name",
-        description: "configCatalog.locale.zhCN.description",
-      },
-    ],
   },
-] as const satisfies readonly ConfigurationCatalogEntry[];
+};
+
+const choiceMessages: Record<
+  string,
+  { readonly name: MessageKey; readonly description: MessageKey }
+> = {
+  strict: {
+    name: "configCatalog.approvalLevel.strict.name",
+    description: "configCatalog.approvalLevel.strict.description",
+  },
+  default: {
+    name: "configCatalog.approvalLevel.default.name",
+    description: "configCatalog.approvalLevel.default.description",
+  },
+  bypass: {
+    name: "configCatalog.approvalLevel.bypass.name",
+    description: "configCatalog.approvalLevel.bypass.description",
+  },
+  en: {
+    name: "configCatalog.locale.en.name",
+    description: "configCatalog.locale.en.description",
+  },
+  "zh-CN": {
+    name: "configCatalog.locale.zhCN.name",
+    description: "configCatalog.locale.zhCN.description",
+  },
+};
+
+/** CLI wording and layout projected from the Application catalog. */
+export const configurationCatalog: readonly ConfigurationCatalogEntry[] =
+  configurationSemantics.map(({ choices, ...entry }) => ({
+    ...entry,
+    ...entryMessages[entry.key]!,
+    ...(choices
+      ? {
+          choices: choices.map((choice) => ({
+            ...choice,
+            ...choiceMessages[choice.value]!,
+          })),
+        }
+      : {}),
+  }));
 
 export const configurationCatalogEntry = (key: string) =>
   configurationCatalog.find((entry) => entry.key === key);
-
-const displayWidth = (value: string) =>
-  [...value].reduce(
-    (width, character) => width + (character.codePointAt(0)! > 0xff ? 2 : 1),
-    0,
-  );
-
-const pad = (value: string, width: number) =>
-  `${value}${" ".repeat(Math.max(0, width - displayWidth(value)))}`;
 
 /** Formats each choice as a fixed key, localized name, and localized summary. */
 export const configurationMenuChoices = (
@@ -119,7 +104,7 @@ export const configurationMenuChoices = (
   const nameWidth = Math.max(...names.map(displayWidth));
   return configurationCatalog.map((entry, index) => ({
     value: entry.key,
-    label: `${theme.command(pad(entry.key, keyWidth))}  ${pad(names[index]!, nameWidth)}  ${theme.muted(t(locale, entry.description))}`,
+    label: `${theme.command(padDisplay(entry.key, keyWidth, 0))}  ${padDisplay(names[index]!, nameWidth, 0)}  ${theme.muted(t(locale, entry.description))}`,
   }));
 };
 
@@ -138,6 +123,6 @@ export const configurationValueMenuChoices = (
   const nameWidth = Math.max(...names.map(displayWidth));
   return choices.map((choice, index) => ({
     value: choice.value,
-    label: `${theme.command(pad(choice.value, valueWidth))}  ${pad(names[index]!, nameWidth)}  ${theme.muted(t(locale, choice.description))}`,
+    label: `${theme.command(padDisplay(choice.value, valueWidth, 0))}  ${padDisplay(names[index]!, nameWidth, 0)}  ${theme.muted(t(locale, choice.description))}`,
   }));
 };

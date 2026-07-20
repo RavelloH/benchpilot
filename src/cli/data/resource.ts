@@ -1,7 +1,4 @@
 import type { Json } from "../../core.js";
-import { t } from "../../i18n/index.js";
-import type { CliScreenNode } from "../presentation/page.js";
-import { terminalTheme } from "../presentation/theme.js";
 import type { CliDataPage } from "./page.js";
 
 type Entry = {
@@ -38,15 +35,8 @@ const entries = (values: readonly Json[]): Entry[] =>
         : {}),
     };
   });
-const width = (value: string) =>
-  [...value].reduce((n, c) => n + (c.codePointAt(0)! > 0xff ? 2 : 1), 0);
-const pad = (value: string, size: number) =>
-  `${value}${" ".repeat(Math.max(1, size - width(value)))}`;
-
 const listPage = (
   schema: "benchpilot.device-list" | "benchpilot.system-list",
-  titleKey: "resourceResult.devices.title" | "resourceResult.systems.title",
-  emptyKey: "resourceResult.devices.empty" | "resourceResult.systems.empty",
   values: readonly Json[],
 ): CliDataPage<{
   schema: typeof schema;
@@ -56,41 +46,14 @@ const listPage = (
   const data = { schema, version: 1 as const, items: entries(values) };
   return {
     data,
-    screen: (context): readonly CliScreenNode[] => {
-      const theme = terminalTheme(context.color);
-      const idWidth = Math.max(
-        14,
-        ...data.items.map((item) => width(item.id) + 2),
-      );
-      return [
-        {
-          text: theme.heading(t(context.locale, titleKey)),
-          children: data.items.length
-            ? data.items.map((item) => ({
-                text: `${theme.command(pad(item.id, idWidth))}${item.adapter ? theme.argument(item.adapter) : item.members?.map((member) => member.device).join(", ") || ""}`,
-              }))
-            : [{ text: theme.muted(t(context.locale, emptyKey)) }],
-        },
-      ];
-    },
     jsonl: data.items.map((item) => ({ key: `items.${item.id}`, value: item })),
   };
 };
 
 export const deviceListDataPage = (input: { devices: readonly Json[] }) =>
-  listPage(
-    "benchpilot.device-list",
-    "resourceResult.devices.title",
-    "resourceResult.devices.empty",
-    input.devices,
-  );
+  listPage("benchpilot.device-list", input.devices);
 export const systemListDataPage = (input: { systems: readonly Json[] }) =>
-  listPage(
-    "benchpilot.system-list",
-    "resourceResult.systems.title",
-    "resourceResult.systems.empty",
-    input.systems,
-  );
+  listPage("benchpilot.system-list", input.systems);
 
 export const systemDetailDataPage = (input: {
   name: string;
@@ -111,58 +74,6 @@ export const systemDetailDataPage = (input: {
   };
   return {
     data,
-    screen: (context) => {
-      const theme = terminalTheme(context.color);
-      const label = (key: string, value: string) => ({
-        text: `${theme.muted(pad(t(context.locale, key as never), 14))}${theme.argument(value)}`,
-      });
-      return [
-        {
-          text: theme.heading(
-            t(context.locale, "system.detail.title" as never),
-          ),
-          children: [
-            label("system.detail.id", input.name),
-            ...(input.displayName
-              ? [label("system.detail.name", input.displayName)]
-              : []),
-            ...(input.description
-              ? [label("system.detail.description", input.description)]
-              : []),
-            ...(input.labels?.length
-              ? [label("system.detail.labels", input.labels.join(", "))]
-              : []),
-          ],
-        },
-        {
-          text: theme.heading(
-            t(context.locale, "system.detail.members" as never),
-          ),
-          children: input.members.map((member) => ({
-            text: `${theme.command(pad(member.device, 18))}${member.role ? theme.argument(member.role) : theme.muted("-")}`,
-          })),
-        },
-        {
-          text: theme.heading(
-            t(context.locale, "system.detail.capabilities" as never),
-          ),
-          children: input.capabilities.length
-            ? input.capabilities.map((capability) => ({
-                text: `${theme.command(pad(capability.id, 18))}${capability.summary}`,
-              }))
-            : [
-                {
-                  text: theme.muted(
-                    t(
-                      context.locale,
-                      "system.detail.capabilitiesEmpty" as never,
-                    ),
-                  ),
-                },
-              ],
-        },
-      ];
-    },
     jsonl: [
       ...input.members.map((member) => ({
         key: `members.${member.device}`,
@@ -198,32 +109,6 @@ export const systemOperationDataPage = (input: {
   };
   return {
     data,
-    screen: (context) => {
-      const theme = terminalTheme(context.color);
-      return [
-        {
-          text: theme.heading(
-            t(context.locale, "system.operation.title" as never),
-          ),
-          children: [
-            {
-              text: `${theme.muted(pad(t(context.locale, "system.operation.system" as never), 14))}${theme.command(input.system)}`,
-            },
-            {
-              text: `${theme.muted(pad(t(context.locale, "system.operation.capability" as never), 14))}${theme.command(input.capability)}`,
-            },
-          ],
-        },
-        {
-          text: theme.heading(
-            t(context.locale, "system.operation.results" as never),
-          ),
-          children: input.results.map((result) => ({
-            text: `${theme.command(pad(result.device, 18))}${result.ok ? theme.success(t(context.locale, "system.operation.success" as never)) : theme.error(`${result.error?.kind ?? "ERROR"}: ${result.error?.message ?? ""}`)}`,
-          })),
-        },
-      ];
-    },
     jsonl: input.results.map((result) => ({
       key: `members.${result.device}`,
       value: result,
@@ -241,46 +126,6 @@ export const deviceScanDataPage = (input: {
   };
   return {
     data,
-    screen: (context: Parameters<CliDataPage<typeof data>["screen"]>[0]) => {
-      const theme = terminalTheme(context.color);
-      const rows = input.devices.map((value) => {
-        const item = object(value);
-        return {
-          identity: String(item.identity || "unknown"),
-          adapter: String(item.adapter || "unknown"),
-          port: String(object(item.fields as Json).port || "-"),
-        };
-      });
-      const identityWidth = Math.max(
-        width(t(context.locale, "resourceResult.scan.identity")) + 2,
-        ...rows.map((row) => width(row.identity) + 2),
-      );
-      const adapterWidth = Math.max(
-        width(t(context.locale, "resourceResult.scan.adapter")) + 2,
-        ...rows.map((row) => width(row.adapter) + 2),
-      );
-      return [
-        {
-          text: theme.heading(t(context.locale, "resourceResult.scan.title")),
-          children: rows.length
-            ? [
-                {
-                  text: `${theme.muted(pad(t(context.locale, "resourceResult.scan.identity"), identityWidth))}${theme.muted(pad(t(context.locale, "resourceResult.scan.adapter"), adapterWidth))}${theme.muted(t(context.locale, "resourceResult.scan.port"))}`,
-                },
-                ...rows.map((row) => ({
-                  text: `${theme.command(pad(row.identity, identityWidth))}${theme.argument(pad(row.adapter, adapterWidth))}${row.port}`,
-                })),
-              ]
-            : [
-                {
-                  text: theme.muted(
-                    t(context.locale, "resourceResult.scan.empty"),
-                  ),
-                },
-              ],
-        },
-      ];
-    },
     jsonl: input.devices.map((value, index) => ({
       key: `devices.${String(object(value).identity || index)}`,
       value: object(value),
@@ -306,43 +151,6 @@ export const deviceAddedDataPage = (input: {
   };
   return {
     data,
-    screen: (context) => {
-      const theme = terminalTheme(context.color);
-      const row = (
-        label:
-          | "resourceResult.added.instance"
-          | "resourceResult.added.adapter"
-          | "resourceResult.added.identity"
-          | "resourceResult.added.port"
-          | "resourceResult.added.path",
-        value: string,
-        render: (value: string) => string,
-      ) => ({
-        text: `${theme.muted(pad(t(context.locale, label), 12))}${render(value)}`,
-      });
-      return [
-        {
-          text: theme.heading(t(context.locale, "resourceResult.added.title")),
-          children: [
-            row("resourceResult.added.instance", input.instance, theme.command),
-            row("resourceResult.added.adapter", input.adapter, theme.argument),
-            ...(input.identity
-              ? [
-                  row(
-                    "resourceResult.added.identity",
-                    input.identity,
-                    theme.argument,
-                  ),
-                ]
-              : []),
-            ...(input.port
-              ? [row("resourceResult.added.port", input.port, theme.argument)]
-              : []),
-            row("resourceResult.added.path", input.path, theme.muted),
-          ],
-        },
-      ];
-    },
     jsonl: [{ key: `devices.${input.instance}`, value: input }],
   };
 };
@@ -362,24 +170,6 @@ export const deviceRemovedDataPage = (input: {
   };
   return {
     data,
-    screen: (context) => {
-      const theme = terminalTheme(context.color);
-      return [
-        {
-          text: theme.heading(
-            t(context.locale, "resourceResult.removed.title"),
-          ),
-          children: [
-            {
-              text: `${theme.muted(pad(t(context.locale, "resourceResult.removed.instance"), 12))}${theme.command(input.instance)}`,
-            },
-            {
-              text: `${theme.muted(pad(t(context.locale, "resourceResult.removed.path"), 12))}${theme.muted(input.path)}`,
-            },
-          ],
-        },
-      ];
-    },
     jsonl: [{ key: `devices.${input.instance}`, value: input }],
   };
 };

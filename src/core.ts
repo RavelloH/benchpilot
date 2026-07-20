@@ -1,5 +1,13 @@
 export { BenchPilotError, fail } from "./core/errors/benchpilot-error.js";
 export {
+  coreErrorCatalog,
+  coreErrorDefinition,
+  isCoreErrorKind,
+  type CoreErrorDefinition,
+  type CoreErrorKind,
+  type ErrorCategoryKey,
+} from "./core/errors/catalog.js";
+export {
   arraySchema,
   booleanSchema,
   durationSchema,
@@ -46,11 +54,18 @@ export type {
   ApprovalLiveness,
   ApprovalRecord,
 } from "./core/approvals/types.js";
-export { EventWriter } from "./core/events/event-writer.js";
 export type {
-  BenchPilotEvent,
-  BenchPilotEventWriter,
-} from "./core/events/types.js";
+  OperationReportAudience,
+  OperationReporter,
+  OperationReportOptions,
+} from "./core/reporting/types.js";
+export type {
+  BusinessLog,
+  BusinessLogEventOptions,
+  BusinessLogFactory,
+  BusinessLogOpenOptions,
+  OperationLogger,
+} from "./core/reporting/business-log.js";
 export type {
   CleanupError,
   OperationOutcome,

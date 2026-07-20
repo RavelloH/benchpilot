@@ -1,0 +1,13 @@
+Initialized BenchPilot project.
+
+Project
+  Project name Demo
+  Project ID  demo
+  Enabled adapters esp-idf, demo
+
+Applied existing BenchPilot project configuration.
+
+Project
+  Project name Demo
+  Project ID  demo
+  Enabled adapters esp-idf, demo

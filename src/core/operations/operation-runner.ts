@@ -1,5 +1,4 @@
 import path from "node:path";
-import RlogModule from "rlog-js";
 import { SchemaValidationError } from "../adapters/schemas.js";
 import { BenchPilotError, fail } from "../errors/benchpilot-error.js";
 import { lockIdentity } from "../locks/lock-identity.js";
@@ -7,7 +6,6 @@ import { LockManager } from "../locks/lock-manager.js";
 import type { LockLease, LockRecord } from "../locks/types.js";
 import { ApprovalManager } from "../approvals/approval-manager.js";
 import type { ApprovalLease, ApprovalRecord } from "../approvals/types.js";
-import type { BenchPilotEventWriter } from "../events/types.js";
 import {
   abortPromise,
   abortReasonToError,
@@ -35,7 +33,6 @@ import {
   requiresApproval,
   type Json,
 } from "../config/config.js";
-const Rlog = RlogModule.default;
 
 const object = (value: unknown): value is Json =>
   !!value && typeof value === "object" && !Array.isArray(value);
@@ -77,7 +74,12 @@ export class OperationRunner {
    * preflight so a system never partially executes while approvals are being
    * requested.
    */
-  async preflightApproval(instance: string, capabilityId: string, input: Json) {
+  async preflightApproval(
+    instance: string,
+    capabilityId: string,
+    input: Json,
+    executionOptions: Pick<OperationExecutionOptions, "safetyConfirmed"> = {},
+  ) {
     const project = this.requireProject();
     const raw = (this.s.config.value.devices as Json | undefined)?.[instance];
     if (!object(raw))
@@ -106,7 +108,7 @@ export class OperationRunner {
       approvalLevel(this.s.config.value),
       safety.mode,
     );
-    if (safety.mode !== "normal" && !this.s.flags[safety.flag!])
+    if (safety.mode !== "normal" && !executionOptions.safetyConfirmed)
       fail(
         "DANGEROUS_CONFIRMATION_REQUIRED",
         7,
@@ -187,10 +189,10 @@ export class OperationRunner {
     options: OperationExecutionOptions = {},
   ): Promise<Json> {
     const project = this.requireProject();
-    const eventWriter =
-      options.eventContext && this.s.eventWriter?.child
-        ? this.s.eventWriter.child(options.eventContext)
-        : this.s.eventWriter;
+    const reporter =
+      options.eventContext && this.s.reporter?.child
+        ? this.s.reporter.child(options.eventContext)
+        : this.s.reporter;
     const raw = (this.s.config.value.devices as Json | undefined)?.[instance];
     if (!object(raw))
       fail("DEVICE_NOT_FOUND", 3, `Device not found: ${instance}`);
@@ -275,7 +277,7 @@ export class OperationRunner {
     if (
       !interactiveExecution &&
       safety.mode !== "normal" &&
-      !this.s.flags[safety.flag!]
+      !options.safetyConfirmed
     )
       fail(
         "DANGEROUS_CONFIRMATION_REQUIRED",
@@ -309,8 +311,11 @@ export class OperationRunner {
           : {}),
       },
     };
-    const timeout = duration(this.s.flags.timeout, capability.defaultTimeoutMs);
-    if (this.s.flags["dry-run"])
+    const timeout = duration(
+      this.s.defaults?.timeout,
+      capability.defaultTimeoutMs,
+    );
+    if (this.s.defaults?.dryRun)
       return {
         schema: "benchpilot.result" as const,
         version: 2 as const,
@@ -358,7 +363,7 @@ export class OperationRunner {
             scope: layer.scope,
             path: layer.path,
           })),
-          benchpilotVersion: "0.0.0",
+          benchpilotVersion: this.s.defaults?.benchpilotVersion ?? "unknown",
           nodeVersion: process.version,
         })
       : undefined;
@@ -381,27 +386,15 @@ export class OperationRunner {
       }
       await atomicJson(path.join(run.dir, "resolved-config.json"), snapshot);
     }
-    const machineOutput =
-      this.s.flags.json === true || this.s.flags.jsonl === true;
-    const logger = new Rlog({
+    const logger = this.s.businessLogs.open({
       logFilePath: run && path.join(run.dir, "benchpilot.log"),
       jsonlFilePath: run && path.join(run.dir, "events.jsonl"),
-      jsonlOutput: "none",
-      // Canonical command results own stdout. Keep routine lifecycle logs in
-      // the Run files, exposing them on the terminal only when requested.
-      screenOutput:
-        this.s.flags.quiet || machineOutput || this.s.flags.verbose !== true
-          ? "none"
-          : "stderr",
-      enableColorfulOutput: this.s.flags.color !== false,
-      screenLogLevel: this.s.flags.verbose ? "debug" : "info",
       context: {
         runId: run?.id,
         command,
         device: instance,
         adapter: d.adapter,
       },
-      fileErrorPolicy: "throw",
     });
     const emit = (
       type: string,
@@ -409,7 +402,7 @@ export class OperationRunner {
       options?: { level?: "error" | "warn" | "info" | "debug" },
     ) => {
       logger.event(type, data, options);
-      eventWriter?.emit(type, data);
+      reporter?.emit(type, data, options);
     };
     let lock: LockRecord | undefined;
     let lease: LockLease | undefined;
@@ -473,7 +466,7 @@ export class OperationRunner {
             kind: "device",
             physicalId: runtime.identity.physicalId,
           },
-          this.s.flags.session ? String(this.s.flags.session) : undefined,
+          this.s.defaults?.session,
         );
         lease = this.lifecycle.locks.startHeartbeat(
           lock,
@@ -839,23 +832,24 @@ export class OperationRunner {
     session.transition("finalized");
     if (outcome.primaryError) {
       if (options.eventScope === "child")
-        eventWriter?.emit("device.operation.failed", { error: outcome.result });
-      else eventWriter?.failed(outcome.result);
+        reporter?.emit("device.operation.failed", { error: outcome.result });
+      else reporter?.emit("operation.failed", { error: outcome.result });
       throw Object.assign(outcome.primaryError, {
         result: outcome.result,
-        jsonlTerminalEmitted: Boolean(eventWriter),
+        operationTerminalReported: Boolean(reporter),
       });
     }
     if (options.eventScope === "child")
-      eventWriter?.emit("device.operation.completed", {
+      reporter?.emit("device.operation.completed", {
         result: outcome.result,
       });
-    else eventWriter?.completed(outcome.result);
+    else reporter?.emit("operation.completed", { result: outcome.result });
     return outcome.result;
   }
 
   emitSystemEvent(type: string, data: Json = {}) {
-    this.s.eventWriter?.emit(type, data);
+    this.s.reporter?.emit(type, data);
+    return Boolean(this.s.reporter);
   }
 
   private requireProject(): { root: string; config: string } {

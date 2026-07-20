@@ -1,0 +1,52 @@
+
+   ___                 _       ___ _ _       _   
+  / __\ ___ _ __   ___| |__   / _ (_) | ___ | |_ 
+ /__\/// _ \ '_ \ / __| '_ \ / /_)/ | |/ _ \| __|
+/ \/  \  __/ | | | (__| | | / ___/| | | (_) | |_ 
+\_____/\___|_| |_|\___|_| |_\/    |_|_|\___/ \__|
+
+面向 Agent 的设备生命周期 CLI。Made by RavelloH。
+
+用法
+  benchpilot <command> [arguments] [options]
+
+交互模式
+  home             打开引导式交互界面
+
+开始使用
+  init             在当前目录初始化 BenchPilot 项目
+  doctor           检查本地环境、依赖和外部工具
+  language         查看或设置 CLI 的全局语言
+
+环境与接入
+  config           查看和管理全局及项目配置
+  adapter          查看、管理和诊断设备适配器
+
+资源与编排
+  device           发现、配置和操作设备
+  system           配置、编排和操作多设备系统
+
+审计与安全
+  run              查看操作记录、执行日志和产物
+  approval         查看和处理人工审批请求
+  lock             查看和管理物理资源锁
+
+帮助
+  upgrade          检查并升级 BenchPilot CLI
+  help             显示命令的详细帮助
+  version          显示 BenchPilot 和运行时版本信息
+
+全局选项
+  --json           以 JSON 格式输出最终结果
+  --jsonl          以 JSON Lines 格式输出结构化事件
+  --config <path>  使用指定路径的配置文件
+  --agent          强制以 Agent 模式运行，适用于 Agent 和自动化环境
+  --help           显示当前命令的详细帮助
+
+示例
+  $ benchpilot device scan
+  $ benchpilot device <device> status
+  $ benchpilot device <device> status --json
+
+详细帮助：benchpilot <command> --help
+项目仓库：https://github.com/RavelloH/benchpilot

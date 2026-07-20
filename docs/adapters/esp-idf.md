@@ -108,3 +108,11 @@ reset the board; it asserts `BENCHPILOT_ESP32S3_OK` and Lock release.
 
 See the Adapter [README](../../src/adapters/builtin/esp-idf/README.md) for the
 configuration example, safety model, and explicit hardware test entry point.
+
+## CLI output status
+
+ESP-IDF capabilities already contribute their schemas, timeout, lock mode,
+safety metadata, and localized help to the dynamic Command Graph. Their
+dedicated Screen/JSON/JSONL View migration is deferred with Device/System
+operation output, so this document does not promise a capability-specific
+public Event v3 layout yet.

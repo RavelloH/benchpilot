@@ -1,0 +1,15 @@
+Installed adapters
+  esp-idf     1.2.3     ESP-IDF adapter
+  demo        0.1.0     Demo adapter
+
+Configured devices
+  board-a       esp-idf
+  board-b       demo
+
+Configured systems
+  pair          board-a, board-b
+
+Operation records
+  Run ID                            Status    Command
+  run-001                           Succeeded device board-a status
+  run-002                           Failed    device board-b flash

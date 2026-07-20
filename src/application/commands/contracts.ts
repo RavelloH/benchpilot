@@ -34,13 +34,21 @@ export interface CommandNode {
 }
 
 export interface CommandIntent {
-  commandId: string;
-  input: Json;
-  options: Json;
+  readonly commandId: string;
+  readonly handlerId?: string;
+  readonly path: readonly string[];
+  readonly input: Json;
+  readonly options: Json;
+  readonly globals: Json;
 }
 
 export interface CommandOutcome {
-  kind: string;
-  data: Json;
-  notices?: Json[];
+  readonly commandId: string;
+  readonly kind: string;
+  readonly data: Json;
+  readonly notices?: readonly Json[];
 }
+
+export type CommandHandler = (
+  intent: CommandIntent,
+) => Promise<CommandOutcome> | CommandOutcome;

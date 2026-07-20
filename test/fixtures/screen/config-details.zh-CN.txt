@@ -1,0 +1,18 @@
+配置值
+  配置键      approval.level
+  值          "strict"
+  来源        project: C:/project/benchpilot.toml
+
+配置校验
+  状态        有效
+
+配置已更新
+  配置键      approval.level
+  值          "strict"
+  作用域      项目
+  路径        C:/project/benchpilot.toml
+
+配置已删除
+  配置键      approval.level
+  作用域      项目
+  路径        C:/project/benchpilot.toml

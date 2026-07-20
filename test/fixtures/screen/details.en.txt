@@ -1,0 +1,15 @@
+Adapter details
+  Adapter ID  esp-idf
+  Version     1.2.3
+  Description ESP-IDF adapter
+
+Device added
+  Device instance board-a
+  Adapter     esp-idf
+  Identity    usb:1234
+  Port        COM7
+  Configuration path C:/project/.benchpilot/config.toml
+
+Device removed
+  Device instance board-a
+  Configuration path C:/project/.benchpilot/config.toml

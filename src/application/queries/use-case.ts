@@ -9,7 +9,6 @@ import {
   type PathService,
   type ResolvedConfig,
 } from "../../core.js";
-import { t, type Locale } from "../../i18n/index.js";
 
 export interface QueryUseCaseDependencies {
   registry: AdapterRegistry;
@@ -88,7 +87,7 @@ export class QueryUseCases {
     return { valid: true as const };
   }
 
-  async doctor(locale: Locale = "en") {
+  async doctor() {
     const hasProject = this.dependencies.project !== undefined;
     const hasProjectLocal = this.dependencies.config.layers.some(
       (layer) => layer.scope === "project-local",
@@ -112,25 +111,33 @@ export class QueryUseCases {
       {
         id: "config",
         status: "pass",
-        message: t(locale, "doctor.configValid"),
+        message: "TOML and configuration schema valid",
+        messageKey: "doctor.configValid",
       },
       {
         id: "project-local",
         status: !hasProject ? "unknown" : hasProjectLocal ? "pass" : "warn",
         message: !hasProject
-          ? t(locale, "doctor.projectLocalUnavailable")
+          ? "No project-local configuration applies outside a project."
           : hasProjectLocal
-            ? t(locale, "doctor.projectLocalReady")
-            : t(locale, "doctor.projectLocalMissing"),
+            ? "Project-local configuration is available."
+            : "Project-local configuration is missing; run benchpilot init to create it.",
+        messageKey: !hasProject
+          ? "doctor.projectLocalUnavailable"
+          : hasProjectLocal
+            ? "doctor.projectLocalReady"
+            : "doctor.projectLocalMissing",
       },
       {
         id: "adapters",
         status: adapterCount ? "pass" : "warn",
-        message: t(
-          locale,
-          adapterCount ? "doctor.adaptersEnabled" : "doctor.adaptersNone",
-          { count: adapterCount },
-        ),
+        message: adapterCount
+          ? `${adapterCount} enabled adapter(s) are installed.`
+          : "No enabled adapters are installed for this project.",
+        messageKey: adapterCount
+          ? "doctor.adaptersEnabled"
+          : "doctor.adaptersNone",
+        messageValues: { count: adapterCount },
       },
     ];
     for (const adapter of this.dependencies.registry.list())
@@ -141,18 +148,10 @@ export class QueryUseCases {
             this.dependencies.config.value,
             this.dependencies.paths,
           )
-        ).map((check) => {
-          const value = check as Record<string, unknown>;
-          const message =
-            typeof value.messageKey === "string"
-              ? (adapter.translate?.(locale, value.messageKey) ?? value.message)
-              : value.message;
-          return {
-            adapter: adapter.id,
-            ...value,
-            ...(typeof message === "string" ? { message } : {}),
-          };
-        }),
+        ).map((check) => ({
+          adapter: adapter.id,
+          ...(check as Record<string, Json>),
+        })),
       );
     return { checks };
   }
@@ -176,7 +175,7 @@ export class QueryUseCases {
     };
   }
 
-  async adapterDoctor(id: string, locale: Locale = "en") {
+  async adapterDoctor(id: string) {
     const adapter = this.dependencies.registry.get(id);
     return {
       checks: (
@@ -185,17 +184,7 @@ export class QueryUseCases {
           this.dependencies.config.value,
           this.dependencies.paths,
         )
-      ).map((check) => {
-        const value = check as Record<string, unknown>;
-        const message =
-          typeof value.messageKey === "string"
-            ? (adapter.translate?.(locale, value.messageKey) ?? value.message)
-            : value.message;
-        return {
-          ...value,
-          ...(typeof message === "string" ? { message } : {}),
-        };
-      }),
+      ).map((check) => check),
     };
   }
 

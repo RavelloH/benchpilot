@@ -74,6 +74,18 @@ test("core errors have stable diagnostic ids and JSON-safe details", () => {
 
 const exec = promisify(execFile);
 
+const recordingBusinessLogs = {
+  open() {
+    return {
+      debug() {},
+      info() {},
+      warn() {},
+      event() {},
+      async close() {},
+    };
+  },
+};
+
 test("core hardening uses safe lock names and redacts config", () => {
   const id = lockIdentity({
     adapter: "demo",
@@ -718,13 +730,20 @@ test("a normal operation recovers and reuses a stale approval claim", async () =
       },
     );
     const runner = new OperationRunner({
+      businessLogs: recordingBusinessLogs,
       paths,
       registry,
       project: { root, config: path.join(root, "benchpilot.toml") },
-      flags: { quiet: true, danger: true },
       config,
     });
-    const result = await runner.execute("device", "burn", {});
+    const result = await runner.execute(
+      "device",
+      "burn",
+      {},
+      {
+        safetyConfirmed: true,
+      },
+    );
     assert.equal(result.ok, true);
     assert.equal((await approvals.list()).length, 1);
     assert.equal((await approvals.get(request.id)).status, "consumed");
@@ -946,10 +965,10 @@ test("output schema failures are classified as INVALID_CAPABILITY_OUTPUT", async
       }),
     });
     const runner = new OperationRunner({
+      businessLogs: recordingBusinessLogs,
       paths,
       registry,
       project: { root, config: path.join(root, "benchpilot.toml") },
-      flags: { quiet: true },
       config: {
         value: { devices: { device: { adapter: "output-schema" } } },
         origins: new Map(),
@@ -1204,10 +1223,10 @@ test("lock ownership loss aborts the capability and preserves the replacement", 
       }),
     });
     const runner = new OperationRunner({
+      businessLogs: recordingBusinessLogs,
       paths,
       registry,
       project: { root, config: path.join(root, "benchpilot.toml") },
-      flags: { quiet: true },
       lockHeartbeatIntervalMs: 1_000,
       lockLeaseMs: 100,
       config: {
@@ -1484,19 +1503,13 @@ test("critical cleanup failure quarantines its lock and finalizes a failed run",
       }),
     });
     const runner = new OperationRunner({
+      businessLogs: recordingBusinessLogs,
       paths,
       registry,
       project: { root, config: path.join(root, "benchpilot.toml") },
-      flags: { quiet: true },
-      eventWriter: {
+      reporter: {
         emit(type, data) {
           events.push({ type, data });
-        },
-        completed(result) {
-          events.push({ type: "operation.completed", result });
-        },
-        failed(error) {
-          events.push({ type: "operation.failed", error });
         },
       },
       config: {
@@ -1599,10 +1612,11 @@ test("cleanup timeout quarantines a lock when a capability ignores AbortSignal",
       }),
     });
     const runner = new OperationRunner({
+      businessLogs: recordingBusinessLogs,
       paths,
       registry,
       project: { root, config: path.join(root, "benchpilot.toml") },
-      flags: { quiet: true, timeout: "10ms" },
+      defaults: { timeout: "10ms" },
       config: {
         value: { devices: { device: { adapter: "timeout" } } },
         origins: new Map(),
@@ -1662,10 +1676,10 @@ async function runCleanupFailureScenario(root, options) {
     }),
   });
   const runner = new OperationRunner({
+    businessLogs: recordingBusinessLogs,
     paths,
     registry,
     project: { root, config: path.join(root, "benchpilot.toml") },
-    flags: { quiet: true },
     config: {
       value: { devices: { device: { adapter: "cleanup-semantics" } } },
       origins: new Map(),
@@ -1771,13 +1785,15 @@ async function runDangerousFailure(root, markEffect) {
   const approval = await approvals.request(binding);
   await approvals.change(approval.id, "approved");
   const runner = new OperationRunner({
+    businessLogs: recordingBusinessLogs,
     paths,
     registry,
     project: { root, config: path.join(root, "benchpilot.toml") },
-    flags: { quiet: true, danger: true },
     config,
   });
-  await runner.execute("device", "effect", {}).catch(() => {});
+  await runner
+    .execute("device", "effect", {}, { safetyConfirmed: true })
+    .catch(() => {});
   return approvals.get(approval.id);
 }
 
@@ -1863,20 +1879,18 @@ test("successful dangerous operation without a marker consumes approval and warn
     const approvals = new ApprovalManager(paths, root);
     await approvals.change(approval.id, "approved");
     const runner = new OperationRunner({
+      businessLogs: recordingBusinessLogs,
       paths,
       registry,
       project: { root, config: path.join(root, "benchpilot.toml") },
-      flags: { quiet: true, danger: true },
       config,
-      eventWriter: {
+      reporter: {
         emit(type, data) {
           events.push({ type, data });
         },
-        completed() {},
-        failed() {},
       },
     });
-    await runner.execute("device", "effect", {});
+    await runner.execute("device", "effect", {}, { safetyConfirmed: true });
     assert.equal((await approvals.get(approval.id)).status, "consumed");
     assert.deepEqual(
       events.find((event) => event.type === "safety.marker-missing"),

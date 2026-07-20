@@ -1,5 +1,6 @@
 import { fail, type Json } from "../../core.js";
 import type { QueryUseCases } from "../queries/use-case.js";
+import { configurationCatalogEntry } from "./catalog.js";
 import type { ConfigurationUseCases } from "./use-case.js";
 
 export type ConfigurationCommandAction =
@@ -11,6 +12,8 @@ export interface ConfigurationCommandRequest {
   value?: string;
   scopes: Array<"local" | "project" | "global">;
   showOrigin?: boolean;
+  /** Apply the public CLI's built-in key and scope policy. */
+  enforceCatalog?: boolean;
 }
 
 export interface ConfigurationCommandOutcome {
@@ -38,8 +41,34 @@ export class ConfigurationCommandUseCases {
     const requiresKey = ["get", "set", "unset", "explain"].includes(action);
     if (requiresKey && !request.key)
       fail("USAGE_ERROR", 2, `config ${action} requires <key>.`);
+    const entry =
+      request.key && request.enforceCatalog
+        ? configurationCatalogEntry(request.key)
+        : undefined;
+    if (requiresKey && request.enforceCatalog && !entry)
+      fail(
+        "CONFIG_KEY_NOT_FOUND",
+        3,
+        `Unknown configuration key: ${request.key}`,
+      );
     if (action === "set" && request.value === undefined)
       fail("USAGE_ERROR", 2, "config set requires <key> and <value>.");
+    const scopes =
+      (action === "set" || action === "unset") && request.enforceCatalog
+        ? request.scopes.length
+          ? request.scopes
+          : [entry!.scopes[0]]
+        : request.scopes;
+    if (
+      (action === "set" || action === "unset") &&
+      request.enforceCatalog &&
+      scopes.some((scope) => !entry!.scopes.includes(scope))
+    )
+      fail(
+        "CONFIG_SCOPE_INVALID",
+        2,
+        `${entry!.key} cannot be saved in the requested scope.`,
+      );
     switch (action) {
       case "get":
         return {
@@ -69,7 +98,7 @@ export class ConfigurationCommandUseCases {
         return {
           kind: `config.${action}`,
           data: await this.mutations.edit({
-            scopes: request.scopes,
+            scopes,
             key: request.key!,
             ...(action === "set" ? { value: request.value } : {}),
           }),

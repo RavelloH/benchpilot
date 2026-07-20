@@ -1,0 +1,15 @@
+适配器详情
+  适配器 ID   esp-idf
+  版本        1.2.3
+  说明        ESP-IDF adapter
+
+设备已添加
+  设备实例    board-a
+  适配器      esp-idf
+  标识        usb:1234
+  端口        COM7
+  配置路径    C:/project/.benchpilot/config.toml
+
+设备已移除
+  设备实例    board-a
+  配置路径    C:/project/.benchpilot/config.toml

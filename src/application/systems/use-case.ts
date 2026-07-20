@@ -92,18 +92,13 @@ export class SystemUseCases {
     return this.definition(name).members.map((member) => member.device);
   }
 
-  async describe(name: string, locale?: string) {
+  async describe(name: string) {
     const definition = this.definition(name);
     const devices = definition.members.map((member) => member.device);
     const capabilities = await systemCapabilityIntersection({
       devices,
       runner: this.dependencies.runner,
     });
-    const first = [...devices].sort()[0];
-    const localized =
-      locale && first
-        ? (await this.dependencies.devices.describe(first, locale)).capabilities
-        : [];
     return {
       name,
       ...(definition.name ? { displayName: definition.name } : {}),
@@ -113,18 +108,7 @@ export class SystemUseCases {
       ...(definition.labels ? { labels: definition.labels } : {}),
       members: definition.members,
       devices,
-      capabilities: capabilities.map((capability) => {
-        const translation = localized.find((item) => item.id === capability.id);
-        return translation
-          ? {
-              ...capability,
-              summary: translation.summary,
-              ...(translation.description
-                ? { description: translation.description }
-                : {}),
-            }
-          : capability;
-      }),
+      capabilities,
     };
   }
 
@@ -132,12 +116,8 @@ export class SystemUseCases {
    * Returns a real capability definition only after the system intersection
    * confirms that every member exposes compatible safety/input metadata.
    */
-  async capability(
-    name: string,
-    capabilityId: string,
-    locale?: string,
-  ): Promise<Capability> {
-    const description = await this.describe(name, locale);
+  async capability(name: string, capabilityId: string): Promise<Capability> {
+    const description = await this.describe(name);
     if (!description.capabilities.some((item) => item.id === capabilityId))
       fail(
         "SYSTEM_CAPABILITY_UNAVAILABLE",
@@ -146,16 +126,15 @@ export class SystemUseCases {
       );
     const first = [...description.devices].sort()[0];
     if (!first) fail("SYSTEM_NOT_FOUND", 3, `System has no members: ${name}`);
-    return (
-      await this.dependencies.devices.capability(first!, capabilityId, locale)
-    ).capability;
+    return (await this.dependencies.devices.capability(first!, capabilityId))
+      .capability;
   }
 
   async execute(
     name: string,
     capability: string,
     capabilityInput?: Json,
-    options?: { executionMode?: "interactive" },
+    options?: { executionMode?: "interactive"; safetyConfirmed?: boolean },
   ) {
     const devices = this.members(name);
     this.dependencies.runner.emitSystemEvent("system.operation.started", {
@@ -170,6 +149,7 @@ export class SystemUseCases {
         runner: this.dependencies.runner,
         capabilityInput,
         executionMode: options?.executionMode,
+        safetyConfirmed: options?.safetyConfirmed,
       });
       if (result.results.some((item) => !item.ok))
         throw Object.assign(
@@ -189,12 +169,13 @@ export class SystemUseCases {
       });
       return result as unknown as Json;
     } catch (error) {
-      this.dependencies.runner.emitSystemEvent("system.operation.failed", {
-        error: (error as { result?: Json }).result ?? {
-          message: (error as Error).message,
-        },
-      });
-      throw Object.assign(error as Error, { jsonlTerminalEmitted: true });
+      const operationTerminalReported =
+        this.dependencies.runner.emitSystemEvent("system.operation.failed", {
+          error: (error as { result?: Json }).result ?? {
+            message: (error as Error).message,
+          },
+        });
+      throw Object.assign(error as Error, { operationTerminalReported });
     }
   }
 }
@@ -256,6 +237,7 @@ export async function executeSystemCapability(input: {
   capabilityInput?: Json;
   policy?: SystemExecutionPolicy;
   executionMode?: "interactive";
+  safetyConfirmed?: boolean;
 }): Promise<SystemOperationResult> {
   const available = await systemCapabilityIntersection(input);
   if (!available.some((candidate) => candidate.id === input.capability))
@@ -284,6 +266,7 @@ export async function executeSystemCapability(input: {
                 device,
                 input.capability,
                 structuredClone(input.capabilityInput ?? {}),
+                { safetyConfirmed: input.safetyConfirmed },
               ),
             ),
         );
@@ -313,6 +296,7 @@ export async function executeSystemCapability(input: {
         eventScope: "child",
         eventContext: { system: input.system, device },
         executionMode: input.executionMode,
+        safetyConfirmed: input.safetyConfirmed,
       },
     );
   if (policy === "parallel") {

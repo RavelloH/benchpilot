@@ -1,4 +1,3 @@
-import RlogModule from "rlog-js";
 import type { DeviceRuntime } from "../capabilities/types.js";
 import type { Json, ResolvedConfig } from "../config/config.js";
 import type { AdapterRegistry } from "../adapters/registry.js";
@@ -6,18 +5,20 @@ import type {
   ArtifactRegistration,
   ArtifactRecord,
 } from "../artifacts/types.js";
-import type { BenchPilotEventWriter } from "../events/types.js";
 import type { PathService } from "../paths/path-service.js";
 import type { Run } from "../runs/run-manager.js";
 import type { RunManager } from "../runs/run-manager.js";
 import type { LockManager } from "../locks/lock-manager.js";
 import type { ApprovalManager } from "../approvals/approval-manager.js";
-
-const Rlog = RlogModule.default;
+import type { OperationReporter } from "../reporting/types.js";
+import type {
+  BusinessLogFactory,
+  OperationLogger,
+} from "../reporting/business-log.js";
 
 export interface OperationContext {
   signal: AbortSignal;
-  logger: InstanceType<typeof Rlog>;
+  logger: OperationLogger;
   run?: Run;
   stateRoot: string;
   project?: { root: string; config: string };
@@ -47,10 +48,16 @@ export interface OperationServices {
   registry: AdapterRegistry;
   config: ResolvedConfig;
   project: { root: string; config: string } | undefined;
-  flags: Json;
+  defaults?: {
+    timeout?: unknown;
+    dryRun?: boolean;
+    session?: string;
+    benchpilotVersion?: string;
+  };
   lockHeartbeatIntervalMs?: number;
   lockLeaseMs?: number;
-  eventWriter?: BenchPilotEventWriter;
+  reporter?: OperationReporter;
+  businessLogs: BusinessLogFactory;
   lifecycle?: OperationLifecycleFactories;
 }
 
@@ -64,6 +71,8 @@ export interface OperationLifecycleFactories {
 export interface OperationExecutionOptions {
   eventScope?: "root" | "child";
   eventContext?: Json;
+  /** The caller supplied the Capability's explicit safety confirmation. */
+  safetyConfirmed?: boolean;
   /** The CLI completed human safety and approval confirmation before execution. */
   executionMode?: "interactive";
 }

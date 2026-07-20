@@ -63,10 +63,7 @@ export function colorEnabled(
   return stdoutIsTTY === true;
 }
 
-export function shouldShowWordmark(input: {
-  stdoutIsTTY: boolean | undefined;
-  agentDetected: boolean;
-  agentMode: boolean;
-}) {
-  return input.stdoutIsTTY === true && !input.agentDetected && !input.agentMode;
+/** Wordmarks are a terminal capability, not a caller-specific presentation. */
+export function shouldShowWordmark(stdoutIsTTY: boolean | undefined) {
+  return stdoutIsTTY === true;
 }

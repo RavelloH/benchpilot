@@ -4,26 +4,14 @@ import {
   Adapter,
   approvalLevel,
   BenchPilotError,
-  EventWriter,
   fail,
   Json,
   requiresApproval,
 } from "../core.js";
+import { LegacyEventReporter } from "./output/legacy-event-reporter.js";
 import { loadBuiltinAdapters } from "../adapters/runtime/builtin-adapters.js";
-import { createApplication } from "../application/application.js";
 import { openApplicationRequest } from "../application/request-scope.js";
-import {
-  readGlobalLocale,
-  readGlobalLocaleSetting,
-  writeGlobalLocale,
-} from "../application/config/locale.js";
-import {
-  brief,
-  commandGroups,
-  fullHelp,
-  humanFull,
-  isCommandGroup,
-} from "./help-renderer.js";
+import { readGlobalLocale } from "../application/config/locale.js";
 import { parse } from "./parser.js";
 import { handleDeviceCommand } from "./commands/device.js";
 import { handleRuntimeCommand } from "./commands/runtime.js";
@@ -32,24 +20,11 @@ import {
   commandOptionFlags,
   optionEnabled,
 } from "./option-parser.js";
-import {
-  humanErrorMessage,
-  write,
-  writeDataPage,
-  writeFailure,
-  writePresentation,
-  writeText,
-} from "./output-renderer.js";
+import { humanErrorMessage } from "./output-renderer.js";
+import { renderDataPage } from "./output/data-page-renderer.js";
+import { commandFailureResult, renderFailure } from "./output/failure.js";
 import { detectAgent } from "./agent/detector.js";
 import { interactionDecision } from "./interaction/policy.js";
-import { renderVersion, versionPage } from "./presentation/version.js";
-import {
-  renderInteractiveHomeHeader,
-  rootHelpPage,
-  rootMenuChoices,
-} from "./presentation/root-help.js";
-import { commandHelpPage } from "./presentation/command-help.js";
-import { presentationView } from "./presentation/page.js";
 import {
   colorEnabled,
   shouldShowWordmark,
@@ -61,16 +36,42 @@ import {
   InteractionExitedError,
   InteractionSession,
   menuDivider,
-  promptInit,
 } from "./interaction/prompter.js";
-import { isLocale, t, type Locale, type MessageKey } from "../i18n/index.js";
 import {
-  checkForUpgrade,
-  compareUpgradeVersion,
-  upgradeBenchPilot,
-} from "./upgrade.js";
-import { upgradeCheckDataPage, upgradeResultDataPage } from "./data/upgrade.js";
+  isLocale,
+  resolveMessage,
+  t,
+  type Locale,
+  type MessageKey,
+} from "../i18n/index.js";
+import { interactionMenuChoices } from "./interaction/menu.js";
+import { InteractionEngine } from "./interaction/engine.js";
+import { navigateResourceCommand } from "./interaction/resource-navigation.js";
+import {
+  commandIntentValues,
+  parseCommandState,
+} from "./commands/command-intent.js";
+import { commandContractError } from "./commands/command-errors.js";
+import { packageVersion } from "../version.js";
+import { localizeAdapterCapabilities } from "./i18n/adapter-messages.js";
+import { RLogBusinessLogFactory } from "../infrastructure/rlog-business-log.js";
+import { displayWidth, padDisplay } from "./terminal/text.js";
+import { detectTerminalCapabilities } from "./terminal/capabilities.js";
+import { StreamTerminalSurface } from "./terminal/surface.js";
+import { OutputEngine, outputMode } from "./output/engine.js";
+import { versionOutputDefinition } from "./definitions/version.js";
+import { commandCatalogDefinition } from "../application/commands/definitions.js";
+import { HelpDocumentService } from "../application/commands/help.js";
+import { CommandResolutionError } from "../application/commands/resolver.js";
+import { projectHelpDocument } from "./help/projector.js";
+import { helpOutputDefinition } from "./definitions/help.js";
+import { handleUpgradeCommand } from "./commands/upgrade.js";
+import { handleHomeCommand } from "./commands/home.js";
+import { handleVersionCommand } from "./commands/version.js";
+import { handleHelpCommand } from "./commands/help.js";
+import { handleInitCommand } from "./commands/init.js";
 import { doctorDataPage } from "./data/doctor.js";
+import { hasOutcomePage, outcomeDataPage } from "./data/outcome-page.js";
 import {
   adapterDoctorDataPage,
   adapterInfoDataPage,
@@ -92,28 +93,29 @@ import {
   configResolvedDataPage,
   configValidateDataPage,
 } from "./data/config.js";
-import { initDataPage } from "./data/init.js";
 import {
   configurationCatalogEntry,
   configurationMenuChoices,
   configurationValueMenuChoices,
-  type ConfigurationCatalogEntry,
 } from "./config-catalog.js";
 
-const version = "0.0.0";
+const version = packageVersion;
 const supportedLanguages = [
   { value: "en", label: "English" },
   { value: "zh-CN", label: "简体中文" },
 ] as const;
 
-const displayWidth = (value: string) =>
-  [...value].reduce(
-    (width, character) => width + (character.codePointAt(0)! > 0xff ? 2 : 1),
-    0,
-  );
+const commandGroups = new Set(
+  commandCatalogDefinition.commands
+    .filter((command) => !command.parentId && !command.handler)
+    .flatMap((command) => {
+      const root = command.path[0];
+      return root?.kind === "literal" ? [root.value] : [];
+    }),
+);
 
-const padDisplay = (value: string, width: number) =>
-  `${value}${" ".repeat(Math.max(1, width - displayWidth(value)))}`;
+const isCommandGroup = (value: string | undefined): value is string =>
+  typeof value === "string" && commandGroups.has(value);
 
 const recordChoiceWidth = (ids: readonly string[]) =>
   Math.max(1, ...ids.map((id) => displayWidth(id) + 2));
@@ -149,6 +151,14 @@ const lockStatusLabel = (locale: Locale, state: unknown, liveness: unknown) => {
   return t(locale, "lock.list.liveness.unknown");
 };
 
+const isInteractionFailure = (kind: string) =>
+  [
+    "AGENT_INTERACTION_UNSUPPORTED",
+    "INTERACTIVE_MACHINE_OUTPUT_UNSUPPORTED",
+    "INTERACTIVE_TERMINAL_REQUIRED",
+    "INTERACTION_CANCELLED",
+  ].includes(kind);
+
 interface MainResume {
   readonly path: readonly string[];
   readonly flags: ReturnType<typeof parse>["flags"];
@@ -158,12 +168,17 @@ interface MainResume {
 }
 
 export async function main(adapters?: Adapter[], resume?: MainResume) {
+  const commandStartedAt = new Date();
   let interaction: InteractionSession | undefined;
+  let terminal: StreamTerminalSurface | undefined;
   let presentationLocale: Locale = "en";
   let replay: Omit<MainResume, "path"> | undefined;
   let invokedPath: readonly string[] = [];
   let selectedCommandEmitted = false;
+  let resolvedCommandId: string | undefined;
   let renderAdapterDoctor: ((adapterId: string) => Promise<void>) | undefined;
+  let renderFailureHelp:
+    ((target: readonly string[]) => Promise<string>) | undefined;
   try {
     const parsed = resume ?? parse(process.argv.slice(2));
     let parts = [...parsed.path];
@@ -171,12 +186,23 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
     replay = { flags, rawOptions };
     invokedPath = parts;
     let commandFlags = { ...flags, ...commandOptionFlags(rawOptions) };
+    const terminalSurface = new StreamTerminalSurface(
+      stdout,
+      detectTerminalCapabilities({
+        stdin: { isTTY: stdin.isTTY === true },
+        stdout: {
+          isTTY: stdout.isTTY === true,
+          ...(stdout.columns ? { columns: stdout.columns } : {}),
+          ...(stdout.rows ? { rows: stdout.rows } : {}),
+        },
+        stderr: { isTTY: process.stderr.isTTY === true },
+        env: process.env,
+        color: colorEnabled(flags, stdout.isTTY),
+      }),
+    );
+    terminal = terminalSurface;
     const agent = detectAgent();
-    const showWordmark = shouldShowWordmark({
-      stdoutIsTTY: stdout.isTTY,
-      agentDetected: Boolean(agent),
-      agentMode: flags.agent === true,
-    });
+    const showWordmark = shouldShowWordmark(stdout.isTTY);
     const interactive = (locale: Locale, helpPath: string[]) => {
       const decision = interactionDecision({
         agent,
@@ -207,7 +233,7 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
           false,
           undefined,
           [],
-          { help: fullHelp(helpPath) },
+          { helpPath },
         );
       }
       interaction ??= new InteractionSession(
@@ -234,381 +260,211 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
         typeof commandFlags.identity === "string"
           ? ` --adapter ${commandFlags.adapter} --identity ${commandFlags.identity}${typeof commandFlags.port === "string" ? ` --port ${commandFlags.port}` : ""}${typeof commandFlags.name === "string" ? ` --name ${commandFlags.name}` : ""}`
           : "";
-      writeText(
+      terminalSurface.write(
         `${terminalTheme(colorEnabled(flags, stdout.isTTY)).debug(`$ benchpilot ${parts.join(" ")}${configScope ? ` --${configScope}` : ""}${deviceAddOptions}`)}\n\n`,
       );
     };
-    const currentPresentationView = (help = flags.help === true) =>
-      presentationView({
-        help,
-        agentDetected: Boolean(agent),
-        agentMode: flags.agent === true,
-      });
-    const present = (
-      nodes: Parameters<typeof writePresentation>[0]["nodes"],
-      view: ReturnType<typeof currentPresentationView>,
-    ) =>
-      writePresentation({
-        nodes,
-        flags,
-        locale: presentationLocale,
-        view,
-      });
     const loadPresentationLocale = async () => {
       const locale = await readGlobalLocale();
       presentationLocale = locale;
       return locale;
     };
-    if (flags.version) {
-      const locale = await loadPresentationLocale();
-      if (flags.help) {
-        present(
-          commandHelpPage(
-            ["version"],
-            locale,
-            colorEnabled(flags, stdout.isTTY),
-          ),
-          currentPresentationView(),
-        );
-        return;
-      }
-      const value = { cliVersion: version, nodeVersion: process.version };
-      present(
-        versionPage(
-          value,
-          colorEnabled(flags, stdout.isTTY),
+    const renderVersionOutput = (locale: Locale) =>
+      new OutputEngine({
+        mode: outputMode(flags),
+        locale,
+        color: colorEnabled(flags, stdout.isTTY),
+        columns: stdout.columns ?? 80,
+        output: stdout,
+      }).render(
+        versionOutputDefinition({
+          cliVersion: version,
+          nodeVersion: process.version,
           showWordmark,
-          stdout.columns,
-        ),
-        currentPresentationView(false),
+        }),
       );
-      return;
-    }
-    if (parts[0] === "help") {
+    const loadDefinitionHelp = async (
+      target: readonly string[],
+      includeAll = false,
+    ) => {
       const locale = await loadPresentationLocale();
-      const target = parts.slice(1);
-      if (commandFlags.all) {
-        const value = {
-          schema: "benchpilot.help-index",
-          version: 2,
-          commands: commandGroups,
-        };
-        write(value, flags, JSON.stringify(value, null, 2));
-        return;
+      const emptyProvider = { values: async () => [] };
+      const staticHelp = new HelpDocumentService(
+        commandCatalogDefinition,
+        emptyProvider,
+      );
+      let document;
+      try {
+        document = await staticHelp.document(target, {
+          includeDynamicValues: includeAll,
+        });
+      } catch (error) {
+        if (!(error instanceof CommandResolutionError)) throw error;
+        const declared = adapters ?? (await loadBuiltinAdapters());
+        const helpScope = await openApplicationRequest({
+          cwd: process.cwd(),
+          configPath: flags.config as string | undefined,
+          operation: { benchpilotVersion: version },
+          adapters: declared,
+          nodeVersion: process.versions.node,
+          businessLogs: new RLogBusinessLogFactory(),
+        });
+        try {
+          document = await helpScope.commandGraph.help.document(target, {
+            includeDynamicValues: includeAll,
+          });
+        } catch (dynamicError) {
+          if (dynamicError instanceof CommandResolutionError)
+            throw new BenchPilotError(
+              dynamicError.code === "COMMAND_UNAVAILABLE"
+                ? "COMMAND_UNAVAILABLE"
+                : "UNKNOWN_COMMAND",
+              dynamicError.code === "COMMAND_UNAVAILABLE" ? 3 : 2,
+              `Command not found: ${target.join(" ")}`,
+              false,
+              undefined,
+              [],
+              { path: target, resolution: dynamicError.code },
+            );
+          throw dynamicError;
+        }
       }
-      present(
-        commandHelpPage(target, locale, colorEnabled(flags, stdout.isTTY)),
-        currentPresentationView(true),
-      );
+      return { data: projectHelpDocument(document, locale), locale };
+    };
+    const renderDefinitionHelp = async (
+      target: readonly string[],
+      includeAll = false,
+    ) => {
+      const { data, locale } = await loadDefinitionHelp(target, includeAll);
+      new OutputEngine({
+        mode: outputMode(flags),
+        locale,
+        color: colorEnabled(flags, stdout.isTTY),
+        columns: stdout.columns ?? 80,
+        output: stdout,
+      }).render(helpOutputDefinition(data, showWordmark));
+    };
+    renderFailureHelp = async (target) => {
+      const { data, locale } = await loadDefinitionHelp(target);
+      const output: string[] = [];
+      new OutputEngine({
+        mode: "screen",
+        locale,
+        color: colorEnabled(flags, stdout.isTTY),
+        columns: stdout.columns ?? 80,
+        output: { write: (value) => output.push(value) },
+      }).render(helpOutputDefinition(data, false));
+      return output.join("");
+    };
+    if (
+      await handleVersionCommand({
+        path: parts,
+        forceVersion: flags.version === true,
+        helpRequested: flags.help === true,
+        loadLocale: loadPresentationLocale,
+        renderHelp: renderDefinitionHelp,
+        renderVersion: renderVersionOutput,
+      })
+    )
       return;
-    }
-    const target = parts.length ? parts : [];
-    if (flags.help && (parts[0] !== "device" || parts.length === 1)) {
-      const locale = await loadPresentationLocale();
-      present(
-        commandHelpPage(target, locale, colorEnabled(flags, stdout.isTTY)),
-        currentPresentationView(),
-      );
+    if (
+      await handleHelpCommand({
+        path: parts,
+        helpRequested: flags.help === true,
+        includeAll: commandFlags.all === true,
+        render: renderDefinitionHelp,
+      })
+    )
       return;
-    }
-    if (!parts.length) {
-      const locale = await loadPresentationLocale();
-      present(
-        rootHelpPage(
-          locale,
-          colorEnabled(flags, stdout.isTTY),
-          showWordmark,
-          currentPresentationView(false) === "agent" ? "agent" : "normal",
-        ),
-        currentPresentationView(false),
-      );
+    if (
+      await handleUpgradeCommand({
+        path: parts,
+        loadLocale: loadPresentationLocale,
+        executable: process.argv[1] || "",
+        interaction: () => interactive(presentationLocale, ["upgrade"]),
+        selected: writeSelectedCommand,
+        render: ({ command, page }) =>
+          renderDataPage({
+            command,
+            page,
+            flags,
+            locale: presentationLocale,
+            color: colorEnabled(flags, stdout.isTTY),
+          }),
+      })
+    )
       return;
+    const home = await handleHomeCommand({
+      path: parts,
+      loadLocale: loadPresentationLocale,
+      color: colorEnabled(flags, stdout.isTTY),
+      showWordmark,
+      interactionAllowed: interactionDecision({
+        agent,
+        agentMode: flags.agent === true,
+        json: flags.json,
+        jsonl: flags.jsonl,
+        stdinIsTTY: stdin.isTTY,
+        stdoutIsTTY: stdout.isTTY,
+      }).allowed,
+      interaction: () => interactive(presentationLocale, ["home"]),
+      rootHelp: async () => (await loadDefinitionHelp([])).data,
+      write: (value) => terminalSurface.write(value),
+      selected: writeSelectedCommand,
+      renderRootHelp: () => renderDefinitionHelp([]),
+      renderVersion: renderVersionOutput,
+      ignoreInitialEscape: resume?.ignoreHomeEscape === true,
+    });
+    if (home.handled) {
+      if (!home.nextPath) return;
+      parts = [...home.nextPath];
     }
-    if (parts[0] === "upgrade") {
-      const locale = await loadPresentationLocale();
-      if (parts.length > 2)
-        fail("USAGE_ERROR", 2, "upgrade accepts check, latest, or a version.");
-      const info = await checkForUpgrade(process.argv[1] || "");
-      if (parts.length === 1) {
-        if (!info.updateAvailable) {
-          writeDataPage({
-            page: upgradeCheckDataPage(info),
+    if (
+      await handleInitCommand({
+        path: parts,
+        values: commandFlags,
+        cwd: process.cwd(),
+        color: colorEnabled(flags, stdout.isTTY),
+        canInteract: interactionDecision({
+          agent,
+          agentMode: flags.agent === true,
+          json: flags.json,
+          jsonl: flags.jsonl,
+          stdinIsTTY: stdin.isTTY,
+          stdoutIsTTY: stdout.isTTY,
+        }).allowed,
+        interaction: (locale) => interactive(locale, ["init"]),
+        loadAdapters: async () => adapters ?? (await loadBuiltinAdapters()),
+        setPresentationLocale: (locale) => (presentationLocale = locale),
+        selected: writeSelectedCommand,
+        render: ({ page, locale }) =>
+          renderDataPage({
+            command: { id: "init", path: ["init"] },
+            page,
             flags,
             locale,
-            view: currentPresentationView(),
             color: colorEnabled(flags, stdout.isTTY),
-          });
-          return;
-        }
-        const selected = await interactive(locale, ["upgrade"]).choose(
-          info.versions
-            .filter(
-              (candidate) =>
-                compareUpgradeVersion(candidate, info.currentVersion) > 0,
-            )
-            .map((candidate, index) => ({
-              value: candidate,
-              label: index === 0 ? `${candidate} — 最新` : candidate,
-            })),
-          { commandPath: ["upgrade"], nextBackPath: ["upgrade"] },
-        );
-        writeSelectedCommand();
-        const result = await upgradeBenchPilot(info, selected);
-        writeDataPage({
-          page: upgradeResultDataPage(result),
-          flags,
-          locale,
-          view: currentPresentationView(),
-          color: colorEnabled(flags, stdout.isTTY),
-        });
-        return;
-      }
-      if (parts[1] === "check") {
-        writeDataPage({
-          page: upgradeCheckDataPage(info),
-          flags,
-          locale,
-          view: currentPresentationView(),
-          color: colorEnabled(flags, stdout.isTTY),
-        });
-        return;
-      }
-      const requested = parts[1]!;
-      const targetVersion =
-        requested === "latest" ? info.latestVersion : requested;
-      if (!targetVersion)
-        fail(
-          "UPGRADE_VERSION_NOT_FOUND",
-          2,
-          "No published version is available.",
-        );
-      const result = await upgradeBenchPilot(info, targetVersion!);
-      writeDataPage({
-        page: upgradeResultDataPage(result),
-        flags,
-        locale,
-        view: currentPresentationView(),
-        color: colorEnabled(flags, stdout.isTTY),
-      });
+          }),
+      })
+    )
       return;
-    }
-    if (parts[0] === "home") {
-      if (parts.length !== 1)
-        fail("USAGE_ERROR", 2, "The home command takes no arguments.");
-      const locale = await loadPresentationLocale();
-      const decision = interactionDecision({
-        agent,
-        agentMode: flags.agent === true,
-        json: flags.json,
-        jsonl: flags.jsonl,
-        stdinIsTTY: stdin.isTTY,
-        stdoutIsTTY: stdout.isTTY,
-      });
-      if (!decision.allowed) {
-        present(
-          rootHelpPage(
-            locale,
-            colorEnabled(flags, stdout.isTTY),
-            showWordmark,
-            currentPresentationView(false) === "agent" ? "agent" : "normal",
-          ),
-          currentPresentationView(false),
-        );
-        return;
-      }
-      writeText(
-        renderInteractiveHomeHeader(
-          locale,
-          colorEnabled(flags, stdout.isTTY),
-          showWordmark,
-        ),
-      );
-      interaction ??= new InteractionSession(
-        locale,
-        undefined,
-        colorEnabled(flags, stdout.isTTY),
-        resume?.backPaths,
-      );
-      const command = await interaction.choose(
-        rootMenuChoices(locale, colorEnabled(flags, stdout.isTTY)),
-        {
-          pageSize: 100,
-          searchable: true,
-          commandPath: [],
-          ignoreInitialEscape: resume?.ignoreHomeEscape === true,
-          nextBackPath: ["home"],
-        },
-      );
-      if (command === "help") {
-        writeSelectedCommand();
-        write(
-          fullHelp([]),
-          flags,
-          brief(
-            "root",
-            locale,
-            colorEnabled(flags, stdout.isTTY),
-            showWordmark,
-          ),
-        );
-        return;
-      }
-      if (command === "version") {
-        writeSelectedCommand();
-        const value = { cliVersion: version, nodeVersion: process.version };
-        write(
-          value,
-          flags,
-          renderVersion(
-            value,
-            colorEnabled(flags, stdout.isTTY),
-            showWordmark,
-            stdout.columns,
-          ),
-        );
-        return;
-      }
-      parts = [command];
-    }
-    if (parts[0] === "version") {
-      if (parts.length !== 1)
-        fail("USAGE_ERROR", 2, "The version command takes no arguments.");
-      const locale = await loadPresentationLocale();
-      const value = { cliVersion: version, nodeVersion: process.version };
-      present(
-        versionPage(
-          value,
-          colorEnabled(flags, stdout.isTTY),
-          showWordmark,
-          stdout.columns,
-        ),
-        currentPresentationView(false),
-      );
-      return;
-    }
-    if (parts[0] === "init") {
-      const suppliedLocale = commandFlags.locale;
-      if (commandFlags["project-id"] !== undefined)
-        fail(
-          "USAGE_ERROR",
-          2,
-          "init generates the project ID automatically; omit --project-id.",
-        );
-      const persistedLocale = await readGlobalLocaleSetting();
-      const requestedLocale = isLocale(suppliedLocale)
-        ? suppliedLocale
-        : undefined;
-      const initLocale: Locale = persistedLocale ?? requestedLocale ?? "en";
-      const projectName =
-        typeof commandFlags["project-name"] === "string"
-          ? String(commandFlags["project-name"])
-          : undefined;
-      const app = createApplication([]);
-      if (await app.hasProjectConfig(process.cwd())) {
-        presentationLocale = initLocale;
-        writeSelectedCommand();
-        const result = await app.initializeProject({
-          cwd: process.cwd(),
-          projectName: "",
-          enabledAdapters: [],
-        });
-        writeDataPage({
-          page: initDataPage(result),
-          flags,
-          locale: initLocale,
-          view: currentPresentationView(),
-          color: colorEnabled(flags, stdout.isTTY),
-        });
-        return;
-      }
-      let input =
-        projectName && (persistedLocale || requestedLocale)
-          ? {
-              projectName,
-              locale: persistedLocale ?? requestedLocale!,
-              enabledAdapters: [] as string[],
-            }
-          : undefined;
-      const decision = interactionDecision({
-        agent,
-        agentMode: flags.agent === true,
-        json: flags.json,
-        jsonl: flags.jsonl,
-        stdinIsTTY: stdin.isTTY,
-        stdoutIsTTY: stdout.isTTY,
-      });
-      if (!input || decision.allowed) {
-        if (!decision.allowed) {
-          const kind =
-            decision.reason === "agent"
-              ? "AGENT_INTERACTION_UNSUPPORTED"
-              : decision.reason === "machine-output"
-                ? "INTERACTIVE_MACHINE_OUTPUT_UNSUPPORTED"
-                : "INTERACTIVE_TERMINAL_REQUIRED";
-          const message = t(
-            initLocale,
-            decision.reason === "agent"
-              ? "cli.interaction.agent"
-              : decision.reason === "machine-output"
-                ? "cli.interaction.machine"
-                : "cli.interaction.terminal",
-          );
-          throw new BenchPilotError(kind, 2, message, false, undefined, [], {
-            help: fullHelp(["init"]),
-          });
-        }
-        try {
-          const session = interactive(initLocale, ["init"]);
-          const available = adapters ?? (await loadBuiltinAdapters());
-          const theme = terminalTheme(colorEnabled(flags, stdout.isTTY));
-          input = await promptInit({
-            locale: initLocale,
-            projectName,
-            adapters: available.map((adapter) => ({
-              value: adapter.id,
-              label: `${theme.command(adapter.id)}  ${adapter.summary}`,
-            })),
-            color: colorEnabled(flags, stdout.isTTY),
-            session,
-            selectedLocale: persistedLocale ?? requestedLocale,
-          });
-        } catch (error) {
-          if ((error as Error).name === "INTERACTION_CANCELLED")
-            throw new BenchPilotError(
-              "INTERACTION_CANCELLED",
-              130,
-              t(initLocale, "cli.interaction.cancelled"),
-            );
-          throw error;
-        }
-      }
-      presentationLocale = input.locale;
-      writeSelectedCommand();
-      const result = await app.initializeProject({
-        cwd: process.cwd(),
-        projectName: input.projectName,
-        enabledAdapters: input.enabledAdapters,
-      });
-      if (!persistedLocale) await writeGlobalLocale({ locale: input.locale });
-      writeDataPage({
-        page: initDataPage(result),
-        flags,
-        locale: input.locale,
-        view: currentPresentationView(),
-        color: colorEnabled(flags, stdout.isTTY),
-      });
-      return;
-    }
     const declared = adapters ?? (await loadBuiltinAdapters());
     const scope = await openApplicationRequest({
       cwd: process.cwd(),
       configPath: flags.config as string | undefined,
-      flags,
+      operation: {
+        timeout: flags.timeout,
+        dryRun: flags["dry-run"] === true,
+        session: typeof flags.session === "string" ? flags.session : undefined,
+        benchpilotVersion: version,
+      },
       adapters: declared,
       nodeVersion: process.versions.node,
-      eventWriter: flags.jsonl ? new EventWriter(stdout) : undefined,
+      reporter: flags.jsonl ? new LegacyEventReporter(stdout) : undefined,
+      businessLogs: new RLogBusinessLogFactory(),
     });
     const {
+      application,
       config,
       runtime,
       runtimeCommands,
@@ -618,6 +474,107 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
       configurationCommands,
       catalog,
     } = scope;
+    const operationOutputDeferred =
+      parts[0] === "device" || parts[0] === "system";
+    const interactionResolutionDeferred =
+      parts[0] === "approval" &&
+      (parts[2] === "approve" || parts[2] === "reject");
+    const parseCurrentCommand = async () => {
+      try {
+        return await parseCommandState({
+          graph: scope.commandGraph,
+          path: parts,
+          values: commandFlags,
+        });
+      } catch (error) {
+        throw commandContractError(error, parts);
+      }
+    };
+    let definedCommand;
+    if (!operationOutputDeferred && !interactionResolutionDeferred) {
+      try {
+        const directPathUnchanged =
+          !resume &&
+          parsed.path.length === parts.length &&
+          parsed.path.every((value, index) => value === parts[index]);
+        definedCommand = directPathUnchanged
+          ? await scope.commandGraph.parser.parse(process.argv.slice(2))
+          : await parseCurrentCommand();
+        commandFlags = {
+          ...commandFlags,
+          ...commandIntentValues(definedCommand.intent),
+        };
+        resolvedCommandId = definedCommand.intent.commandId;
+      } catch (error) {
+        throw commandContractError(error, parts);
+      }
+    }
+    const translateAdapterMessage = (
+      adapterId: string,
+      selectedLocale: Locale,
+      key: string,
+      values: Readonly<Record<string, string | number | boolean>>,
+    ) =>
+      application.registry
+        .get(adapterId)
+        .translate?.(
+          selectedLocale,
+          key,
+          Object.fromEntries(
+            Object.entries(values).map(([name, value]) => [
+              name,
+              String(value),
+            ]),
+          ),
+        );
+    const adapterMessageResolver =
+      (selectedLocale: Locale) =>
+      ({
+        adapter,
+        key,
+        values,
+        fallback,
+      }: {
+        adapter?: string;
+        key: string;
+        values: Readonly<Record<string, string | number | boolean>>;
+        fallback: string;
+      }) =>
+        adapter
+          ? (translateAdapterMessage(adapter, selectedLocale, key, values) ??
+            fallback)
+          : undefined;
+    const describeDeviceForDisplay = async (
+      id: string,
+      selectedLocale: Locale,
+    ) => {
+      const description = await devices.describe(id);
+      return {
+        ...description,
+        capabilities: localizeAdapterCapabilities(
+          application.registry.get(description.adapter.id),
+          selectedLocale,
+          description.capabilities,
+        ),
+      };
+    };
+    const describeSystemForDisplay = async (
+      id: string,
+      selectedLocale: Locale,
+    ) => {
+      const description = await systems.describe(id);
+      const first = [...description.devices].sort()[0];
+      if (!first) return description;
+      const source = await devices.describe(first);
+      return {
+        ...description,
+        capabilities: localizeAdapterCapabilities(
+          application.registry.get(source.adapter.id),
+          selectedLocale,
+          description.capabilities,
+        ),
+      };
+    };
     const globalLayer = config.layers.find((layer) => layer.scope === "global");
     const configuredLocale = (globalLayer?.value.cli as Json | undefined)
       ?.locale;
@@ -645,120 +602,184 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
         label: commandChoice(entry.value, entry.summary, width),
       }));
     };
+    const graphMenuChoices = (
+      parentId: string,
+      commandIds?: readonly string[],
+    ) =>
+      interactionMenuChoices(
+        scope.commandGraph.interaction.children(parentId, commandIds),
+        locale,
+        colorEnabled(flags, stdout.isTTY),
+      );
+    const resourceNavigation = {
+      adapter: () =>
+        navigateResourceCommand({
+          path: parts,
+          root: "adapter",
+          rootChoices: graphMenuChoices("adapter"),
+          resources: async () =>
+            queries.listAdapters().adapters.map((adapter) => ({
+              value: adapter.id,
+              label: `${adapter.id} — ${adapter.summary}`,
+            })),
+          actionChoices: async () => graphMenuChoices("adapter.resource"),
+          interaction: () => interactive(locale, parts),
+          color: colorEnabled(flags, stdout.isTTY),
+        }),
+      run: () =>
+        navigateResourceCommand({
+          path: parts,
+          root: "run",
+          rootChoices: graphMenuChoices("run"),
+          resources: async () => {
+            const records = await runtime.listRuns();
+            const width = recordChoiceWidth(records.runs.map((run) => run.id));
+            return records.runs.map((run) => ({
+              value: run.id,
+              label: recordChoiceLabel(
+                run.id,
+                runStatusLabel(locale, run.manifest?.status),
+                width,
+              ),
+            }));
+          },
+          actionChoices: async () => graphMenuChoices("run.resource"),
+          onStaticAction: async (action) => {
+            if (action !== "prune") return ["run", action];
+            const parsedPrune = await parseCommandState({
+              graph: scope.commandGraph,
+              path: ["run", "prune"],
+              values: commandFlags,
+            });
+            const completion = await new InteractionEngine(
+              interactive(locale, ["run", "prune"]),
+              locale,
+              {
+                "run-prune-mode": () => [
+                  { value: "keep", label: t(locale, "menu.runs.keep") },
+                  {
+                    value: "older-than",
+                    label: t(locale, "menu.runs.older-than"),
+                  },
+                  {
+                    value: "dangerously-remove-all-runs",
+                    label: t(locale, "menu.runs.all"),
+                  },
+                ],
+              },
+            ).complete(parsedPrune);
+            commandFlags = { ...commandFlags, ...completion.values };
+            return completion.path;
+          },
+          interaction: () => interactive(locale, parts),
+          color: colorEnabled(flags, stdout.isTTY),
+        }),
+      lock: () =>
+        navigateResourceCommand({
+          path: parts,
+          root: "lock",
+          rootChoices: graphMenuChoices("lock"),
+          resources: async () => {
+            const records = await runtime.listLocks();
+            const width = recordChoiceWidth(
+              records.locks.map((lock) => lock.lockId),
+            );
+            return records.locks.map((lock) => ({
+              value: lock.lockId,
+              label: recordChoiceLabel(
+                lock.lockId,
+                lockStatusLabel(locale, lock.state, lock.liveness),
+                width,
+              ),
+            }));
+          },
+          actionChoices: async () =>
+            graphMenuChoices("lock.resource", ["lock.show", "lock.clear"]),
+          interaction: () => interactive(locale, parts),
+          color: colorEnabled(flags, stdout.isTTY),
+        }),
+      approval: () =>
+        navigateResourceCommand({
+          path: parts,
+          root: "approval",
+          rootChoices: graphMenuChoices("approval"),
+          resources: async () => {
+            const approvals = await runtime.listApprovals();
+            const width = recordChoiceWidth(
+              approvals.approvals.map((approval) => approval.id),
+            );
+            return approvals.approvals.map((approval) => ({
+              value: approval.id,
+              label: recordChoiceLabel(
+                approval.id,
+                approvalStatusLabel(locale, approval.status),
+                width,
+              ),
+            }));
+          },
+          actionChoices: async (approvalId) => {
+            const approval = (await runtime.listApprovals()).approvals.find(
+              (candidate) => candidate.id === approvalId,
+            );
+            const pending = approval?.status === "pending";
+            const entries =
+              scope.commandGraph.interaction.children("approval.resource");
+            const width = Math.max(
+              ...entries.map((entry) => entry.value.length),
+            );
+            const unavailable = t(locale, "approval.actionUnavailable", {
+              status: approval
+                ? approvalStatusLabel(locale, approval.status)
+                : approvalId,
+            });
+            const theme = terminalTheme(colorEnabled(flags, stdout.isTTY));
+            return entries.map((entry) => {
+              const summary = resolveMessage(locale, entry.summary);
+              const unavailableAction = !pending && entry.value !== "inspect";
+              return {
+                value: entry.value,
+                label: unavailableAction
+                  ? theme.muted(`${entry.value.padEnd(width)}  ${summary}`)
+                  : commandChoice(entry.value, summary, width),
+                ...(unavailableAction
+                  ? { description: `${theme.debug(unavailable)}\n` }
+                  : {}),
+              };
+            });
+          },
+          interaction: () => interactive(locale, parts),
+          color: colorEnabled(flags, stdout.isTTY),
+        }),
+    } as const;
+    const navigateDynamicRecord = async () => {
+      if (flags.help) return false;
+      const navigate =
+        resourceNavigation[parts[0] as keyof typeof resourceNavigation];
+      if (!navigate) return false;
+      const result = await navigate();
+      if (!result) return false;
+      parts = [...result];
+      return true;
+    };
     renderAdapterDoctor = async (adapterId) => {
-      writeText(
+      terminalSurface.write(
         `\n${terminalTheme(colorEnabled(flags, stdout.isTTY)).debug(`$ benchpilot adapter ${adapterId} doctor`)}\n\n`,
       );
-      writeDataPage({
+      renderDataPage({
+        command: {
+          id: "adapter.doctor",
+          path: ["adapter", adapterId, "doctor"],
+        },
         page: adapterDoctorDataPage(
-          await queries.adapterDoctor(adapterId, presentationLocale),
+          adapterId,
+          await queries.adapterDoctor(adapterId),
         ),
         flags,
         locale: presentationLocale,
-        view: "normal",
         color: colorEnabled(flags, stdout.isTTY),
+        messageResolver: adapterMessageResolver(presentationLocale),
       });
     };
-    if (parts[0] === "language") {
-      const globalLayer = config.layers.find(
-        (layer) => layer.scope === "global",
-      );
-      const globalLocale = (globalLayer?.value.cli as Json | undefined)?.locale;
-      const current = isLocale(globalLocale) ? globalLocale : "en";
-      if (parts.length === 1) {
-        const session = interactive(locale, ["language"]);
-        parts.push(
-          await session.choose(
-            commandChoices([
-              { value: "list", summary: t(locale, "menu.action.list") },
-              { value: "get", summary: t(locale, "menu.action.get") },
-              { value: "set", summary: t(locale, "menu.action.set") },
-            ]),
-            { commandPath: ["language"], nextBackPath: ["language"] },
-          ),
-        );
-      }
-      if (parts[1] === "set" && parts.length === 2)
-        parts.push(
-          await interactive(locale, ["language", "set"]).choose(
-            supportedLanguages,
-            { commandPath: ["language", "set"] },
-          ),
-        );
-      const action = parts[1];
-      if (!action || !["list", "get", "set"].includes(action))
-        fail("USAGE_ERROR", 2, "language expects list, get, or set <locale>.");
-      writeSelectedCommand();
-      if (action === "list") {
-        if (parts.length !== 2)
-          fail("USAGE_ERROR", 2, "language list takes no arguments.");
-        write(
-          { languages: supportedLanguages },
-          flags,
-          `${supportedLanguages.map(({ value, label }) => `${value.padEnd(7)} ${label}`).join("\n")}\n`,
-        );
-        return;
-      }
-      if (action === "get") {
-        if (parts.length !== 2)
-          fail("USAGE_ERROR", 2, "language get takes no arguments.");
-        write({ language: current }, flags, `${current}\n`);
-        return;
-      }
-      if (parts.length !== 3)
-        fail("USAGE_ERROR", 2, "language set requires <locale>.");
-      const requested = parts[2];
-      if (!isLocale(requested))
-        fail("USAGE_ERROR", 2, `Unsupported CLI language: ${requested}.`);
-      await configurationCommands.execute({
-        action: "set",
-        key: "cli.locale",
-        value: requested,
-        scopes: ["global"],
-      });
-      write({ language: requested }, flags, `${requested}\n`);
-      return;
-    }
-    const menuActionKeys = {
-      get: "menu.action.get",
-      add: "menu.action.add",
-      remove: "menu.action.remove",
-      set: "menu.action.set",
-      unset: "menu.action.unset",
-      resolved: "menu.action.resolved",
-      explain: "menu.action.explain",
-      validate: "menu.action.validate",
-      list: "menu.action.list",
-      prune: "menu.action.prune",
-      scan: "menu.action.scan",
-      "clear-stale": "menu.action.clear-stale",
-      doctor: "menu.action.doctor",
-      show: "menu.action.show",
-      logs: "menu.action.logs",
-      artifacts: "menu.action.artifacts",
-      clear: "menu.action.clear",
-      inspect: "menu.action.inspect",
-      approve: "menu.action.approve",
-      reject: "menu.action.reject",
-      create: "menu.action.create",
-      delete: "menu.action.delete",
-      member: "menu.action.member",
-    } as const satisfies Record<string, MessageKey>;
-    const menuChoices = (values: readonly (keyof typeof menuActionKeys)[]) =>
-      commandChoices(
-        values.map((value) => ({
-          value,
-          summary: t(locale, menuActionKeys[value]),
-        })),
-      );
-    const chooseConfigurationKey = async (
-      session: InteractionSession,
-      commandPath: readonly string[],
-    ) =>
-      session.choose(
-        configurationMenuChoices(locale, colorEnabled(flags, stdout.isTTY)),
-        { commandPath },
-      );
     const configurationScopeMessages = {
       local: {
         name: "configCatalog.scope.local.name",
@@ -776,65 +797,73 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
       "local" | "project" | "global",
       { name: MessageKey; description: MessageKey }
     >;
-    const chooseConfigurationScope = async (
-      session: InteractionSession,
-      entry: NonNullable<ReturnType<typeof configurationCatalogEntry>>,
-    ) => {
-      const explicit = ["local", "project", "global"].find(
-        (scope) => commandFlags[scope] === true,
-      );
-      if (explicit) return;
-      const scopes = entry.scopes;
-      const theme = terminalTheme(colorEnabled(flags, stdout.isTTY));
-      const nameWidth = Math.max(
-        ...scopes.map((scope) =>
-          displayWidth(t(locale, configurationScopeMessages[scope].name)),
-        ),
-      );
-      const scope = await session.choose(
-        scopes.map((scope) => ({
+    const configurationInteractionProviders = {
+      "configuration-keys": () =>
+        configurationMenuChoices(locale, colorEnabled(flags, stdout.isTTY)),
+      "configuration-scopes": ({
+        values,
+      }: {
+        values: Readonly<Record<string, unknown>>;
+      }) => {
+        const entry = configurationCatalogEntry(String(values.key ?? ""));
+        if (!entry) return [];
+        const theme = terminalTheme(colorEnabled(flags, stdout.isTTY));
+        const nameWidth = Math.max(
+          ...entry.scopes.map((scope) =>
+            displayWidth(t(locale, configurationScopeMessages[scope].name)),
+          ),
+        );
+        return entry.scopes.map((scope) => ({
           value: scope,
           label: `${theme.command(padDisplay(scope, 7))}  ${padDisplay(t(locale, configurationScopeMessages[scope].name), nameWidth)}  ${theme.muted(t(locale, configurationScopeMessages[scope].description))}`,
-        })),
-      );
-      commandFlags = { ...commandFlags, [scope]: true };
-    };
-    const completeConfigSet = async (
-      session: InteractionSession,
-      commandPath: readonly string[],
-    ) => {
-      const key = await chooseConfigurationKey(session, commandPath);
-      const entry = configurationCatalogEntry(key);
-      if (!entry) throw new Error(`Unknown configuration key: ${key}`);
-      await chooseConfigurationScope(session, entry);
-      if (entry.editor === "select") {
-        return [
-          key,
-          await session.choose(
-            configurationValueMenuChoices(
-              entry,
-              locale,
-              colorEnabled(flags, stdout.isTTY),
-            ),
-            { commandPath: [...commandPath, key] },
-          ),
-        ];
-      }
-      if (entry.editor === "multi-select") {
+        }));
+      },
+      "configuration-values": ({
+        values,
+      }: {
+        values: Readonly<Record<string, unknown>>;
+      }) => {
+        const entry = configurationCatalogEntry(String(values.key ?? ""));
+        if (!entry || entry.editor === "text") return undefined;
+        if (entry.editor === "select")
+          return configurationValueMenuChoices(
+            entry,
+            locale,
+            colorEnabled(flags, stdout.isTTY),
+          );
         const idWidth = Math.max(
           ...declared.map((adapter) => displayWidth(adapter.id)),
         );
         const theme = terminalTheme(colorEnabled(flags, stdout.isTTY));
-        const selected = await session.chooseMany(
-          t(locale, "configCatalog.enabledAdapters.prompt"),
-          declared.map((adapter) => ({
+        return {
+          choices: declared.map((adapter) => ({
             value: adapter.id,
             label: `${theme.command(padDisplay(adapter.id, idWidth))}  ${adapter.summary}`,
           })),
-        );
-        return [key, JSON.stringify(selected)];
-      }
-      return [key, await session.value(t(locale, "menu.field.value"))];
+          multiple: true,
+          prompt: t(locale, "configCatalog.enabledAdapters.prompt"),
+          serialize: "json" as const,
+        };
+      },
+    };
+    const completeDeclaredRecipe = async () => {
+      const candidate = await parseCurrentCommand();
+      if (
+        !candidate.resolved.definition.interactionRecipe ||
+        !candidate.missingFields.length
+      )
+        return false;
+      const completion = await new InteractionEngine(
+        interactive(locale, parts),
+        locale,
+        {
+          "supported-locales": () => supportedLanguages,
+          ...configurationInteractionProviders,
+        },
+      ).complete(candidate);
+      parts = [...completion.path];
+      commandFlags = { ...commandFlags, ...completion.values };
+      return true;
     };
     const chooseDiscoveredDevice = async (session: InteractionSession) => {
       const discovered = await queries.scanDevices();
@@ -887,124 +916,36 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
         ...(typeof fields?.port === "string" ? { port: fields.port } : {}),
       };
     };
+    await navigateDynamicRecord();
+    const staticGroupNavigation = {
+      language: async (session: InteractionSession) => {
+        parts.push(
+          await session.choose(graphMenuChoices("language"), {
+            commandPath: ["language"],
+            nextBackPath: ["language"],
+          }),
+        );
+      },
+      config: async (session: InteractionSession) => {
+        parts.push(
+          await session.choose(graphMenuChoices("config"), {
+            commandPath: ["config"],
+            nextBackPath: ["config"],
+          }),
+        );
+      },
+    } as const;
     if (isCommandGroup(parts[0]) && parts.length === 1) {
       const session = interactive(locale, parts);
       const group = parts[0];
-      if (group === "config") {
-        const sub = await session.choose(
-          menuChoices([
-            "get",
-            "set",
-            "unset",
-            "resolved",
-            "explain",
-            "validate",
-          ]),
-          { commandPath: ["config"], nextBackPath: ["config"] },
-        );
-        parts.push(sub);
-        if (["get", "unset", "explain"].includes(sub)) {
-          parts.push(await chooseConfigurationKey(session, parts));
-          if (sub === "unset")
-            await chooseConfigurationScope(
-              session,
-              configurationCatalogEntry(parts[2]!)!,
-            );
-        }
-        if (sub === "set")
-          parts.push(...(await completeConfigSet(session, parts)));
-      } else if (group === "run") {
-        const runRecords = await runtime.listRuns();
-        const runChoiceWidth = recordChoiceWidth(
-          runRecords.runs.map((run) => run.id),
-        );
-        const selected = await session.choose(
-          [
-            ...menuChoices(["list", "prune"]),
-            ...(runRecords.runs.length
-              ? [
-                  {
-                    separator: menuDivider(colorEnabled(flags, stdout.isTTY)),
-                  },
-                  ...runRecords.runs.map((run) => ({
-                    value: run.id,
-                    label: recordChoiceLabel(
-                      run.id,
-                      runStatusLabel(locale, run.manifest?.status),
-                      runChoiceWidth,
-                    ),
-                  })),
-                ]
-              : []),
-          ],
-          {
-            commandPath: ["run"],
-            nextBackPath: ["run"],
-          },
-        );
-        if (selected !== "list" && selected !== "prune") {
-          parts.push(
-            selected,
-            await session.choose(menuChoices(["show", "logs", "artifacts"]), {
-              commandPath: ["run", selected],
-            }),
-          );
-        } else {
-          const sub = selected;
-          parts.push(sub);
-          if (sub === "prune") {
-            const mode = await session.choose(
-              [
-                { value: "keep", label: t(locale, "menu.runs.keep") },
-                {
-                  value: "older-than",
-                  label: t(locale, "menu.runs.older-than"),
-                },
-                { value: "all", label: t(locale, "menu.runs.all") },
-              ],
-              { commandPath: ["run", "prune"] },
-            );
-            if (mode === "all")
-              commandFlags = {
-                ...commandFlags,
-                "dangerously-remove-all-runs": true,
-              };
-            else
-              commandFlags = {
-                ...commandFlags,
-                [mode]: await session.value(mode),
-              };
-          }
-        }
-      } else if (group === "adapter") {
-        const adapters = queries.listAdapters().adapters;
-        const id = await session.choose(
-          [
-            ...menuChoices(["list"]),
-            ...(adapters.length
-              ? [
-                  { separator: menuDivider(colorEnabled(flags, stdout.isTTY)) },
-                  ...adapters.map((adapter) => ({
-                    value: adapter.id,
-                    label: `${adapter.id} — ${adapter.summary}`,
-                  })),
-                ]
-              : []),
-          ],
-          { commandPath: ["adapter"], nextBackPath: ["adapter"] },
-        );
-        parts.push(id);
-        if (id !== "list")
-          parts.push(
-            await session.choose(menuChoices(["show", "doctor"]), {
-              commandPath: ["adapter", id],
-            }),
-          );
-      } else if (group === "device") {
+      const navigate =
+        staticGroupNavigation[group as keyof typeof staticGroupNavigation];
+      if (navigate) await navigate(session);
+      else if (group === "device") {
         const deviceNodes = await catalog.children(["device"]);
         const id = await session.choose(
           [
-            ...menuChoices(["list", "scan", "add", "remove"]),
+            ...graphMenuChoices("device"),
             ...(deviceNodes.length
               ? [
                   { separator: menuDivider(colorEnabled(flags, stdout.isTTY)) },
@@ -1044,7 +985,7 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
             ),
           );
         } else {
-          const capabilities = (await devices.describe(id, locale))
+          const capabilities = (await describeDeviceForDisplay(id, locale))
             .capabilities;
           parts.push(
             id,
@@ -1063,7 +1004,11 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
         const systemNodes = await catalog.children(["system"]);
         const id = await session.choose(
           [
-            ...menuChoices(["list", "create", "delete"]),
+            ...graphMenuChoices("system", [
+              "system.list",
+              "system.create",
+              "system.delete",
+            ]),
             ...(systemNodes.length
               ? [
                   { separator: menuDivider(colorEnabled(flags, stdout.isTTY)) },
@@ -1082,11 +1027,9 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
           const devices = queries.listConfiguredDevices().devices;
           if (!devices.length)
             fail("DEVICE_NOT_FOUND", 3, "No configured devices are available.");
-          const name = await session.value(
-            t(locale, "system.detail.id" as never),
-          );
+          const name = await session.value(t(locale, "system.detail.id"));
           const members = await session.chooseMany(
-            t(locale, "system.detail.members" as never),
+            t(locale, "system.detail.members"),
             devices.map((device) => ({
               value: String((device as Record<string, unknown>).id),
               label: String((device as Record<string, unknown>).id),
@@ -1113,11 +1056,12 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
             ),
           );
         } else {
-          const capabilities = (await systems.describe(id, locale))
+          const capabilities = (await describeSystemForDisplay(id, locale))
             .capabilities;
           const action = await session.choose(
             [
-              ...menuChoices(["show", "member"]),
+              ...graphMenuChoices("system.resource"),
+              ...graphMenuChoices("system", ["system.member"]),
               ...(capabilities.length
                 ? [
                     {
@@ -1137,12 +1081,12 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
           if (action === "show") parts.push(id, action);
           else if (action === "member") {
             const operation = await session.choose(
-              menuChoices(["add", "remove"]),
+              graphMenuChoices("system.member"),
               {
                 commandPath: ["system", id, "member"],
               },
             );
-            const system = await systems.describe(id, locale);
+            const system = await systems.describe(id);
             const candidates =
               operation === "add"
                 ? queries
@@ -1176,152 +1120,14 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
             );
           } else parts.push(id, action);
         }
-      } else if (group === "lock") {
-        const locks = await runtime.listLocks();
-        const lockChoiceWidth = recordChoiceWidth(
-          locks.locks.map((lock) => lock.lockId),
-        );
-        const lockActions = [
-          { value: "list", summary: t(locale, "menu.lock.listAll") },
-          {
-            value: "clear-stale",
-            summary: t(locale, "menu.action.clear-stale"),
-          },
-        ];
-        const selected = await session.choose(
-          [
-            ...commandChoices(lockActions),
-            ...(locks.locks.length
-              ? [
-                  { separator: menuDivider(colorEnabled(flags, stdout.isTTY)) },
-                  ...locks.locks.map((lock) => ({
-                    value: lock.lockId,
-                    label: recordChoiceLabel(
-                      lock.lockId,
-                      lockStatusLabel(locale, lock.state, lock.liveness),
-                      lockChoiceWidth,
-                    ),
-                  })),
-                ]
-              : []),
-          ],
-          { commandPath: ["lock"], nextBackPath: ["lock"] },
-        );
-        if (selected === "list" || selected === "clear-stale")
-          parts.push(selected);
-        else
-          parts.push(
-            selected,
-            await session.choose(menuChoices(["show", "clear"]), {
-              commandPath: ["lock", selected],
-            }),
-          );
-      } else if (group === "approval") {
-        const approvals = await runtime.listApprovals();
-        const approvalChoiceWidth = recordChoiceWidth(
-          approvals.approvals.map((approval) => approval.id),
-        );
-        const selected = await session.choose(
-          [
-            ...commandChoices([
-              {
-                value: "list",
-                summary: t(locale, "menu.approval.listAll"),
-              },
-            ]),
-            ...(approvals.approvals.length
-              ? [
-                  {
-                    separator: menuDivider(colorEnabled(flags, stdout.isTTY)),
-                  },
-                  ...approvals.approvals.map((approval) => ({
-                    value: approval.id,
-                    label: recordChoiceLabel(
-                      approval.id,
-                      approvalStatusLabel(locale, approval.status),
-                      approvalChoiceWidth,
-                    ),
-                  })),
-                ]
-              : []),
-          ],
-          { commandPath: ["approval"], nextBackPath: ["approval"] },
-        );
-        if (selected === "list") parts.push(selected);
-        else {
-          const approval = approvals.approvals.find(
-            (candidate) => candidate.id === selected,
-          );
-          const pending = approval?.status === "pending";
-          const actionEntries = [
-            { value: "inspect", summary: t(locale, "menu.action.inspect") },
-            { value: "approve", summary: t(locale, "menu.action.approve") },
-            { value: "reject", summary: t(locale, "menu.action.reject") },
-          ] as const;
-          const width = Math.max(
-            ...actionEntries.map((entry) => entry.value.length),
-          );
-          const unavailable = t(locale, "approval.actionUnavailable", {
-            status: approval
-              ? approvalStatusLabel(locale, approval.status)
-              : selected,
-          });
-          parts.push(
-            selected,
-            await session.choose(
-              actionEntries.map((entry) => ({
-                value: entry.value,
-                label:
-                  !pending && entry.value !== "inspect"
-                    ? terminalTheme(colorEnabled(flags, stdout.isTTY)).muted(
-                        `${entry.value.padEnd(width)}  ${entry.summary}`,
-                      )
-                    : commandChoice(entry.value, entry.summary, width),
-                ...(!pending && entry.value !== "inspect"
-                  ? {
-                      description: `${terminalTheme(colorEnabled(flags, stdout.isTTY)).debug(unavailable)}\n`,
-                    }
-                  : {}),
-              })),
-              {
-                commandPath: ["approval", selected],
-              },
-            ),
-          );
-        }
       }
     }
-    // A known parent plus an omitted action is an incomplete command. Continue
-    // the same interactive flow instead of degrading to a static help screen.
     if (
       !flags.help &&
-      parts[0] === "config" &&
-      parts.length === 2 &&
-      ["get", "unset", "explain", "set"].includes(parts[1]!)
-    ) {
-      const session = interactive(locale, parts);
-      if (["get", "unset", "explain"].includes(parts[1]!)) {
-        parts.push(await chooseConfigurationKey(session, parts));
-        if (parts[1] === "unset")
-          await chooseConfigurationScope(
-            session,
-            configurationCatalogEntry(parts[2]!)!,
-          );
-      } else if (parts[1] === "set")
-        parts.push(...(await completeConfigSet(session, parts)));
-    }
-    if (
-      !flags.help &&
-      parts[0] === "adapter" &&
-      parts.length === 2 &&
-      parts[1] !== "list"
+      !operationOutputDeferred &&
+      !interactionResolutionDeferred
     )
-      parts.push(
-        await interactive(locale, parts).choose(
-          menuChoices(["show", "doctor"]),
-          { commandPath: parts },
-        ),
-      );
+      await completeDeclaredRecipe();
     if (
       !flags.help &&
       parts[0] === "device" &&
@@ -1353,7 +1159,7 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
           ),
         );
       } else {
-        const capabilities = (await devices.describe(parts[1]!, locale))
+        const capabilities = (await describeDeviceForDisplay(parts[1]!, locale))
           .capabilities;
         if (!capabilities.length)
           fail(
@@ -1384,9 +1190,9 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
       const devices = queries.listConfiguredDevices().devices;
       if (!devices.length)
         fail("DEVICE_NOT_FOUND", 3, "No configured devices are available.");
-      const name = await session.value(t(locale, "system.detail.id" as never));
+      const name = await session.value(t(locale, "system.detail.id"));
       const members = await session.chooseMany(
-        t(locale, "system.detail.members" as never),
+        t(locale, "system.detail.members"),
         devices.map((device) => ({
           value: String((device as Record<string, unknown>).id),
           label: String((device as Record<string, unknown>).id),
@@ -1426,11 +1232,11 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
       !["list", "create", "delete"].includes(parts[1]!)
     ) {
       const session = interactive(locale, parts);
-      const capabilities = (await systems.describe(parts[1]!, locale))
+      const capabilities = (await describeSystemForDisplay(parts[1]!, locale))
         .capabilities;
       const action = await session.choose(
         [
-          ...menuChoices(["show"]),
+          ...graphMenuChoices("system.resource"),
           ...commandChoices(
             capabilities.map((capability) => ({
               value: capability.id,
@@ -1442,231 +1248,85 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
       );
       parts.push(action);
     }
+    // Reject human-only approval actions before resolving their dynamic ID.
     if (
-      !flags.help &&
-      parts[0] === "run" &&
-      parts.length === 2 &&
-      !["list", "prune"].includes(parts[1]!)
-    )
-      parts.push(
-        await interactive(locale, parts).choose(
-          menuChoices(["show", "logs", "artifacts"]),
-          { commandPath: parts },
-        ),
-      );
-    if (
-      !flags.help &&
-      parts[0] === "lock" &&
-      parts.length === 2 &&
-      !["list", "clear-stale"].includes(parts[1]!)
-    )
-      parts.push(
-        await interactive(locale, parts).choose(
-          menuChoices(["show", "clear"]),
-          {
-            commandPath: parts,
-          },
-        ),
-      );
-    if (
-      !flags.help &&
       parts[0] === "approval" &&
-      parts.length === 2 &&
-      parts[1] !== "list"
+      (parts[2] === "approve" || parts[2] === "reject")
     )
-      parts.push(
-        await interactive(locale, parts).choose(
-          menuChoices(["inspect", "approve", "reject"]),
-          { commandPath: parts },
-        ),
-      );
-    writeSelectedCommand();
-    if (parts[0] === "config") {
-      if (parts.length === 1) {
-        write(fullHelp(["config"]), flags, brief("config", locale));
-        return;
-      }
-      const configAction = parts[1]!;
-      const configEntry = configurationCatalogEntry(parts[2] ?? "") as
-        ConfigurationCatalogEntry | undefined;
-      if (["get", "set", "unset", "explain"].includes(configAction)) {
-        if (!configEntry)
-          fail(
-            "CONFIG_KEY_NOT_FOUND",
-            3,
-            `Configuration key is not managed by config: ${parts[2] ?? ""}.`,
-          );
-        if (["set", "unset"].includes(configAction)) {
-          const mutableEntry = configEntry as ConfigurationCatalogEntry;
-          const requestedScopes = ["local", "project", "global"].filter(
-            (scope) => commandFlags[scope] === true,
-          ) as Array<"local" | "project" | "global">;
-          if (
-            requestedScopes.some(
-              (scope) => !mutableEntry.scopes.includes(scope),
-            )
-          )
-            fail(
-              "CONFIG_SCOPE_INVALID",
-              2,
-              `${mutableEntry.key} cannot be saved in the requested scope.`,
-            );
-          if (!requestedScopes.length)
-            commandFlags = {
-              ...commandFlags,
-              [mutableEntry.scopes[0]]: true,
-            };
-        }
-      }
-      const outcome = await configurationCommands.execute({
-        action: parts[1]!,
-        key: parts[2],
-        value: parts[3],
-        scopes: ["local", "project", "global"].filter(
-          (scope) => commandFlags[scope],
-        ) as Array<"local" | "project" | "global">,
-        showOrigin: commandFlags["show-origin"] === true || parts[1] === "get",
-      });
-      const value = outcome.data as { value?: unknown };
-      if (outcome.kind === "config.resolved") {
-        writeDataPage({
-          page: configResolvedDataPage(
-            outcome.data as Parameters<typeof configResolvedDataPage>[0],
-          ),
-          flags,
-          locale,
-          view: currentPresentationView(),
-          color: colorEnabled(flags, stdout.isTTY),
-        });
-        return;
-      }
-      if (outcome.kind === "config.explain") {
-        writeDataPage({
-          page: configExplainDataPage(
-            outcome.data as Parameters<typeof configExplainDataPage>[0],
-          ),
-          flags,
-          locale,
-          view: currentPresentationView(),
-          color: colorEnabled(flags, stdout.isTTY),
-        });
-        return;
-      }
-      if (outcome.kind === "config.validate") {
-        writeDataPage({
-          page: configValidateDataPage(),
-          flags,
-          locale,
-          view: currentPresentationView(),
-          color: colorEnabled(flags, stdout.isTTY),
-        });
-        return;
-      }
-      if (outcome.kind === "config.get") {
-        writeDataPage({
-          page: configGetDataPage(
-            outcome.data as Parameters<typeof configGetDataPage>[0],
-          ),
-          flags,
-          locale,
-          view: currentPresentationView(),
-          color: colorEnabled(flags, stdout.isTTY),
-        });
-        return;
-      }
-      if (outcome.kind === "config.set" || outcome.kind === "config.unset") {
-        writeDataPage({
-          page: configMutationDataPage({
-            ...(outcome.data as Omit<
-              Parameters<typeof configMutationDataPage>[0],
-              "action"
-            >),
-            action: outcome.kind === "config.set" ? "set" : "unset",
-          }),
-          flags,
-          locale,
-          view: currentPresentationView(),
-          color: colorEnabled(flags, stdout.isTTY),
-        });
-        return;
-      }
-      write(
-        outcome.data,
-        flags,
-        outcome.kind === "config.get" ? String(value.value) : undefined,
-      );
-      return;
-    }
-    if (parts[0] === "doctor") {
-      if (commandFlags.save) {
-        /* doctor is intentionally read-only unless explicit save; its diagnostics are returned */
-      }
-      const result = await queries.doctor(locale);
-      writeDataPage({
-        page: doctorDataPage(result),
-        flags,
-        locale,
-        view: currentPresentationView(),
-        color: colorEnabled(flags, stdout.isTTY),
-      });
-      return;
-    }
-    if (parts[0] === "adapter" && parts[1] === "list") {
-      writeDataPage({
-        page: adapterListDataPage(queries.listAdapters()),
-        flags,
-        locale,
-        view: currentPresentationView(),
-        color: colorEnabled(flags, stdout.isTTY),
-      });
-      return;
-    }
-    if (parts[0] === "adapter" && parts[1] && parts[1] !== "list") {
-      const adapter = queries.adapterInfo(parts[1]);
-      if (parts.length === 2) {
-        write(
-          fullHelp(["adapter"]),
-          flags,
-          `benchpilot adapter ${adapter.id} — ${adapter.summary}\n\nCommands: show, doctor\n`,
+      interactive(locale, parts);
+    if (!operationOutputDeferred) {
+      definedCommand = await parseCurrentCommand();
+      commandFlags = {
+        ...commandFlags,
+        ...commandIntentValues(definedCommand.intent),
+      };
+      resolvedCommandId = definedCommand.intent.commandId;
+      if (definedCommand.missingFields.length)
+        throw new BenchPilotError(
+          "USAGE_ERROR",
+          2,
+          `Missing required fields: ${definedCommand.missingFields.join(", ")}.`,
+          false,
+          undefined,
+          [],
+          { helpPath: parts, fields: definedCommand.missingFields },
         );
-        return;
-      }
-      if (parts[2] === "show")
-        writeDataPage({
-          page: adapterInfoDataPage(adapter),
-          flags,
-          locale,
-          view: currentPresentationView(),
-          color: colorEnabled(flags, stdout.isTTY),
-        });
-      else if (parts[2] === "doctor")
-        writeDataPage({
-          page: adapterDoctorDataPage(
-            await queries.adapterDoctor(parts[1], locale),
-          ),
-          flags,
-          locale,
-          view: currentPresentationView(),
-          color: colorEnabled(flags, stdout.isTTY),
-        });
-      else fail("USAGE_ERROR", 2, "Unknown adapter command.");
+    }
+    writeSelectedCommand();
+    const deferredConfirmation =
+      definedCommand?.intent.commandId === "lock.clear" ||
+      definedCommand?.intent.commandId === "approval.approve" ||
+      definedCommand?.intent.commandId === "approval.reject";
+    if (
+      definedCommand?.intent.handlerId &&
+      hasOutcomePage(definedCommand.intent.commandId) &&
+      !deferredConfirmation
+    ) {
+      const outcome = await scope.commandGraph.dispatcher.dispatch(
+        definedCommand.intent,
+      );
+      renderDataPage({
+        command: {
+          id: definedCommand.intent.commandId,
+          path: [...definedCommand.intent.path],
+        },
+        page: outcomeDataPage(definedCommand.intent, outcome, {
+          approvalPresentation: {
+            projectId: (config.value.project as Json | undefined)?.id as
+              string | undefined,
+            projectName: (config.value.project as Json | undefined)?.name as
+              string | undefined,
+          },
+        }),
+        flags,
+        locale:
+          definedCommand.intent.commandId === "language.set" &&
+          isLocale(definedCommand.intent.input.locale)
+            ? definedCommand.intent.input.locale
+            : locale,
+        color: colorEnabled(flags, stdout.isTTY),
+        ...(definedCommand.intent.commandId === "adapter.doctor"
+          ? { messageResolver: adapterMessageResolver(locale) }
+          : {}),
+      });
       return;
     }
     if (parts[0] === "device" && ["list", "scan"].includes(parts[1]!)) {
       if (parts.length !== 2)
         fail("USAGE_ERROR", 2, `device ${parts[1]} takes no arguments.`);
       if (parts[1] === "list") {
-        writeDataPage({
+        renderDataPage({
+          command: { id: "device.list", path: ["device", "list"] },
           page: deviceListDataPage(queries.listConfiguredDevices()),
           flags,
           locale,
-          view: currentPresentationView(),
           color: colorEnabled(flags, stdout.isTTY),
         });
         return;
       }
       if (parts[1] === "scan") {
-        writeDataPage({
+        renderDataPage({
+          command: { id: "device.scan", path: ["device", "scan"] },
           page: deviceScanDataPage(
             await queries.scanDevices(
               commandFlags.adapter === undefined
@@ -1678,7 +1338,6 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
           ),
           flags,
           locale,
-          view: currentPresentationView(),
           color: colorEnabled(flags, stdout.isTTY),
         });
         return;
@@ -1718,7 +1377,8 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
           scopes: ["project"],
         });
       const result = outcome.data as { path: string };
-      writeDataPage({
+      renderDataPage({
+        command: { id: "device.add", path: ["device", "add"] },
         page: deviceAddedDataPage({
           instance: deviceInstance,
           adapter,
@@ -1730,7 +1390,6 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
         }),
         flags,
         locale,
-        view: currentPresentationView(),
         color: colorEnabled(flags, stdout.isTTY),
       });
       return;
@@ -1743,14 +1402,14 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
         key: `devices.${parts[2]}`,
         scopes: ["project"],
       });
-      writeDataPage({
+      renderDataPage({
+        command: { id: "device.remove", path: [...parts] },
         page: deviceRemovedDataPage({
           instance: parts[2]!,
           path: (outcome.data as { path: string }).path,
         }),
         flags,
         locale,
-        view: currentPresentationView(),
         color: colorEnabled(flags, stdout.isTTY),
       });
       return;
@@ -1762,7 +1421,13 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
         rawOptions,
         devices,
         catalog,
-        locale,
+        renderHelp: renderDefinitionHelp,
+        localizeCapabilities: (adapterId, capabilities) =>
+          localizeAdapterCapabilities(
+            application.registry.get(adapterId),
+            locale,
+            capabilities,
+          ),
         ...(canConfirmOperationInteractively
           ? {
               confirmSafety: () =>
@@ -1783,11 +1448,11 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
     if (parts[0] === "system" && parts[1] === "list") {
       if (parts.length !== 2)
         fail("USAGE_ERROR", 2, "system list takes no arguments.");
-      writeDataPage({
+      renderDataPage({
+        command: { id: "system.list", path: ["system", "list"] },
         page: systemListDataPage(queries.listSystems()),
         flags,
         locale,
-        view: currentPresentationView(),
         color: colorEnabled(flags, stdout.isTTY),
       });
       return;
@@ -1809,7 +1474,8 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
         value: JSON.stringify({ members }),
         scopes: ["project"],
       });
-      writeDataPage({
+      renderDataPage({
+        command: { id: "system.create", path: [...parts] },
         page: configMutationDataPage({
           ...(outcome.data as Omit<
             Parameters<typeof configMutationDataPage>[0],
@@ -1819,7 +1485,6 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
         }),
         flags,
         locale,
-        view: currentPresentationView(),
         color: colorEnabled(flags, stdout.isTTY),
       });
       return;
@@ -1832,7 +1497,8 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
         key: `systems.${parts[2]}`,
         scopes: ["project"],
       });
-      writeDataPage({
+      renderDataPage({
+        command: { id: "system.delete", path: [...parts] },
         page: configMutationDataPage({
           ...(outcome.data as Omit<
             Parameters<typeof configMutationDataPage>[0],
@@ -1842,7 +1508,6 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
         }),
         flags,
         locale,
-        view: currentPresentationView(),
         color: colorEnabled(flags, stdout.isTTY),
       });
       return;
@@ -1857,7 +1522,7 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
       const action = parts[2]!;
       const systemName = parts[3]!;
       const device = parts[4]!;
-      const current = await systems.describe(systemName, locale);
+      const current = await systems.describe(systemName);
       const members =
         action === "add"
           ? [...current.members, { device }]
@@ -1897,7 +1562,8 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
         }),
         scopes: ["project"],
       });
-      writeDataPage({
+      renderDataPage({
+        command: { id: `system.member.${action}`, path: [...parts] },
         page: configMutationDataPage({
           ...(outcome.data as Omit<
             Parameters<typeof configMutationDataPage>[0],
@@ -1907,33 +1573,33 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
         }),
         flags,
         locale,
-        view: currentPresentationView(),
         color: colorEnabled(flags, stdout.isTTY),
       });
       return;
     }
     if (parts[0] === "system" && parts[1] && parts[1] !== "list") {
-      const system = await systems.describe(parts[1], locale);
+      const system = await describeSystemForDisplay(parts[1], locale);
       if (parts.length === 2 || parts[2] === "show") {
         if (parts.length > 3)
           fail("USAGE_ERROR", 2, "system show takes no arguments.");
-        writeDataPage({
+        renderDataPage({
+          command: { id: "system.show", path: [...parts] },
           page: systemDetailDataPage(system),
           flags,
           locale,
-          view: currentPresentationView(),
           color: colorEnabled(flags, stdout.isTTY),
         });
         return;
       }
       await catalog.executable(["system", parts[1], parts[2]]);
-      const definition = await systems.capability(parts[1], parts[2], locale);
+      const definition = await systems.capability(parts[1], parts[2]);
       const input = capabilityInput(
         rawOptions,
         definition.options || [],
         definition.safety.flag,
         parts.slice(3),
       );
+      let safetyConfirmed = definition.safety.mode === "normal";
       if (definition.safety.mode !== "normal" && definition.safety.flag) {
         if (canConfirmOperationInteractively) {
           if (
@@ -1942,11 +1608,9 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
             ))
           )
             return;
+          safetyConfirmed = true;
         } else
-          flags[definition.safety.flag] = optionEnabled(
-            rawOptions,
-            definition.safety.flag,
-          );
+          safetyConfirmed = optionEnabled(rawOptions, definition.safety.flag);
       }
       if (
         canConfirmOperationInteractively &&
@@ -1964,35 +1628,27 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
         definition.safety.mode !== "normal"
           ? { executionMode: "interactive" as const }
           : {}),
+        safetyConfirmed,
       });
       if (!flags.jsonl)
-        writeDataPage({
+        renderDataPage({
+          command: { id: "system.execute", path: parts.slice(0, 3) },
           page: systemOperationDataPage(
             result as Parameters<typeof systemOperationDataPage>[0],
           ),
           flags,
           locale,
-          view: currentPresentationView(),
           color: colorEnabled(flags, stdout.isTTY),
         });
       return;
     }
-    // Approval confirmation is intrinsically human-only. Check this before
-    // loading a record so an agent cannot use record validity as an oracle.
-    if (
-      parts[0] === "approval" &&
-      parts[1] &&
-      (parts[2] === "approve" || parts[2] === "reject")
-    )
-      interactive(locale, parts);
     if (
       await handleRuntimeCommand({
-        parts,
         flags,
-        commandFlags,
+        intent: definedCommand!.intent,
+        dispatcher: scope.commandGraph.dispatcher,
         locale,
         color: colorEnabled(flags, stdout.isTTY),
-        presentationView: currentPresentationView(),
         runtimeCommands,
         approvalPresentation: {
           projectId: (config.value.project as Json | undefined)?.id as
@@ -2051,45 +1707,59 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
           ? e
           : new BenchPilotError("INTERNAL_ERROR", 8, (e as Error).message);
     const flags = replay?.flags || {};
-    const result = (err as BenchPilotError & { result?: Json }).result || {
-      schema: "benchpilot.result",
-      version: 2,
-      ok: false,
-      kind: err.kind,
-      diagnosticId: err.diagnosticId,
-      message: err.message,
-      retryable: err.retryable,
-      stage: err.stage,
-      recovery: err.recovery,
-      details: err.details,
+    const legacyOperation = ["device", "system"].includes(invokedPath[0] || "");
+    const command = {
+      id:
+        resolvedCommandId ??
+        (invokedPath.length ? invokedPath.join(".") : "root"),
+      path: [...invokedPath],
     };
+    const result = legacyOperation
+      ? (err as BenchPilotError & { result?: Json }).result || {
+          schema: "benchpilot.result",
+          version: 2,
+          ok: false,
+          kind: err.kind,
+          diagnosticId: err.diagnosticId,
+          message: err.message,
+          retryable: err.retryable,
+          stage: err.stage,
+          recovery: err.recovery,
+          details: err.details,
+        }
+      : commandFailureResult({
+          command,
+          error: err,
+          kind: isInteractionFailure(err.kind) ? "interaction" : "data",
+          startedAt: commandStartedAt,
+        });
     const needsHelp = [
       "AGENT_INTERACTION_UNSUPPORTED",
       "INTERACTIVE_MACHINE_OUTPUT_UNSUPPORTED",
       "INTERACTIVE_TERMINAL_REQUIRED",
     ].includes(err.kind);
-    writeFailure({
+    const failureHelpPath = (
+      err.details as { helpPath?: readonly string[] } | undefined
+    )?.helpPath;
+    const failureHelp =
+      needsHelp && renderFailureHelp
+        ? await renderFailureHelp(failureHelpPath ?? []).catch(() => undefined)
+        : undefined;
+    renderFailure({
       result,
+      command,
       flags,
-      isOperation: ["device", "system"].includes(invokedPath[0] || ""),
+      legacyOperation,
       terminalEmitted: Boolean(
-        (err as BenchPilotError & { jsonlTerminalEmitted?: boolean })
-          .jsonlTerminalEmitted,
+        (err as BenchPilotError & { operationTerminalReported?: boolean })
+          .operationTerminalReported,
       ),
       humanMessage: `${terminalTheme(colorEnabled(flags, stdout.isTTY)).danger(` ${err.kind} `)}: ${humanErrorMessage(
         presentationLocale,
         err.kind,
         err.message,
       )}`,
-      ...(needsHelp
-        ? {
-            help: humanFull(
-              ((err.details as { help?: { path?: string[] } } | undefined)?.help
-                ?.path || []) as string[],
-              presentationLocale,
-            ),
-          }
-        : {}),
+      ...(failureHelp ? { help: failureHelp.trimEnd() } : {}),
     });
     const adapterId =
       typeof (err.details as { adapterId?: unknown }).adapterId === "string"
@@ -2107,6 +1777,7 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
     process.exitCode = err.exitCode;
   } finally {
     interaction?.close();
+    terminal?.close();
   }
 }
 if (process.env.BENCHPILOT_NO_AUTORUN !== "1") void main();

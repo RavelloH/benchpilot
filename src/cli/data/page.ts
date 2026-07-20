@@ -1,14 +1,3 @@
-import type { Locale } from "../../i18n/index.js";
-import type { CliScreenNode } from "../presentation/page.js";
-
-export type DataScreenView = "normal" | "agent";
-
-export interface DataScreenContext {
-  readonly locale: Locale;
-  readonly color: boolean;
-  readonly view: DataScreenView;
-}
-
 /** One independently consumable item in a JSON Lines data stream. */
 export interface CliDataJsonlItem {
   /** Stable, page-local path identifying the item within the result. */
@@ -19,7 +8,8 @@ export interface CliDataJsonlItem {
 /** Canonical command data with a screen view derived from that same DTO. */
 export interface CliDataPage<T extends object> {
   readonly data: T;
-  readonly screen: (context: DataScreenContext) => readonly CliScreenNode[];
+  /** Human-only context used by pure formatters; never emitted to JSON/JSONL. */
+  readonly presentation?: object;
   /**
    * Optional item projection for collection pages. JSON remains the complete
    * DTO; JSONL emits each item as a separate snapshot in source order.

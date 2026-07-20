@@ -608,42 +608,8 @@ export class InteractionSession {
 
   close() {}
 
-  /**
-   * Init selects its locale inside the session. Subsequent field prompts must
-   * immediately use that choice without creating a disconnected session.
-   */
+  /** Updates subsequent prompts when a recipe selects a different locale. */
   setLocale(locale: Locale) {
     this.locale = locale;
   }
-}
-
-export async function promptInit(input: {
-  locale: Locale;
-  projectName?: string;
-  adapters?: readonly PromptChoice[];
-  selectedLocale?: Locale;
-  session?: InteractionSession;
-  driver?: InteractionDriver;
-  color?: boolean;
-}): Promise<{
-  projectName: string;
-  locale: Locale;
-  enabledAdapters: string[];
-}> {
-  const session =
-    input.session ??
-    new InteractionSession(input.locale, input.driver, input.color);
-  const locale =
-    input.selectedLocale ??
-    ((await session.choose([
-      { value: "en", label: "English" },
-      { value: "zh-CN", label: "简体中文" },
-    ])) as Locale);
-  session.setLocale(locale);
-  const projectName =
-    input.projectName ?? (await session.value(t(locale, "init.projectName")));
-  const enabledAdapters = input.adapters
-    ? await session.chooseMany(t(locale, "init.adapters"), input.adapters)
-    : [];
-  return { projectName, locale, enabledAdapters };
 }

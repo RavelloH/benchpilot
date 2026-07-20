@@ -4,6 +4,7 @@ import {
   access,
   mkdir,
   mkdtemp,
+  readFile,
   readdir,
   rm,
   writeFile,
@@ -12,6 +13,9 @@ import os from "node:os";
 import path from "node:path";
 
 const root = process.cwd();
+const packageVersion = JSON.parse(
+  await readFile(path.join(root, "package.json"), "utf8"),
+).version;
 const temp = await mkdtemp(path.join(os.tmpdir(), "benchpilot-package-"));
 const pnpmCli = process.env.npm_execpath;
 const npm = process.platform === "win32" ? "npm.cmd" : "npm";
@@ -61,7 +65,10 @@ try {
       env,
       encoding: "utf8",
     });
-  assert.match(run("--version"), /0\.0\.0/);
+  assert.match(
+    run("--version"),
+    new RegExp(`v${packageVersion.replace(/\./g, "\\.")}`),
+  );
   assert.match(run("help"), /Agent-first device lifecycle CLI/);
   await access(
     path.join(
@@ -94,16 +101,14 @@ try {
   ];
   for (const args of commands) {
     const result = JSON.parse(run(...args));
-    if (args[0] === "help") {
-      assert.ok(Array.isArray(result), `${args.join(" ")} uses a page tree`);
-      assert.equal(result[0]?.name, "name");
-      continue;
-    }
     assert.equal(
-      typeof result.schema,
-      "string",
-      `${args.join(" ")} has a schema`,
+      result.schema,
+      "benchpilot.result",
+      `${args.join(" ")} uses Result v3`,
     );
+    assert.equal(result.version, 3, `${args.join(" ")} uses Result v3`);
+    assert.equal(result.ok, true, `${args.join(" ")} succeeds`);
+    assert.ok(result.data, `${args.join(" ")} includes semantic data`);
   }
 } finally {
   await rm(temp, { recursive: true, force: true });

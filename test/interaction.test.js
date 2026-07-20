@@ -17,28 +17,21 @@ import {
   compactPromptAnswer,
   interactionShortcut,
   menuDivider,
-  promptInit,
 } from "../dist/cli/interaction/prompter.js";
-import { brief, fullHelp, humanFull } from "../dist/cli/help-renderer.js";
 import {
   renderInteractiveHomeHeader,
   rootMenuChoices,
 } from "../dist/cli/presentation/root-help.js";
 import { commandRoots } from "../dist/application/commands/catalog.js";
-import {
-  humanErrorMessage,
-  writeFailure,
-} from "../dist/cli/output-renderer.js";
+import { commandCatalogDefinition } from "../dist/application/commands/definitions.js";
+import { HelpDocumentService } from "../dist/application/commands/help.js";
+import { projectHelpDocument } from "../dist/cli/help/projector.js";
+import { humanErrorMessage } from "../dist/cli/output-renderer.js";
+import { renderFailure } from "../dist/cli/output/failure.js";
 import { handleDeviceCommand } from "../dist/cli/commands/device.js";
 import { t } from "../dist/i18n/index.js";
 import { shouldShowWordmark } from "../dist/cli/presentation/theme.js";
 import { renderVersion } from "../dist/cli/presentation/version.js";
-import {
-  jsonlPresentation,
-  jsonPresentation,
-  presentationView,
-  screenPresentation,
-} from "../dist/cli/presentation/page.js";
 import { handleRuntimeCommand } from "../dist/cli/commands/runtime.js";
 import {
   configurationCatalog,
@@ -156,16 +149,26 @@ test("interactive answers use compact spacing after selection", () => {
 test("interactive lock clear asks for confirmation before clearing a quarantined lock", async () => {
   const calls = [];
   const confirmations = [];
+  let output = "";
   const originalWrite = process.stdout.write;
-  process.stdout.write = () => true;
+  process.stdout.write = (value) => {
+    output += String(value);
+    return true;
+  };
   try {
     const handled = await handleRuntimeCommand({
-      parts: ["lock", "quarantined-lock", "clear"],
       flags: {},
-      commandFlags: {},
+      intent: {
+        commandId: "lock.clear",
+        handlerId: "lock.clear",
+        path: ["lock", "quarantined-lock", "clear"],
+        input: { lock: "quarantined-lock" },
+        options: {},
+        globals: {},
+      },
+      dispatcher: { dispatch: async () => assert.fail("clear was cancelled") },
       locale: "en",
       color: false,
-      presentationView: "normal",
       runtimeCommands: {
         execute: async (request) => {
           calls.push(request);
@@ -207,6 +210,28 @@ test("interactive lock clear asks for confirmation before clearing a quarantined
     },
   ]);
   assert.deepEqual(calls, [{ action: "lock.show", id: "quarantined-lock" }]);
+  assert.match(output, /^Lock details/m);
+  assert.match(output, /^  Lock ID     quarantined-lock$/m);
+  assert.doesNotMatch(output, /Lock cleared/);
+});
+
+test("incomplete device resources delegate to definition-driven help", async () => {
+  const rendered = [];
+  assert.equal(
+    await handleDeviceCommand({
+      parts: ["device", "board"],
+      flags: {},
+      rawOptions: [],
+      devices: {},
+      catalog: {},
+      localizeCapabilities: (_adapterId, capabilities) => [...capabilities],
+      renderHelp: async (path, includeAll = false) => {
+        rendered.push({ path: [...path], includeAll });
+      },
+    }),
+    true,
+  );
+  assert.deepEqual(rendered, [{ path: ["device", "board"], includeAll: true }]);
 });
 
 test("interactive device execution confirms safety and approval before running", async () => {
@@ -220,10 +245,12 @@ test("interactive device execution confirms safety and approval before running",
       flags,
       rawOptions: [],
       locale: "en",
+      localizeCapabilities: (_adapterId, capabilities) => [...capabilities],
       catalog: { executable: async () => ({}) },
       devices: {
         describe: async () => ({ capabilities: [] }),
         capability: async () => ({
+          adapter: { id: "fixture" },
           capability: {
             id: "flash",
             summary: "Flash firmware",
@@ -261,6 +288,7 @@ test("interactive device execution confirms safety and approval before running",
         capability: "flash",
         capabilityInput: {},
         executionMode: "interactive",
+        safetyConfirmed: true,
       },
     },
   ]);
@@ -270,50 +298,13 @@ test("screen catalogs provide localized text and leave machine protocol out of t
   assert.equal(t("zh-CN", "init.done"), "BenchPilot 项目已初始化。");
   assert.equal(t("zh-CN", "menu.action.set"), "写入配置");
   assert.equal(t("zh-CN", "menu.runs.keep"), "保留最新操作记录");
-  assert.match(
-    humanFull(["config"], "zh-CN"),
-    /读取、解释、校验并安全编辑配置/,
-  );
-  assert.match(fullHelp(["config"]).summary, /Read, explain/);
 });
 
-test("root help does not repeat the executable name", () => {
-  assert.deepEqual(fullHelp([]).examples, ["benchpilot --json"]);
-  assert.match(humanFull([]), /benchpilot —/);
-  assert.doesNotMatch(humanFull([]), /benchpilot  —/);
-  const root = brief("root", "zh-CN");
-  assert.ok(root.indexOf("交互模式") < root.indexOf("开始使用"));
-  assert.match(root, /开始使用/);
-  assert.match(root, /^  device\s+/m);
-  assert.match(root, /全局选项/);
-  assert.match(root, /详细帮助：benchpilot <command> --help/);
-  assert.match(root, /\$ benchpilot device scan/);
-  for (const command of [
-    "init",
-    "setup",
-    "doctor",
-    "language",
-    "alias",
-    "config",
-    "adapter",
-    "device",
-    "system",
-    "workflow",
-    "run",
-    "lock",
-    "approval",
-    "skill",
-    "docs",
-    "upgrade",
-    "help",
-    "home",
-    "version",
-  ])
-    assert.match(root, new RegExp(`^  ${command}(?:\\s|$)`, "m"));
-});
-
-test("interactive home flattens commands under non-selectable categories", () => {
-  const choices = rootMenuChoices("zh-CN");
+test("interactive home flattens commands under non-selectable categories", async () => {
+  const document = await new HelpDocumentService(commandCatalogDefinition, {
+    values: async () => [],
+  }).document([]);
+  const choices = rootMenuChoices(projectHelpDocument(document, "zh-CN"));
   assert.deepEqual(
     choices
       .filter((choice) => "separator" in choice)
@@ -324,20 +315,15 @@ test("interactive home flattens commands under non-selectable categories", () =>
     choices.filter((choice) => "value" in choice).map((choice) => choice.value),
     [
       "init",
-      "setup",
       "doctor",
       "language",
-      "alias",
       "config",
       "adapter",
       "device",
       "system",
-      "workflow",
       "run",
       "approval",
       "lock",
-      "skill",
-      "docs",
       "upgrade",
       "help",
       "version",
@@ -445,38 +431,8 @@ test("interactive home header keeps the human root identity above the menu", () 
 });
 
 test("wordmarks are limited to human terminal screens", () => {
-  assert.equal(
-    shouldShowWordmark({
-      stdoutIsTTY: true,
-      agentDetected: false,
-      agentMode: false,
-    }),
-    true,
-  );
-  assert.equal(
-    shouldShowWordmark({
-      stdoutIsTTY: true,
-      agentDetected: true,
-      agentMode: false,
-    }),
-    false,
-  );
-  assert.equal(
-    shouldShowWordmark({
-      stdoutIsTTY: true,
-      agentDetected: false,
-      agentMode: true,
-    }),
-    false,
-  );
-  assert.equal(
-    shouldShowWordmark({
-      stdoutIsTTY: false,
-      agentDetected: false,
-      agentMode: false,
-    }),
-    false,
-  );
+  assert.equal(shouldShowWordmark(true), true);
+  assert.equal(shouldShowWordmark(false), false);
   assert.match(
     renderVersion({ cliVersion: "0.0.0", nodeVersion: "v24.0.0" }, false, true),
     /________/,
@@ -497,55 +453,6 @@ test("wordmarks are limited to human terminal screens", () => {
       false,
     ),
     /________/,
-  );
-});
-
-test("presentation trees project visibility, clean machine text, and flatten keys", () => {
-  const nodes = [
-    {
-      name: "logo",
-      visibility: ["screen"],
-      text: "\u001B[38;5;226mLOGO\u001B[0m\n",
-    },
-    {
-      name: "command",
-      visibility: ["screen", "json", "jsonl"],
-      lineBreak: true,
-      children: [
-        {
-          name: "help",
-          visibility: ["screen", "json", "jsonl"],
-          text: "\u001B[38;5;114m  skill\t  description\u001B[0m\n",
-        },
-        {
-          name: "screen-note",
-          visibility: ["screen"],
-          text: "screen only\n",
-        },
-      ],
-    },
-  ];
-  assert.match(screenPresentation(nodes), /LOGO/);
-  assert.deepEqual(jsonPresentation(nodes), [
-    {
-      name: "command",
-      children: [{ name: "help", text: "skill description" }],
-    },
-  ]);
-  assert.equal("lineBreak" in jsonPresentation(nodes)[0], false);
-  assert.deepEqual(jsonlPresentation(nodes), [
-    { op: "snapshot", key: "command", index: 0 },
-    {
-      op: "snapshot",
-      key: "command.help",
-      index: 1,
-      text: "skill description",
-    },
-  ]);
-  assert.equal("lineBreak" in jsonlPresentation(nodes)[0], false);
-  assert.equal(
-    presentationView({ help: true, agentDetected: true, agentMode: true }),
-    "help",
   );
 });
 
@@ -604,8 +511,8 @@ test("configuration picker uses the fixed localized configuration catalog", () =
     false,
   );
   const descriptionOffsets = [
-    [approvalValues[0].label, "对声明为人工审批"],
-    [approvalValues[1].label, "仅对危险操作"],
+    [approvalValues[0].label, "对所有声明为非普通安全等级"],
+    [approvalValues[1].label, "仅对不可逆的破坏性操作"],
     [approvalValues[2].label, "自动化操作不再"],
   ].map(([label, description]) =>
     [...label.slice(0, label.indexOf(description))].reduce(
@@ -695,65 +602,6 @@ test("interactive exit uses the localized error color on human terminals", async
   assert.match(exit.label, /\u001B\[38;5;203m退出/);
 });
 
-test("init selects a locale before collecting the project name", async () => {
-  assert.deepEqual(
-    await promptInit({
-      locale: "en",
-      driver: scriptedDriver("zh-CN", "演示项目"),
-    }),
-    {
-      locale: "zh-CN",
-      projectName: "演示项目",
-      enabledAdapters: [],
-    },
-  );
-  assert.deepEqual(
-    await promptInit({
-      locale: "en",
-      selectedLocale: "en",
-      driver: scriptedDriver("Demo"),
-    }),
-    { locale: "en", projectName: "Demo", enabledAdapters: [] },
-  );
-});
-
-test("init records every adapter selected in its multi-select step", async () => {
-  const result = await promptInit({
-    locale: "en",
-    selectedLocale: "en",
-    adapters: [
-      { value: "esp-idf", label: "esp-idf  ESP-IDF" },
-      { value: "probe", label: "probe  Probe" },
-    ],
-    driver: {
-      choose: async () => "en",
-      value: async () => "Demo",
-      chooseMany: async () => ["esp-idf", "probe"],
-    },
-  });
-  assert.deepEqual(result, {
-    locale: "en",
-    projectName: "Demo",
-    enabledAdapters: ["esp-idf", "probe"],
-  });
-});
-
-test("init can continue an existing interaction session", async () => {
-  const session = new InteractionSession(
-    "en",
-    scriptedDriver("zh-CN", "演示项目"),
-  );
-  try {
-    assert.deepEqual(await promptInit({ locale: "en", session }), {
-      locale: "zh-CN",
-      projectName: "演示项目",
-      enabledAdapters: [],
-    });
-  } finally {
-    session.close();
-  }
-});
-
 test("presenter keeps machine failures on stdout and human failures on stderr", () => {
   const stdout = [];
   const stderr = [];
@@ -761,20 +609,36 @@ test("presenter keeps machine failures on stdout and human failures on stderr", 
     stdout: { write: (value) => stdout.push(value) },
     stderr: { write: (value) => stderr.push(value) },
   };
-  writeFailure({
-    result: { ok: false, kind: "USAGE_ERROR" },
+  const command = { id: "fixture", path: ["fixture"] };
+  const result = {
+    schema: "benchpilot.result",
+    version: 3,
+    ok: false,
+    command,
+    kind: "data",
+    error: { kind: "USAGE_ERROR", diagnosticId: "core.usage-error" },
+    meta: {
+      startedAt: "2026-01-01T00:00:00.000Z",
+      endedAt: "2026-01-01T00:00:00.000Z",
+      durationMs: 0,
+    },
+  };
+  renderFailure({
+    result,
+    command,
     flags: { json: true },
-    isOperation: false,
+    legacyOperation: false,
     terminalEmitted: false,
     humanMessage: "USAGE_ERROR: invalid input",
     sink,
   });
   assert.match(stdout.join(""), /USAGE_ERROR/);
   assert.equal(stderr.join(""), "");
-  writeFailure({
-    result: { ok: false, kind: "USAGE_ERROR" },
+  renderFailure({
+    result,
+    command,
     flags: {},
-    isOperation: false,
+    legacyOperation: false,
     terminalEmitted: false,
     humanMessage: "USAGE_ERROR: invalid input",
     sink,
@@ -837,7 +701,8 @@ test("only the presenter owns CLI terminal writes", async () => {
     file.endsWith(".ts"),
   );
   for (const file of files) {
-    if (file === "output-renderer.ts") continue;
+    if (file === "output-renderer.ts" || file === "output\\failure.ts")
+      continue;
     const source = await readFile(join(root, file), "utf8");
     assert.doesNotMatch(source, /(?:process\.)?(?:stdout|stderr)\.write/);
     assert.doesNotMatch(source, /createInterface|node:readline/);
