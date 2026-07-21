@@ -51,6 +51,8 @@ command:
     resource: "选择已安装适配器"
     show: "显示适配器详情"
     doctor: "运行适配器诊断"
+    enable: "为当前项目启用适配器"
+    disable: "为当前项目禁用适配器"
   device:
     root: "发现、配置和操作设备"
     list: "列出已配置设备"
@@ -253,6 +255,10 @@ adapterResult:
     title: "适配器详情"
   doctor:
     title: "适配器诊断"
+  state:
+    title: "适配器项目状态"
+    enabled: "已启用"
+    changed: "已变更"
 resourceResult:
   devices:
     title: "已配置设备"
@@ -439,6 +445,8 @@ menu:
     scan: "发现设备"
     clear-stale: "清除过期锁"
     doctor: "检查环境"
+    enable: "为当前项目启用"
+    disable: "为当前项目禁用"
     show: "显示详情"
     logs: "显示日志"
     artifacts: "显示产物"

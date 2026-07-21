@@ -119,3 +119,31 @@ export const adapterDoctorDataPage = (
     })),
   };
 };
+
+export const adapterStateDataPage = (input: {
+  adapter: string;
+  enabled: boolean;
+  changed: boolean;
+  scope: "project";
+  path: string;
+  adapters: readonly string[];
+}): CliDataPage<{
+  schema: "benchpilot.adapter-state";
+  version: 1;
+  adapter: string;
+  enabled: boolean;
+  changed: boolean;
+  scope: "project";
+  path: string;
+  adapters: readonly string[];
+}> => {
+  const data = {
+    schema: "benchpilot.adapter-state" as const,
+    version: 1 as const,
+    ...input,
+  };
+  return {
+    data,
+    jsonl: [{ key: `adapter.${data.adapter}`, value: data }],
+  };
+};

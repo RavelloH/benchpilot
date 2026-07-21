@@ -116,6 +116,8 @@ const outputSchemas: Readonly<Record<string, string>> = {
   "adapter.list": "benchpilot.adapter-list",
   "adapter.show": "benchpilot.adapter",
   "adapter.doctor": "benchpilot.adapter-doctor",
+  "adapter.enable": "benchpilot.adapter-state",
+  "adapter.disable": "benchpilot.adapter-state",
   "device.list": "benchpilot.device-list",
   "device.scan": "benchpilot.device-scan",
   "device.add": "benchpilot.device-added",
@@ -522,18 +524,24 @@ export const staticCommandDefinitions: readonly CommandDefinition[] = [
     path: adapterPath,
     summaryKey: "command.adapter.resource",
   }),
-  ...["show", "doctor"].map((action) =>
+  ...["show", "doctor", "enable", "disable"].map((action) =>
     leaf({
       id: `adapter.${action}`,
       parentId: "adapter.resource",
       path: [...adapterPath, literal(action)],
       summaryKey: `command.adapter.${action}` as
-        "command.adapter.show" | "command.adapter.doctor",
+        | "command.adapter.show"
+        | "command.adapter.doctor"
+        | "command.adapter.enable"
+        | "command.adapter.disable",
       handler: `adapter.${action}`,
       interactionMenu: {
         summaryKey: `menu.action.${action}` as
-          "menu.action.show" | "menu.action.doctor",
-        order: action === "show" ? 10 : 20,
+          | "menu.action.show"
+          | "menu.action.doctor"
+          | "menu.action.enable"
+          | "menu.action.disable",
+        order: { show: 10, doctor: 20, enable: 30, disable: 40 }[action]!,
       },
       arguments: [
         argument("adapter", "field.adapterId", 0, { required: true }),

@@ -1,5 +1,6 @@
 import { BenchPilotError, type Json } from "../../core.js";
 import type { ConfigurationCommandUseCases } from "../config/command-use-case.js";
+import type { AdapterManagementUseCases } from "../adapters/management-use-case.js";
 import type { QueryUseCases } from "../queries/use-case.js";
 import type { RuntimeCommandUseCases } from "../runtime/command-use-case.js";
 import type { CommandIntent, CommandOutcome } from "./contracts.js";
@@ -7,6 +8,7 @@ import { CommandDispatcher } from "./dispatcher.js";
 
 interface ApplicationCommandDispatcherDependencies {
   readonly configuration: ConfigurationCommandUseCases;
+  readonly adapterManagement: AdapterManagementUseCases;
   readonly runtime: RuntimeCommandUseCases;
   readonly queries: QueryUseCases;
   readonly resolvedConfig: { readonly value: Json };
@@ -134,6 +136,17 @@ export const createApplicationCommandDispatcher = (
       )) as Json,
     ),
   );
+  for (const action of ["enable", "disable"] as const)
+    dispatcher.register(`adapter.${action}`, async (intent) =>
+      outcome(
+        intent,
+        `adapter.${action}`,
+        (await dependencies.adapterManagement.setEnabled(
+          String(intent.input.adapter),
+          action === "enable",
+        )) as unknown as Json,
+      ),
+    );
 
   const runtime = async (
     intent: CommandIntent,

@@ -7,6 +7,7 @@ import {
   adapterDoctorDataPage,
   adapterInfoDataPage,
   adapterListDataPage,
+  adapterStateDataPage,
 } from "./adapter.js";
 import {
   approvalChangeDataPage,
@@ -98,6 +99,14 @@ const factories: Readonly<Record<string, OutcomePageFactory>> = {
     adapterDoctorDataPage(
       String(intent.input.adapter),
       outcome.data as Parameters<typeof adapterDoctorDataPage>[1],
+    ),
+  "adapter.enable": (_intent, outcome) =>
+    adapterStateDataPage(
+      outcome.data as Parameters<typeof adapterStateDataPage>[0],
+    ),
+  "adapter.disable": (_intent, outcome) =>
+    adapterStateDataPage(
+      outcome.data as Parameters<typeof adapterStateDataPage>[0],
     ),
   "run.list": (_intent, outcome) =>
     runListDataPage(outcome.data as Parameters<typeof runListDataPage>[0]),

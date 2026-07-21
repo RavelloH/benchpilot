@@ -51,6 +51,8 @@ command:
     resource: "Select an installed adapter"
     show: "Show adapter details"
     doctor: "Run adapter diagnostics"
+    enable: "Enable an adapter for this project"
+    disable: "Disable an adapter for this project"
   device:
     root: "Discover, configure, and operate devices"
     list: "List configured devices"
@@ -253,6 +255,10 @@ adapterResult:
     title: "Adapter details"
   doctor:
     title: "Adapter diagnostics"
+  state:
+    title: "Adapter project state"
+    enabled: "Enabled"
+    changed: "Changed"
 resourceResult:
   devices:
     title: "Configured devices"
@@ -439,6 +445,8 @@ menu:
     scan: "Discover devices"
     clear-stale: "Clear stale locks"
     doctor: "Check environment"
+    enable: "Enable for this project"
+    disable: "Disable for this project"
     show: "Show details"
     logs: "Show logs"
     artifacts: "Show artifacts"

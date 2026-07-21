@@ -11,6 +11,9 @@ import {
 } from "../../core.js";
 
 export interface QueryUseCaseDependencies {
+  /** All Adapters registered by this CLI installation for management commands. */
+  adapterCatalog: AdapterRegistry;
+  /** Adapters enabled by the current project for device-facing queries. */
   registry: AdapterRegistry;
   paths: PathService;
   project: Awaited<ReturnType<PathService["project"]>>;
@@ -158,7 +161,7 @@ export class QueryUseCases {
 
   listAdapters() {
     return {
-      adapters: this.dependencies.registry.list().map((adapter) => ({
+      adapters: this.dependencies.adapterCatalog.list().map((adapter) => ({
         id: adapter.id,
         version: adapter.version,
         summary: adapter.summary,
@@ -167,7 +170,7 @@ export class QueryUseCases {
   }
 
   adapterInfo(id: string) {
-    const adapter = this.dependencies.registry.get(id);
+    const adapter = this.dependencies.adapterCatalog.get(id);
     return {
       id: adapter.id,
       version: adapter.version,
@@ -176,10 +179,10 @@ export class QueryUseCases {
   }
 
   async adapterDoctor(id: string) {
-    const adapter = this.dependencies.registry.get(id);
+    const adapter = this.dependencies.adapterCatalog.get(id);
     return {
       checks: (
-        await this.dependencies.registry.doctor(
+        await this.dependencies.adapterCatalog.doctor(
           adapter,
           this.dependencies.config.value,
           this.dependencies.paths,

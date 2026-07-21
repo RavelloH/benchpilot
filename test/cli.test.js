@@ -1073,6 +1073,65 @@ test("configuration query commands use structured data pages", async () => {
   }
 });
 
+test("adapter enable and disable persist the current project selection", async () => {
+  const dir = await mkdtemp(
+    path.join(os.tmpdir(), "benchpilot-adapter-state-"),
+  );
+  try {
+    await initDemo(dir);
+
+    const disabled = JSON.parse(
+      (await run(dir, "adapter", "demo", "disable", "--json")).stdout,
+    );
+    assert.deepEqual(disabled.data, {
+      schema: "benchpilot.adapter-state",
+      version: 1,
+      adapter: "demo",
+      enabled: false,
+      changed: true,
+      scope: "project",
+      path: path.join(dir, "benchpilot.toml"),
+      adapters: [],
+    });
+    assert.match(
+      await readFile(path.join(dir, "benchpilot.toml"), "utf8"),
+      /enabled = \[\s*\]/,
+    );
+    const listedWhileDisabled = JSON.parse(
+      (await run(dir, "adapter", "list", "--json")).stdout,
+    );
+    assert.equal(
+      listedWhileDisabled.data.adapters.some(
+        (adapter) => adapter.id === "demo",
+      ),
+      true,
+    );
+
+    const alreadyDisabled = JSON.parse(
+      (await run(dir, "adapter", "demo", "disable", "--json")).stdout,
+    );
+    assert.equal(alreadyDisabled.data.changed, false);
+
+    const enabled = JSON.parse(
+      (await run(dir, "adapter", "demo", "enable", "--json")).stdout,
+    );
+    assert.equal(enabled.data.enabled, true);
+    assert.equal(enabled.data.changed, true);
+    assert.deepEqual(enabled.data.adapters, ["demo"]);
+    assert.match(
+      await readFile(path.join(dir, "benchpilot.toml"), "utf8"),
+      /enabled = \[ "demo" \]/,
+    );
+
+    const alreadyEnabled = JSON.parse(
+      (await run(dir, "adapter", "demo", "enable", "--json")).stdout,
+    );
+    assert.equal(alreadyEnabled.data.changed, false);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("declarative demo executes build, deploy, and capture", async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "benchpilot-declarative-"));
   try {
@@ -1081,9 +1140,9 @@ test("declarative demo executes build, deploy, and capture", async () => {
       (await run(dir, "adapter", "list", "--json")).stdout,
     );
     assert.equal(adapters.data.schema, "benchpilot.adapter-list");
-    assert.deepEqual(
-      adapters.data.adapters.map((adapter) => adapter.id),
-      ["demo"],
+    assert.equal(
+      adapters.data.adapters.some((adapter) => adapter.id === "demo"),
+      true,
     );
     const built = JSON.parse(
       (await run(dir, "device", "demo", "build", "--json")).stdout,

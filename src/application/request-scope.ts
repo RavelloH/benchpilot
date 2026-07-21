@@ -39,6 +39,10 @@ import {
   createConfigurationCommandUseCases,
   type ConfigurationCommandUseCases,
 } from "./config/command-use-case.js";
+import {
+  createAdapterManagementUseCases,
+  type AdapterManagementUseCases,
+} from "./adapters/management-use-case.js";
 import { CommandCatalog } from "./commands/catalog.js";
 import {
   commandCatalogDefinition,
@@ -80,6 +84,7 @@ export interface ApplicationRequestScope {
   systems: SystemUseCases;
   configuration: ConfigurationUseCases;
   configurationCommands: ConfigurationCommandUseCases;
+  adapterManagement: AdapterManagementUseCases;
   catalog: CommandCatalog;
   commandGraph: {
     definitions: typeof staticCommandDefinitions;
@@ -116,6 +121,7 @@ export async function openApplicationRequest(
   const application = createApplication(
     request.adapters.filter((adapter) => enabled.includes(adapter.id)),
   );
+  const adapterCatalog = createApplication(request.adapters);
   const lifecycle = {
     locks: new LockManager(paths),
     approvals: (projectRoot: string) => new ApprovalManager(paths, projectRoot),
@@ -134,6 +140,7 @@ export async function openApplicationRequest(
   const runtime = createRuntimeUseCases({ paths, project, config, lifecycle });
   const runtimeCommands = createRuntimeCommandUseCases(runtime);
   const queries = createQueryUseCases({
+    adapterCatalog: adapterCatalog.registry,
     registry: application.registry,
     paths,
     project,
@@ -152,6 +159,12 @@ export async function openApplicationRequest(
     queries,
     configuration,
   );
+  const adapterManagement = createAdapterManagementUseCases({
+    adapterIds: request.adapters.map((adapter) => adapter.id),
+    config,
+    project,
+    configuration,
+  });
   const catalog = new CommandCatalog({
     async configuredDevices() {
       return queries.listConfiguredDevices().devices.map((device) => ({
@@ -189,6 +202,7 @@ export async function openApplicationRequest(
     interaction: new CommandInteractionService(staticCommandDefinitions),
     dispatcher: createApplicationCommandDispatcher({
       configuration: configurationCommands,
+      adapterManagement,
       runtime: runtimeCommands,
       queries,
       resolvedConfig: config,
@@ -207,6 +221,7 @@ export async function openApplicationRequest(
     systems,
     configuration,
     configurationCommands,
+    adapterManagement,
     catalog,
     commandGraph,
   };

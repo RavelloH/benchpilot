@@ -365,6 +365,74 @@ export const dataViewDefinitions: readonly DataViewDefinition[] = [
     ],
   },
   {
+    id: "adapter.enable",
+    blocks: [
+      {
+        component: "Detail",
+        source: "",
+        title: msg("adapterResult.state.title"),
+        labelWidth: 12,
+        rows: [
+          {
+            field: "adapter",
+            label: msg("adapterResult.id"),
+            formatter: "string",
+            tone: "command",
+          },
+          {
+            field: "enabled",
+            label: msg("adapterResult.state.enabled"),
+            formatter: "string",
+          },
+          {
+            field: "changed",
+            label: msg("adapterResult.state.changed"),
+            formatter: "string",
+          },
+          {
+            field: "path",
+            label: msg("configResult.path"),
+            formatter: "string",
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: "adapter.disable",
+    blocks: [
+      {
+        component: "Detail",
+        source: "",
+        title: msg("adapterResult.state.title"),
+        labelWidth: 12,
+        rows: [
+          {
+            field: "adapter",
+            label: msg("adapterResult.id"),
+            formatter: "string",
+            tone: "command",
+          },
+          {
+            field: "enabled",
+            label: msg("adapterResult.state.enabled"),
+            formatter: "string",
+          },
+          {
+            field: "changed",
+            label: msg("adapterResult.state.changed"),
+            formatter: "string",
+          },
+          {
+            field: "path",
+            label: msg("configResult.path"),
+            formatter: "string",
+          },
+        ],
+      },
+    ],
+  },
+  {
     id: "doctor",
     blocks: [
       {
