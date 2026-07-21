@@ -4,7 +4,82 @@
   "type": "object",
   "$defs": {
     "empty": { "type": "object", "additionalProperties": false },
-    "info": { "type": "object", "additionalProperties": true },
+    "status": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["availability", "connection", "target", "tooling"],
+      "properties": {
+        "availability": { "const": "ready" },
+        "connection": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["transport", "endpoint"],
+          "properties": {
+            "transport": { "const": "serial" },
+            "endpoint": { "type": "string", "minLength": 1 }
+          }
+        },
+        "target": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["model", "revision"],
+          "properties": {
+            "model": { "type": "string", "minLength": 1 },
+            "revision": { "type": "string", "minLength": 1 }
+          }
+        },
+        "tooling": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["esptool"],
+          "properties": {
+            "esptool": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    },
+    "info": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["identity", "hardware", "tooling"],
+      "properties": {
+        "identity": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["model", "revision", "hardware_id"],
+          "properties": {
+            "model": { "type": "string", "minLength": 1 },
+            "revision": { "type": "string", "minLength": 1 },
+            "hardware_id": { "type": "string", "minLength": 1 }
+          }
+        },
+        "hardware": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["flash"],
+          "properties": {
+            "flash": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["manufacturer", "device", "size"],
+              "properties": {
+                "manufacturer": { "type": "string", "minLength": 1 },
+                "device": { "type": "string", "minLength": 1 },
+                "size": { "type": "string", "minLength": 1 }
+              }
+            }
+          }
+        },
+        "tooling": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["esptool"],
+          "properties": {
+            "esptool": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    },
     "build": {
       "type": "object",
       "additionalProperties": false,

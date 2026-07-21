@@ -95,12 +95,21 @@
         "timeout": { "$ref": "#/$defs/duration" },
         "stop_on_failure": { "type": "boolean" },
         "output": { "$ref": "#/$defs/id" },
+        "output_template": {
+          "type": "object",
+          "additionalProperties": true
+        },
         "steps": {
           "type": "array",
           "minItems": 1,
           "items": { "$ref": "#/$defs/step" }
         }
-      }
+      },
+      "allOf": [
+        {
+          "not": { "required": ["output", "output_template"] }
+        }
+      ]
     }
   }
 }

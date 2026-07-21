@@ -26,6 +26,22 @@ context = { project = { root = "C:/work/benchpilot-smoke" }, device = { chip = "
 expect = { tool = "esptool", cwd = "C:/work/benchpilot-smoke", args = ["--chip", "esp32s3", "--port", "COM8", "--after", "hard-reset", "chip-id"] }
 
 [[cases]]
+id = "render-probe-status-v5"
+type = "render-action"
+platform = "windows"
+target = "probe-status"
+context = { project = { root = "C:/work/benchpilot-smoke" }, device = { chip = "esp32s3", port = "COM8" }, tool = { esptool = { probe = { major = 5 } } } }
+expect = { tool = "esptool", cwd = "C:/work/benchpilot-smoke", args = ["--chip", "esp32s3", "--port", "COM8", "flash-id"] }
+
+[[cases]]
+id = "render-probe-status-v4"
+type = "render-action"
+platform = "windows"
+target = "probe-status"
+context = { project = { root = "C:/work/benchpilot-smoke" }, device = { chip = "esp32s3", port = "COM8" }, tool = { esptool = { probe = { major = 4 } } } }
+expect = { tool = "esptool", cwd = "C:/work/benchpilot-smoke", args = ["--chip", "esp32s3", "--port", "COM8", "flash_id"] }
+
+[[cases]]
 id = "parse-build-output"
 type = "parse-output"
 platform = "windows"
@@ -147,7 +163,7 @@ type = "plan-workflow"
 platform = "windows"
 target = "status"
 context = { tool = { esptool = { probe = { major = 5 } } } }
-expect = { steps = ["detect", "flash-v5"] }
+expect = { steps = ["detect", "probe"] }
 
 [[cases]]
 id = "plan-size"

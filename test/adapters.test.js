@@ -31,6 +31,7 @@ const complete = join(
   "adapters",
   "complete",
 );
+const demo = join(process.cwd(), "test", "fixtures", "adapters", "demo");
 const invalid = join(process.cwd(), "test", "fixtures", "adapters", "invalid");
 const espIdf = join(process.cwd(), "src", "adapters", "builtin", "esp-idf");
 const catalog = join(
@@ -904,6 +905,35 @@ test("enabled capabilities require input and output schemas", async () => {
     const result = await validateAdapter(adapterRoot);
     assert.ok(
       result.diagnostics.some((item) => item.code === "ADAPTER_SCHEMA_INVALID"),
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("standard status and info capabilities require their distinct output contracts", async () => {
+  const root = await mkdtemp(join(tmpdir(), "benchpilot-adapter-"));
+  const adapterRoot = join(root, "demo");
+  try {
+    await cp(demo, adapterRoot, { recursive: true });
+    const capabilities = await readFile(
+      join(adapterRoot, "capabilities.toml"),
+      "utf8",
+    );
+    await writeFile(
+      join(adapterRoot, "capabilities.toml"),
+      capabilities.replace(
+        'output_schema = "status"',
+        'output_schema = "info"',
+      ),
+    );
+    const result = await validateAdapter(adapterRoot);
+    assert.ok(
+      result.diagnostics.some(
+        (item) =>
+          item.code === "ADAPTER_CAPABILITY_INVALID" &&
+          item.message.includes("status-report"),
+      ),
     );
   } finally {
     await rm(root, { recursive: true, force: true });

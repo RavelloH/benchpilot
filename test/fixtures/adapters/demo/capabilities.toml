@@ -149,6 +149,30 @@ reason = "Not implemented by the declarative demo."
 windows = false
 linux = false
 macos = false
+
+[capabilities.console]
+enabled = false
+reason = "Managed serial sessions are not implemented by the declarative demo."
+[capabilities.console.platforms]
+windows = false
+linux = false
+macos = false
+
+[capabilities.send]
+enabled = false
+reason = "Managed serial sessions are not implemented by the declarative demo."
+[capabilities.send.platforms]
+windows = false
+linux = false
+macos = false
+
+[capabilities.request]
+enabled = false
+reason = "No target protocol is implemented by the declarative demo."
+[capabilities.request.platforms]
+windows = false
+linux = false
+macos = false
 [capabilities.sync]
 enabled = false
 reason = "Not implemented by the declarative demo."

@@ -95,6 +95,30 @@ windows = false
 linux = false
 macos = false
 
+[capabilities.console]
+enabled = false
+reason = "Not included."
+[capabilities.console.platforms]
+windows = false
+linux = false
+macos = false
+
+[capabilities.send]
+enabled = false
+reason = "Not included."
+[capabilities.send.platforms]
+windows = false
+linux = false
+macos = false
+
+[capabilities.request]
+enabled = false
+reason = "Not included."
+[capabilities.request.platforms]
+windows = false
+linux = false
+macos = false
+
 [capabilities.capture]
 enabled = false
 reason = "Not included."

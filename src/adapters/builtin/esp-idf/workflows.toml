@@ -10,19 +10,21 @@ uses = "action:detect-esptool"
 label = { key = "progress.status.detect", fallback = "Detect esptool" }
 with = {}
 [[workflows.status.steps]]
-id = "flash-v5"
-uses = "action:flash-id-v5"
-progress_id = "device"
-label = { key = "progress.status.device", fallback = "Read device status" }
+id = "probe"
+uses = "action:probe-status"
+progress_id = "probe"
+label = { key = "progress.status.probe", fallback = "Probe target readiness" }
 with = {}
-when = { path = "tool.esptool.probe.major", operator = "equals", value = 5 }
-[[workflows.status.steps]]
-id = "flash-v4"
-uses = "action:flash-id-v4"
-progress_id = "device"
-label = { key = "progress.status.device", fallback = "Read device status" }
-with = {}
-when = { path = "tool.esptool.probe.major", operator = "equals", value = 4 }
+[workflows.status.output_template]
+availability = "ready"
+[workflows.status.output_template.connection]
+transport = "serial"
+endpoint = "${device.port}"
+[workflows.status.output_template.target]
+model = "${result.probe.chip}"
+revision = "${result.probe.revision}"
+[workflows.status.output_template.tooling]
+esptool = "${result.detect.version}"
 
 [workflows.info]
 timeout = "2m"
@@ -33,47 +35,33 @@ uses = "action:detect-esptool"
 label = { key = "progress.info.detect", fallback = "Detect esptool" }
 with = {}
 [[workflows.info.steps]]
-id = "chip-v5"
-uses = "action:chip-id-v5"
+id = "chip"
+uses = "action:probe-chip"
 progress_id = "chip"
 label = { key = "progress.info.chip", fallback = "Read chip identity" }
 with = {}
-when = { path = "tool.esptool.probe.major", operator = "equals", value = 5 }
 [[workflows.info.steps]]
-id = "chip-v4"
-uses = "action:chip-id-v4"
-progress_id = "chip"
-label = { key = "progress.info.chip", fallback = "Read chip identity" }
-with = {}
-when = { path = "tool.esptool.probe.major", operator = "equals", value = 4 }
-[[workflows.info.steps]]
-id = "mac-v5"
-uses = "action:read-mac-v5"
+id = "mac"
+uses = "action:probe-mac"
 progress_id = "mac"
 label = { key = "progress.info.mac", fallback = "Read device MAC address" }
 with = {}
-when = { path = "tool.esptool.probe.major", operator = "equals", value = 5 }
 [[workflows.info.steps]]
-id = "mac-v4"
-uses = "action:read-mac-v4"
-progress_id = "mac"
-label = { key = "progress.info.mac", fallback = "Read device MAC address" }
-with = {}
-when = { path = "tool.esptool.probe.major", operator = "equals", value = 4 }
-[[workflows.info.steps]]
-id = "flash-v5"
-uses = "action:flash-id-v5"
+id = "flash"
+uses = "action:probe-status"
 progress_id = "flash"
 label = { key = "progress.info.flash", fallback = "Read flash identity" }
 with = {}
-when = { path = "tool.esptool.probe.major", operator = "equals", value = 5 }
-[[workflows.info.steps]]
-id = "flash-v4"
-uses = "action:flash-id-v4"
-progress_id = "flash"
-label = { key = "progress.info.flash", fallback = "Read flash identity" }
-with = {}
-when = { path = "tool.esptool.probe.major", operator = "equals", value = 4 }
+[workflows.info.output_template.identity]
+model = "${result.chip.chip}"
+revision = "${result.chip.revision}"
+hardware_id = "${result.mac.mac}"
+[workflows.info.output_template.hardware.flash]
+manufacturer = "${result.flash.flash_manufacturer}"
+device = "${result.flash.flash_device}"
+size = "${result.flash.flash_size}"
+[workflows.info.output_template.tooling]
+esptool = "${result.detect.version}"
 
 [workflows.build]
 timeout = "30m"

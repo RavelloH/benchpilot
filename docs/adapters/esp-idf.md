@@ -115,8 +115,8 @@ configuration example, safety model, and explicit hardware test entry point.
 
 ESP-IDF capabilities contribute schemas, timeout, lock mode, safety metadata,
 localized help, and schema-bound Screen Views to the dynamic Command Graph.
-`status` presents a structured device-state table, while `info` presents the
-full multi-step probe with raw key paths for detailed diagnosis. `size` and
+`status` presents a compact live readiness probe, while `info` presents a
+stable identity and hardware inventory rather than workflow step names. `size` and
 `capture` use compact structured summaries; `build`, `clean`, `fullclean`,
 `flash`, `reset`, and `deploy` use the shared ObjectTree component. JSON Result
 v3 and JSONL Event v3 remain the same locale-neutral capability outcome for

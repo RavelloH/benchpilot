@@ -10,6 +10,10 @@ import {
 const id = /^[a-z][a-z0-9-]*$/;
 const duration = /^[1-9]\d*(ms|s|m|h)$/;
 const platforms = ["windows", "linux", "macos"];
+const standardOutputContracts: Readonly<Record<string, string>> = {
+  "status-report": "status",
+  "info-report": "info",
+};
 const obj = (value: unknown): JsonObject =>
   value && typeof value === "object" && !Array.isArray(value)
     ? (value as JsonObject)
@@ -431,6 +435,22 @@ export const validateSemantics = async (
           ),
         );
     }
+    const expectedOutputSchema =
+      standardOutputContracts[String(obj(catalog[key]).output_contract ?? "")];
+    if (
+      enabled &&
+      expectedOutputSchema &&
+      item.output_schema !== expectedOutputSchema
+    )
+      errors.push(
+        diagnostic(
+          "ADAPTER_CAPABILITY_INVALID",
+          "capabilities.toml",
+          `Capability ${key} must use the ${String(obj(catalog[key]).output_contract)} output schema: ${expectedOutputSchema}`,
+          undefined,
+          adapter.id,
+        ),
+      );
     const safety = obj(item.safety);
     if (
       safety.mode &&

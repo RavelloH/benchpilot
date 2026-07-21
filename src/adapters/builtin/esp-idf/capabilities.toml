@@ -6,7 +6,7 @@ catalog_version = 1
 enabled = true
 handler = "workflow:status"
 input_schema = "empty"
-output_schema = "info"
+output_schema = "status"
 creates_run = true
 timeout = "2m"
 lock = "device"
@@ -186,6 +186,30 @@ macos = false
 enabled = false
 reason = "Interactive log streaming is intentionally outside v1."
 [capabilities.logs.platforms]
+windows = false
+linux = false
+macos = false
+
+[capabilities.console]
+enabled = false
+reason = "Managed ESP-IDF serial sessions are not implemented yet."
+[capabilities.console.platforms]
+windows = false
+linux = false
+macos = false
+
+[capabilities.send]
+enabled = false
+reason = "Managed ESP-IDF serial sessions are not implemented yet."
+[capabilities.send.platforms]
+windows = false
+linux = false
+macos = false
+
+[capabilities.request]
+enabled = false
+reason = "ESP-IDF does not declare a firmware protocol profile yet."
+[capabilities.request.platforms]
 windows = false
 linux = false
 macos = false

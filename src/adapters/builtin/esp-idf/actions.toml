@@ -184,6 +184,45 @@ arguments = [
   { kind = "literal", value = "flash_id" }
 ]
 
+[actions.probe-status]
+type = "process"
+tool = "esptool"
+cwd = "${project.root}"
+timeout = "1m"
+parser = "esptool-info"
+arguments = [
+  { kind = "option", flag = "--chip", value = "${device.chip}" },
+  { kind = "option", flag = "--port", value = "${device.port}" },
+  { kind = "literal", value = "flash-id", when = { path = "tool.esptool.probe.major", operator = "equals", value = 5 } },
+  { kind = "literal", value = "flash_id", when = { path = "tool.esptool.probe.major", operator = "equals", value = 4 } }
+]
+
+[actions.probe-chip]
+type = "process"
+tool = "esptool"
+cwd = "${project.root}"
+timeout = "1m"
+parser = "esptool-info"
+arguments = [
+  { kind = "option", flag = "--chip", value = "${device.chip}" },
+  { kind = "option", flag = "--port", value = "${device.port}" },
+  { kind = "literal", value = "chip-id", when = { path = "tool.esptool.probe.major", operator = "equals", value = 5 } },
+  { kind = "literal", value = "chip_id", when = { path = "tool.esptool.probe.major", operator = "equals", value = 4 } }
+]
+
+[actions.probe-mac]
+type = "process"
+tool = "esptool"
+cwd = "${project.root}"
+timeout = "1m"
+parser = "esptool-info"
+arguments = [
+  { kind = "option", flag = "--chip", value = "${device.chip}" },
+  { kind = "option", flag = "--port", value = "${device.port}" },
+  { kind = "literal", value = "read-mac", when = { path = "tool.esptool.probe.major", operator = "equals", value = 5 } },
+  { kind = "literal", value = "read_mac", when = { path = "tool.esptool.probe.major", operator = "equals", value = 4 } }
+]
+
 [actions.flash]
 type = "process"
 tool = "idf"

@@ -14,7 +14,12 @@ import {
 } from "./environments/resolver.js";
 import { durationMs, planLaunch } from "./planning/launch-plan.js";
 import { collectArtifacts } from "./rules/artifact-collector.js";
-import { lookup, object, type RuleObject } from "./rules/template.js";
+import {
+  lookup,
+  object,
+  renderRequiredDeep,
+  type RuleObject,
+} from "./rules/template.js";
 import { ToolResolver, type ResolvedToolLaunch } from "./tools/resolver.js";
 import type { AdapterRuntimeContext, RuntimeAdapter } from "./types.js";
 import { AdapterDataValidator } from "./validation/data-validator.js";
@@ -230,9 +235,14 @@ export class DeclarativeCapabilityRunner {
         deadline.limit(durationMs(workflow.timeout)),
       );
       result = object(context.result);
+      const outputTemplate = workflow.output_template;
       const outputStep =
         typeof workflow.output === "string" ? workflow.output : undefined;
-      if (outputStep) result = object(result[outputStep]);
+      if (outputTemplate)
+        result = object(
+          renderRequiredDeep(outputTemplate, context, "workflow output"),
+        );
+      else if (outputStep) result = object(result[outputStep]);
       if (!Object.keys(result).length) result = execution as RuleObject;
     } else
       throw new AdapterRuntimeError(

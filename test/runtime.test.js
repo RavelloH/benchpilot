@@ -2166,7 +2166,7 @@ test("declarative adapters execute through the Core operation lifecycle", async 
         capabilities: {
           build: {
             enabled: true,
-            handler: "action:build",
+            handler: "workflow:build",
             input_schema: "build",
             output_schema: "build",
             creates_run: true,
@@ -2207,7 +2207,17 @@ test("declarative adapters execute through the Core operation lifecycle", async 
             parser: "build",
           },
         },
-        workflows: {},
+        workflows: {
+          build: {
+            timeout: "10s",
+            stop_on_failure: true,
+            steps: [{ id: "compile", uses: "action:build", with: {} }],
+            output_template: {
+              value: "${result.compile.value}",
+              temp: "${result.compile.temp}",
+            },
+          },
+        },
         parsers: {
           build: {
             success_exit_codes: [0],

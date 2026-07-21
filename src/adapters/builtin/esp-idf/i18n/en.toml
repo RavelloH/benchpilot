@@ -1,7 +1,20 @@
 [view.status]
-title = "Device status"
+title = "Device readiness"
+[view.status.field]
+endpoint = "Endpoint"
+model = "Target"
+revision = "Revision"
+esptool = "esptool"
 [view.info]
-title = "ESP-IDF information"
+title = "Device inventory"
+[view.info.field]
+model = "Model"
+revision = "Revision"
+hardware_id = "Hardware ID"
+flash_manufacturer = "Flash manufacturer"
+flash_device = "Flash device"
+flash_size = "Flash size"
+esptool = "esptool"
 [view.info.key]
 version = "Version"
 major = "Major version"
@@ -97,8 +110,8 @@ description = "Remove all generated build state for the configured project."
 confirm = "Confirm the full build cleanup safety requirement."
 effect = "Deletes the configured project build directory but never sdkconfig or source files."
 [capability.info]
-summary = "Inspect detailed device information."
-description = "Read detailed chip, MAC address, and flash information from the connected target."
+summary = "Inspect target identity and inventory."
+description = "Read the connected target's stable identity, flash inventory, and esptool version."
 [capability.info.safety]
 confirm = "Confirm the device connection safety requirement."
 effect = "Connects to the target and may toggle DTR/RTS while esptool identifies it."
@@ -112,8 +125,8 @@ effect = "Connects with esptool and hard-resets the target after the command."
 summary = "Report firmware or application size."
 description = "Read the configured project's firmware size report."
 [capability.status]
-summary = "Inspect current device status."
-description = "Read the connected ESP target identity and flash information."
+summary = "Probe current device readiness."
+description = "Verify the configured serial target is reachable and return a compact readiness summary."
 [capability.status.safety]
 confirm = "Confirm the device connection safety requirement."
 effect = "Connects to the target and may toggle DTR/RTS while esptool reads its status."
@@ -127,7 +140,7 @@ flash = "Read flash identity"
 read = "Read firmware size"
 [progress.status]
 detect = "Detect esptool"
-device = "Read device status"
+probe = "Probe target readiness"
 [progress.build]
 compile = "Build project"
 compiling = "Compile source files"

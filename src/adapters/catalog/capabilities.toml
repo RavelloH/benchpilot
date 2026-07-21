@@ -1,9 +1,11 @@
 version = 1
 
 [capabilities.status]
-description = "Return current target state."
+description = "Probe current target readiness and connection state."
+output_contract = "status-report"
 [capabilities.info]
-description = "Return detailed target state."
+description = "Return a detailed target identity and inventory report."
+output_contract = "info-report"
 [capabilities.build]
 description = "Build firmware or application artifacts."
 [capabilities.clean]
@@ -22,6 +24,12 @@ description = "Start an application or target."
 description = "Stop an application or target."
 [capabilities.logs]
 description = "Stream target logs."
+[capabilities.console]
+description = "Attach a human terminal to a managed target session."
+[capabilities.send]
+description = "Send a bounded raw message through a managed target session."
+[capabilities.request]
+description = "Send a structured request through a declared target protocol."
 [capabilities.capture]
 description = "Capture logs or other diagnostic output."
 [capabilities.sync]

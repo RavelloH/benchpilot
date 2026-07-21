@@ -2,64 +2,82 @@ schema = "benchpilot.adapter.views"
 schema_version = 1
 
 [capabilities.status]
-kind = "table"
+kind = "detail"
 [capabilities.status.title]
 key = "view.status.title"
-fallback = "Device status"
-[capabilities.status.keys.version]
-key = "view.info.key.version"
-fallback = "Version"
-[capabilities.status.keys.major]
-key = "view.info.key.major"
-fallback = "Major version"
-[capabilities.status.keys.chip]
-key = "view.info.key.chip"
-fallback = "Chip"
-[capabilities.status.keys.revision]
-key = "view.info.key.revision"
+fallback = "Device readiness"
+[[capabilities.status.fields]]
+selector = "connection.endpoint"
+formatter = "string"
+[capabilities.status.fields.label]
+key = "view.status.field.endpoint"
+fallback = "Endpoint"
+[[capabilities.status.fields]]
+selector = "target.model"
+formatter = "string"
+[capabilities.status.fields.label]
+key = "view.status.field.model"
+fallback = "Target"
+[[capabilities.status.fields]]
+selector = "target.revision"
+formatter = "string"
+[capabilities.status.fields.label]
+key = "view.status.field.revision"
 fallback = "Revision"
-[capabilities.status.keys.mac]
-key = "view.info.key.mac"
-fallback = "MAC address"
-[capabilities.status.keys.flash_manufacturer]
-key = "view.info.key.flash_manufacturer"
-fallback = "Flash manufacturer"
-[capabilities.status.keys.flash_device]
-key = "view.info.key.flash_device"
-fallback = "Flash device"
-[capabilities.status.keys.flash_size]
-key = "view.info.key.flash_size"
-fallback = "Flash size"
+[[capabilities.status.fields]]
+selector = "tooling.esptool"
+formatter = "string"
+[capabilities.status.fields.label]
+key = "view.status.field.esptool"
+fallback = "esptool"
 
 [capabilities.info]
-kind = "table"
+kind = "detail"
 [capabilities.info.title]
 key = "view.info.title"
-fallback = "ESP-IDF information"
-[capabilities.info.keys.version]
-key = "view.info.key.version"
-fallback = "Version"
-[capabilities.info.keys.major]
-key = "view.info.key.major"
-fallback = "Major version"
-[capabilities.info.keys.chip]
-key = "view.info.key.chip"
-fallback = "Chip"
-[capabilities.info.keys.revision]
-key = "view.info.key.revision"
+fallback = "Device inventory"
+[[capabilities.info.fields]]
+selector = "identity.model"
+formatter = "string"
+[capabilities.info.fields.label]
+key = "view.info.field.model"
+fallback = "Model"
+[[capabilities.info.fields]]
+selector = "identity.revision"
+formatter = "string"
+[capabilities.info.fields.label]
+key = "view.info.field.revision"
 fallback = "Revision"
-[capabilities.info.keys.mac]
-key = "view.info.key.mac"
-fallback = "MAC address"
-[capabilities.info.keys.flash_manufacturer]
-key = "view.info.key.flash_manufacturer"
+[[capabilities.info.fields]]
+selector = "identity.hardware_id"
+formatter = "string"
+[capabilities.info.fields.label]
+key = "view.info.field.hardware_id"
+fallback = "Hardware ID"
+[[capabilities.info.fields]]
+selector = "hardware.flash.manufacturer"
+formatter = "string"
+[capabilities.info.fields.label]
+key = "view.info.field.flash_manufacturer"
 fallback = "Flash manufacturer"
-[capabilities.info.keys.flash_device]
-key = "view.info.key.flash_device"
+[[capabilities.info.fields]]
+selector = "hardware.flash.device"
+formatter = "string"
+[capabilities.info.fields.label]
+key = "view.info.field.flash_device"
 fallback = "Flash device"
-[capabilities.info.keys.flash_size]
-key = "view.info.key.flash_size"
+[[capabilities.info.fields]]
+selector = "hardware.flash.size"
+formatter = "string"
+[capabilities.info.fields.label]
+key = "view.info.field.flash_size"
 fallback = "Flash size"
+[[capabilities.info.fields]]
+selector = "tooling.esptool"
+formatter = "string"
+[capabilities.info.fields.label]
+key = "view.info.field.esptool"
+fallback = "esptool"
 
 [capabilities.build]
 kind = "detail"

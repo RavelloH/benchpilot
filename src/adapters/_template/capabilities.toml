@@ -101,6 +101,33 @@ windows = false
 linux = false
 macos = false
 
+[capabilities.console]
+enabled = false
+reason = "Managed serial sessions are not implemented by the template."
+
+[capabilities.console.platforms]
+windows = false
+linux = false
+macos = false
+
+[capabilities.send]
+enabled = false
+reason = "Managed serial sessions are not implemented by the template."
+
+[capabilities.send.platforms]
+windows = false
+linux = false
+macos = false
+
+[capabilities.request]
+enabled = false
+reason = "No declared target protocol is implemented by the template."
+
+[capabilities.request.platforms]
+windows = false
+linux = false
+macos = false
+
 [capabilities.capture]
 enabled = false
 reason = "Not implemented by the template."
