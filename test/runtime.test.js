@@ -426,9 +426,7 @@ test("command device discovery uses a Tool Action and parsed records", async () 
       discoveries: {
         node: {
           validation: { path_type: "file", executable: true },
-          candidates: [
-            { id: "node", type: "fixed", paths: [process.execPath] },
-          ],
+          candidates: [{ id: "config", type: "config", key: "node_path" }],
         },
       },
       environments: {},
@@ -471,7 +469,7 @@ test("command device discovery uses a Tool Action and parsed records", async () 
     },
   };
   const devices = await createDeclarativeAdapter(runtime).discover({
-    adapterConfig: {},
+    adapterConfig: { node_path: process.execPath },
     paths: new PathService(),
   });
   assert.deepEqual(
@@ -1109,9 +1107,7 @@ test("doctor probes every tool with its declared environment", async () => {
       discoveries: {
         parent: {
           validation: { path_type: "file", executable: true },
-          candidates: [
-            { id: "node", type: "fixed", paths: [process.execPath] },
-          ],
+          candidates: [{ id: "config", type: "config", key: "node_path" }],
           probe: {
             args: [
               "-e",
@@ -1122,9 +1118,7 @@ test("doctor probes every tool with its declared environment", async () => {
         },
         child: {
           validation: { path_type: "file", executable: true },
-          candidates: [
-            { id: "node", type: "fixed", paths: [process.execPath] },
-          ],
+          candidates: [{ id: "config", type: "config", key: "node_path" }],
           probe: {
             args: [
               "-e",
@@ -1164,7 +1158,7 @@ test("doctor probes every tool with its declared environment", async () => {
     },
   });
   const checks = await adapter.doctor({
-    adapterConfig: {},
+    adapterConfig: { node_path: process.execPath },
     paths: new PathService(),
   });
   assert.equal(
@@ -2192,9 +2186,7 @@ test("declarative adapters execute through the Core operation lifecycle", async 
         discoveries: {
           node: {
             validation: { path_type: "file", executable: true },
-            candidates: [
-              { id: "node", type: "fixed", paths: [process.execPath] },
-            ],
+            candidates: [{ id: "config", type: "config", key: "node_path" }],
           },
         },
         environments: {},
@@ -2252,6 +2244,7 @@ test("declarative adapters execute through the Core operation lifecycle", async 
         type: "object",
         properties: {
           token: { type: "string", "x-benchpilot-cli": { secret: true } },
+          node_path: { type: "string" },
         },
         additionalProperties: false,
       },
@@ -2292,7 +2285,9 @@ test("declarative adapters execute through the Core operation lifecycle", async 
       project: { root, config: join(root, "benchpilot.toml") },
       config: {
         value: {
-          adapters: { demo: { token: "runtime-secret" } },
+          adapters: {
+            demo: { token: "runtime-secret", node_path: process.execPath },
+          },
           devices: { target: { adapter: "demo", serial: "serial-1" } },
         },
         origins: new Map(),

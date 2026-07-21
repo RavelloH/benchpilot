@@ -153,12 +153,12 @@ export class CommandResolver {
     const dynamic: Record<string, DynamicCommandValue> = {};
     let inputIndex = 0;
     let finalDynamic: DynamicCommandValue | undefined;
+    let finalDynamicSegment: CommandSegment | undefined;
     for (const segment of definition.path) {
       const token = path[inputIndex];
       if (segment.kind === "literal") {
         if (token !== segment.value) return undefined;
         inputIndex += 1;
-        finalDynamic = undefined;
         continue;
       }
       if (segment.kind === "argument") {
@@ -168,22 +168,19 @@ export class CommandResolver {
           if (field.required && !remaining.length) return undefined;
           captures[segment.name] = remaining;
           inputIndex = path.length;
-          finalDynamic = undefined;
           continue;
         }
         if (token === undefined) {
           if (field?.required && !allowIncompleteArguments) return undefined;
           captures[segment.name] = [];
-          finalDynamic = undefined;
           continue;
         }
         captures[segment.name] = token;
         inputIndex += 1;
-        finalDynamic = undefined;
         continue;
       }
       if (token === undefined) return undefined;
-      const cacheKey = `${segment.provider}\0${JSON.stringify(captures)}`;
+      const cacheKey = `${definition.id}\0${segment.provider}\0${JSON.stringify(captures)}`;
       let values = cache.get(cacheKey);
       if (!values) {
         values = await this.provider.values({
@@ -198,12 +195,13 @@ export class CommandResolver {
       captures[segment.name] = token;
       dynamic[segment.name] = value;
       finalDynamic = value;
+      finalDynamicSegment = segment;
       inputIndex += 1;
     }
     if (inputIndex !== path.length) return undefined;
     const resolvedDefinition = applyDynamicMetadata(
       definition,
-      definition.path.at(-1),
+      finalDynamicSegment,
       finalDynamic,
     );
     const unavailable = Object.values(dynamic).find(

@@ -139,6 +139,16 @@ export const coreErrorCatalog = {
     "error.configuration",
     "error.reason.adapterNotFound",
   ),
+  ADAPTER_CONFIGURATION_DISCOVERY_UNAVAILABLE: defineError(
+    3,
+    "error.configuration",
+    "error.reason.adapterConfigurationDiscoveryUnavailable",
+  ),
+  ADAPTER_CONFIGURATION_INCOMPLETE: defineError(
+    3,
+    "error.configuration",
+    "error.reason.adapterConfigurationIncomplete",
+  ),
   DEVICE_NOT_FOUND: defineError(
     3,
     "error.device",

@@ -22,6 +22,9 @@ export type { RuntimeSchema } from "./core/adapters/schemas.js";
 export { AdapterRegistry } from "./core/adapters/registry.js";
 export type {
   Adapter,
+  AdapterConfigurationField,
+  AdapterConfigurationDiscovery,
+  AdapterConfigurationTool,
   AdapterContext,
   AdapterServices,
 } from "./core/adapters/types.js";

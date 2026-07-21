@@ -1,6 +1,7 @@
 import { BenchPilotError, type Json } from "../../core.js";
 import type { ConfigurationCommandUseCases } from "../config/command-use-case.js";
 import type { AdapterManagementUseCases } from "../adapters/management-use-case.js";
+import type { AdapterConfigurationUseCases } from "../adapters/configuration-use-case.js";
 import type { QueryUseCases } from "../queries/use-case.js";
 import type { RuntimeCommandUseCases } from "../runtime/command-use-case.js";
 import type { CommandIntent, CommandOutcome } from "./contracts.js";
@@ -9,6 +10,7 @@ import { CommandDispatcher } from "./dispatcher.js";
 interface ApplicationCommandDispatcherDependencies {
   readonly configuration: ConfigurationCommandUseCases;
   readonly adapterManagement: AdapterManagementUseCases;
+  readonly adapterConfiguration: AdapterConfigurationUseCases;
   readonly runtime: RuntimeCommandUseCases;
   readonly queries: QueryUseCases;
   readonly resolvedConfig: { readonly value: Json };
@@ -147,6 +149,27 @@ export const createApplicationCommandDispatcher = (
         )) as unknown as Json,
       ),
     );
+  dispatcher.register("adapter.discover", async (intent) =>
+    outcome(
+      intent,
+      "adapter.discover",
+      (await dependencies.adapterConfiguration.discover(
+        String(intent.input.adapter),
+      )) as unknown as Json,
+    ),
+  );
+  dispatcher.register("adapter.configure", async (intent) =>
+    outcome(
+      intent,
+      "adapter.configure",
+      (await dependencies.adapterConfiguration.configure(
+        String(intent.input.adapter),
+        Object.entries(intent.options).flatMap(([key, value]) =>
+          typeof value === "string" ? [`${key}=${value}`] : [],
+        ),
+      )) as unknown as Json,
+    ),
+  );
 
   const runtime = async (
     intent: CommandIntent,

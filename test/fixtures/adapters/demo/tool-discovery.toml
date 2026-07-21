@@ -3,6 +3,11 @@ schema_version = 1
 [discoveries.node]
 strategy = "first-valid"
 [[discoveries.node.candidates]]
+id = "config"
+type = "config"
+priority = 100
+key = "node_path"
+[[discoveries.node.candidates]]
 id = "path"
 type = "path"
 priority = 10
@@ -10,3 +15,6 @@ names = ["node"]
 [discoveries.node.validation]
 path_type = "file"
 executable = true
+[discoveries.node.persistence]
+key = "node_path"
+source = "path"

@@ -65,7 +65,7 @@ const machineError = (result) => {
   }
   return result;
 };
-async function initDemo(dir) {
+async function initDemo(dir, { discover = true } = {}) {
   await run(dir, "init", "--project-name", "Demo", "--locale", "en");
   await writeFile(
     path.join(dir, "benchpilot.toml"),
@@ -90,6 +90,7 @@ device_id = "demo-device-01"
 operation_delay_ms = 1
 `,
   );
+  if (discover) await run(dir, "adapter", "demo", "discover", "--json");
 }
 
 test("system commands manage member definitions and render details", async () => {
@@ -287,6 +288,21 @@ test("doctor reports project-local configuration and enabled adapter readiness",
     );
     assert.equal(checks.get("project-local").status, "pass");
     assert.equal(checks.get("adapters").status, "warn");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("root doctor localizes adapter diagnostics", async () => {
+  const dir = await mkdtemp(
+    path.join(os.tmpdir(), "benchpilot-doctor-adapter-"),
+  );
+  try {
+    await initDemo(dir);
+    await run(dir, "language", "set", "zh-CN");
+    const output = await run(dir, "doctor");
+    assert.match(output.stdout, /适配器包已准备就绪。/);
+    assert.doesNotMatch(output.stdout, /Adapter bundle ready/);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -1097,6 +1113,12 @@ test("adapter enable and disable persist the current project selection", async (
       await readFile(path.join(dir, "benchpilot.toml"), "utf8"),
       /enabled = \[\s*\]/,
     );
+    const doctorWhileDisabled = JSON.parse(
+      (await run(dir, "adapter", "demo", "doctor", "--json")).stdout,
+    );
+    assert.equal(doctorWhileDisabled.data.schema, "benchpilot.adapter-doctor");
+    const doctorScreen = await run(dir, "adapter", "demo", "doctor");
+    assert.match(doctorScreen.stdout, /Adapter diagnostics/);
     const listedWhileDisabled = JSON.parse(
       (await run(dir, "adapter", "list", "--json")).stdout,
     );
@@ -1127,6 +1149,155 @@ test("adapter enable and disable persist the current project selection", async (
       (await run(dir, "adapter", "demo", "enable", "--json")).stdout,
     );
     assert.equal(alreadyEnabled.data.changed, false);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("adapter discover persists globally resolved tool paths", async () => {
+  const dir = await mkdtemp(
+    path.join(os.tmpdir(), "benchpilot-adapter-configure-"),
+  );
+  const globalConfig = path.join(dir, ".benchpilot", "config.toml");
+  try {
+    await initDemo(dir, { discover: false });
+    const operationBeforeDiscovery = await run(
+      dir,
+      "device",
+      "demo",
+      "build",
+      "--json",
+    ).catch((error) => error);
+    assert.equal(
+      machineError(JSON.parse(operationBeforeDiscovery.stdout)).kind,
+      "ADAPTER_TOOL_NOT_FOUND",
+    );
+    await run(dir, "adapter", "demo", "disable", "--json");
+    const doctorBeforeDiscovery = JSON.parse(
+      (await run(dir, "adapter", "demo", "doctor", "--json")).stdout,
+    );
+    assert.equal(
+      doctorBeforeDiscovery.data.checks.find(
+        (check) => check.id === "demo-tool-node",
+      ).status,
+      "fail",
+    );
+    const globalBeforeDiscovery = await readFile(globalConfig, "utf8");
+    const discovered = JSON.parse(
+      (await run(dir, "adapter", "demo", "discover", "--json")).stdout,
+    );
+    assert.equal(discovered.data.schema, "benchpilot.adapter-configuration");
+    assert.equal(discovered.data.changed, true);
+    assert.equal(typeof discovered.data.config.node_path, "string");
+    assert.notEqual(
+      await readFile(globalConfig, "utf8"),
+      globalBeforeDiscovery,
+    );
+    assert.match(await readFile(globalConfig, "utf8"), /node_path = ".+"/);
+    const doctor = JSON.parse(
+      (await run(dir, "adapter", "demo", "doctor", "--json")).stdout,
+    );
+    assert.equal(
+      doctor.data.configuration.node_path,
+      discovered.data.config.node_path,
+    );
+    await run(dir, "adapter", "demo", "enable", "--json");
+    assert.equal(
+      JSON.parse((await run(dir, "device", "demo", "build", "--json")).stdout)
+        .ok,
+      true,
+    );
+
+    const discoveredAgain = JSON.parse(
+      (await run(dir, "adapter", "demo", "discover", "--json")).stdout,
+    );
+    assert.equal(discoveredAgain.data.changed, false);
+    assert.equal(discoveredAgain.data.tools[0].candidateId, "config");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("adapter configure validates and persists manual tool paths", async () => {
+  const dir = await mkdtemp(
+    path.join(os.tmpdir(), "benchpilot-adapter-configure-manual-"),
+  );
+  const globalConfig = path.join(dir, ".benchpilot", "config.toml");
+  try {
+    await initDemo(dir, { discover: false });
+    const configured = JSON.parse(
+      (
+        await run(
+          dir,
+          "adapter",
+          "demo",
+          "configure",
+          "--node_path",
+          process.execPath,
+          "--json",
+        )
+      ).stdout,
+    );
+    assert.equal(configured.data.schema, "benchpilot.adapter-configuration");
+    assert.equal(configured.data.changed, true);
+    assert.equal(configured.data.config.node_path, process.execPath);
+    assert.match(await readFile(globalConfig, "utf8"), /node_path = ".+"/);
+
+    const configuredAgain = JSON.parse(
+      (
+        await run(
+          dir,
+          "adapter",
+          "demo",
+          "configure",
+          "--node_path",
+          process.execPath,
+          "--json",
+        )
+      ).stdout,
+    );
+    assert.equal(configuredAgain.data.changed, false);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("adapter configure help lists adapter-specific path options", async () => {
+  const dir = await mkdtemp(
+    path.join(os.tmpdir(), "benchpilot-adapter-configure-help-"),
+  );
+  try {
+    await initDemo(dir, { discover: false });
+    const output = await run(dir, "adapter", "demo", "configure", "--help");
+    assert.match(output.stdout, /--node_path <path>/);
+    assert.doesNotMatch(output.stdout, /--set/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("adapter configure does not partially write global configuration", async () => {
+  const dir = await mkdtemp(
+    path.join(os.tmpdir(), "benchpilot-adapter-configure-failure-"),
+  );
+  const globalConfig = path.join(dir, ".benchpilot", "config.toml");
+  try {
+    await initDemo(dir, { discover: false });
+    const before = await readFile(globalConfig, "utf8");
+    const failed = await run(
+      dir,
+      "adapter",
+      "demo",
+      "configure",
+      "--node_path",
+      "missing-node-path",
+      "--json",
+    ).catch((error) => error);
+    assert.equal(
+      JSON.parse(failed.stdout).error.kind,
+      "ADAPTER_CONFIGURATION_INCOMPLETE",
+    );
+    assert.equal(await readFile(globalConfig, "utf8"), before);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -1344,6 +1515,7 @@ test("jsonl streams operation events before a delayed operation finishes", async
         "operation_delay_ms = 150",
       ].join("\n"),
     );
+    await run(dir, "adapter", "demo", "discover", "--json");
     const child = spawn(
       process.execPath,
       [cli, "device", "demo", "deploy", "--jsonl"],
@@ -1445,6 +1617,7 @@ test("declarative demo aborts an action when the operation times out", async () 
         "operation_delay_ms = 500",
       ].join("\n"),
     );
+    await run(dir, "adapter", "demo", "discover", "--json");
     const failed = await run(
       dir,
       "device",
@@ -1490,6 +1663,7 @@ test("system JSONL emits child device events and one canonical terminal result",
         'members = [{ device = "left" }, { device = "right" }]',
       ].join("\n"),
     );
+    await run(dir, "adapter", "demo", "discover", "--json");
     const output = await run(dir, "system", "test", "deploy", "--jsonl");
     const events = output.stdout
       .trim()

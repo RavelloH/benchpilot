@@ -130,14 +130,37 @@ const paint = (
   return painters[tone](value);
 };
 
-const renderTable = (
-  input: DataViewBlockDefinition,
+const tableWidths = (
+  block: TableBlockDefinition,
   context: DataViewRenderContext,
+  rows: readonly JsonRow[],
 ) => {
-  const block = input as TableBlockDefinition;
-  const theme = terminalTheme(context.color);
-  const rows = rowsAt(context.data, block.source);
-  if (block.omitWhenEmpty && !rows.length) return "";
+  const headers = block.columns.map((column) =>
+    column.header ? resolveViewMessage(context, column.header) : "",
+  );
+  return block.columns.map((column, index) => {
+    if (!column.width) return 0;
+    const cells = rows.map((row) =>
+      formatDataCell({
+        formatter: column.formatter,
+        row,
+        field: column.field,
+        locale: context.locale,
+        ...(context.presentation ? { presentation: context.presentation } : {}),
+        ...(context.messageResolver
+          ? { messageResolver: context.messageResolver }
+          : {}),
+      }),
+    );
+    return columnWidth(column, headers[index]!, cells);
+  });
+};
+
+const tableLayout = (
+  block: TableBlockDefinition,
+  context: DataViewRenderContext,
+  rows: readonly JsonRow[],
+) => {
   const formatted = rows.map((row) =>
     block.columns.map((column) => {
       const cell = formatDataCell({
@@ -156,13 +179,34 @@ const renderTable = (
   const headers = block.columns.map((column) =>
     column.header ? resolveViewMessage(context, column.header) : "",
   );
-  const widths = block.columns.map((column, index) =>
-    columnWidth(
-      column,
-      headers[index]!,
-      formatted.map((row) => row[index]!),
+  return {
+    formatted,
+    headers,
+    widths: block.columns.map((column, index) =>
+      columnWidth(
+        column,
+        headers[index]!,
+        formatted.map((row) => row[index]!),
+      ),
     ),
-  );
+  };
+};
+
+const renderTable = (
+  input: DataViewBlockDefinition,
+  context: DataViewRenderContext,
+  sharedWidths?: readonly number[],
+) => {
+  const block = input as TableBlockDefinition;
+  const theme = terminalTheme(context.color);
+  const rows = rowsAt(context.data, block.source);
+  if (block.omitWhenEmpty && !rows.length) return "";
+  const {
+    formatted,
+    headers,
+    widths: calculatedWidths,
+  } = tableLayout(block, context, rows);
+  const widths = sharedWidths ?? calculatedWidths;
   const renderCells = (cells: readonly FormattedCell[]) =>
     cells
       .map((cell, index) => {
@@ -369,6 +413,41 @@ const renderKeyValueTable = (
       };
     },
   );
+  const keyWidth = block.keyWidthFrom
+    ? Math.max(
+        block.keyWidthFrom.min,
+        ...rows.map(
+          (row) => displayWidth(String(row.key)) + block.keyWidthFrom!.gap,
+        ),
+        ...rowsAt(context.data, block.keyWidthFrom.source).map(
+          (row) =>
+            displayWidth(
+              String(valueAt(row, block.keyWidthFrom!.field) ?? ""),
+            ) + block.keyWidthFrom!.gap,
+        ),
+      )
+    : 24;
+  const columns: TableColumnDefinition[] = [
+    {
+      field: "key",
+      header: messageRef("capabilityResult.key"),
+      formatter: "string",
+      tone: "command",
+      width: { kind: "content", min: keyWidth, gap: 2 },
+    },
+    {
+      field: "value",
+      header: messageRef("capabilityResult.value"),
+      formatter: "string",
+    },
+  ];
+  if (block.includeName !== false)
+    columns.splice(1, 0, {
+      field: "name",
+      header: messageRef("capabilityResult.name"),
+      formatter: "string",
+      width: { kind: "content", min: 16, gap: 2 },
+    });
   return renderTable(
     {
       component: "Table",
@@ -376,26 +455,7 @@ const renderKeyValueTable = (
       title: block.title,
       empty: block.empty,
       header: true,
-      columns: [
-        {
-          field: "key",
-          header: messageRef("capabilityResult.key"),
-          formatter: "string",
-          tone: "command",
-          width: { kind: "content", min: 24, gap: 2 },
-        },
-        {
-          field: "name",
-          header: messageRef("capabilityResult.name"),
-          formatter: "string",
-          width: { kind: "content", min: 16, gap: 2 },
-        },
-        {
-          field: "value",
-          header: messageRef("capabilityResult.value"),
-          formatter: "string",
-        },
-      ],
+      columns,
     },
     { ...context, data: { rows } },
   );
@@ -407,6 +467,15 @@ const renderGroupedTable = (
 ) => {
   const block = input as GroupedTableBlockDefinition;
   const rows = rowsAt(context.data, block.source);
+  const table: TableBlockDefinition = {
+    component: "Table",
+    source: "rows",
+    title: block.defaultTitle,
+    header: block.header,
+    headerWhenEmpty: block.headerWhenEmpty,
+    columns: block.columns,
+  };
+  const sharedWidths = tableWidths(table, context, rows);
   const groupValues = [
     "",
     ...new Set(
@@ -433,14 +502,11 @@ const renderGroupedTable = (
         : block.defaultTitle;
       return renderTable(
         {
-          component: "Table",
-          source: "rows",
+          ...table,
           title,
-          header: block.header,
-          headerWhenEmpty: block.headerWhenEmpty,
-          columns: block.columns,
         },
         { ...context, data: { rows: groupedRows } },
+        sharedWidths,
       );
     })
     .filter(Boolean)

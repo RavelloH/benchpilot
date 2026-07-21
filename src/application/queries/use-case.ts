@@ -66,6 +66,12 @@ export class QueryUseCases {
     return { keys: configurationKeyPaths(this.dependencies.config.value) };
   }
 
+  adapterConfigurationFields(id: string) {
+    return (
+      this.dependencies.adapterCatalog.get(id).configurationFields?.() ?? []
+    );
+  }
+
   resolvedConfiguration() {
     return {
       config: this.dependencies.config.value,
@@ -180,7 +186,19 @@ export class QueryUseCases {
 
   async adapterDoctor(id: string) {
     const adapter = this.dependencies.adapterCatalog.get(id);
+    const global = this.dependencies.config.layers.find(
+      (layer) => layer.scope === "global",
+    );
+    const configuration =
+      global &&
+      global.value.adapters &&
+      typeof global.value.adapters === "object"
+        ? ((global.value.adapters as Json)[adapter.id] as Json | undefined)
+        : undefined;
     return {
+      configuration: adapter.redactConfig
+        ? adapter.redactConfig(configuration ?? {})
+        : (configuration ?? {}),
       checks: (
         await this.dependencies.adapterCatalog.doctor(
           adapter,

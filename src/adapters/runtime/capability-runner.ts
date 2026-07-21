@@ -108,7 +108,11 @@ const runtimePlatform = () => {
 export class DeclarativeCapabilityRunner {
   private readonly validator: AdapterDataValidator;
   private readonly environments = new EnvironmentResolver();
-  private readonly tools = new ToolResolver(runtimePlatform(), process.env);
+  private readonly tools = new ToolResolver(
+    runtimePlatform(),
+    process.env,
+    "configured",
+  );
   private operationTemp?: string;
 
   constructor(

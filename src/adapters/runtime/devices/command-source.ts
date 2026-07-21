@@ -59,7 +59,7 @@ export const executeDeviceCommandSource = async (
     environment: {},
     result: {},
   };
-  const tools = new ToolResolver(runtime.platform, process.env);
+  const tools = new ToolResolver(runtime.platform, process.env, "configured");
   const tool = await tools.resolveLaunch(
     String(action.tool),
     object(runtime.rules.tools),

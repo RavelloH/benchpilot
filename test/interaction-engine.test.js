@@ -33,6 +33,44 @@ test("interaction engine completes definition fields without command branching",
   });
 });
 
+test("adapter configure prompts for a missing configuration assignment", async () => {
+  const parsed = await new CommandArgvParser(
+    staticCommandDefinitions,
+    globalOptionDefinitions,
+    {
+      values: async (context) =>
+        context.provider === "adapters"
+          ? [
+              {
+                value: "demo",
+                options: [
+                  {
+                    name: "node_path",
+                    kind: "option",
+                    summary: {
+                      key: "field.adapterConfigPath",
+                      values: { key: "node_path" },
+                    },
+                    required: true,
+                    value: "string",
+                  },
+                ],
+              },
+            ]
+          : [],
+    },
+  ).parse(["adapter", "demo", "configure"]);
+  const session = new InteractionSession("en", {
+    choose: async () => undefined,
+    value: async () => "C:/Tools/node.exe",
+  });
+  const completed = await new InteractionEngine(session, "en").complete(parsed);
+  assert.deepEqual(completed, {
+    path: ["adapter", "demo", "configure"],
+    values: { node_path: "C:/Tools/node.exe" },
+  });
+});
+
 test("interaction engine inserts a provider-backed configuration argument", async () => {
   const parsed = await new CommandArgvParser(
     staticCommandDefinitions,

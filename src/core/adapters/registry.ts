@@ -119,6 +119,23 @@ export class AdapterRegistry {
       : { devices: await adapter.discover(context), diagnostics: undefined };
   }
 
+  async discoverConfiguration(
+    adapter: Adapter,
+    config: Json,
+    paths: PathService,
+  ) {
+    if (!adapter.discoverConfiguration)
+      fail(
+        "ADAPTER_CONFIGURATION_DISCOVERY_UNAVAILABLE",
+        3,
+        `Adapter ${adapter.id} does not support configuration discovery.`,
+      );
+    return adapter.discoverConfiguration!({
+      adapterConfig: this.configFor(adapter, config),
+      paths,
+    });
+  }
+
   async doctor(adapter: Adapter, config: Json, paths: PathService) {
     return adapter.doctor({
       adapterConfig: this.configFor(adapter, config),

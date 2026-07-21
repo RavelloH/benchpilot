@@ -53,6 +53,8 @@ command:
     doctor: "运行适配器诊断"
     enable: "为当前项目启用适配器"
     disable: "为当前项目禁用适配器"
+    discover: "发现并保存全局适配器配置"
+    configure: "校验并保存手动提供的适配器路径"
   device:
     root: "发现、配置和操作设备"
     list: "列出已配置设备"
@@ -122,6 +124,7 @@ field:
   scopeProject: "使用项目配置"
   scopeGlobal: "使用全局配置"
   adapterId: "适配器标识符"
+  adapterConfigPath: "{key} 的路径"
   identity: "稳定设备标识"
   deviceName: "配置后的设备名称"
   port: "设备端口"
@@ -255,10 +258,19 @@ adapterResult:
     title: "适配器详情"
   doctor:
     title: "适配器诊断"
+    configuration: "全局适配器配置"
+    configurationEmpty: "尚未持久化全局适配器配置。"
   state:
     title: "适配器项目状态"
     enabled: "已启用"
     changed: "已变更"
+  discovery:
+    tools: "已发现的工具"
+    empty: "适配器未声明工具。"
+    config: "全局适配器配置"
+    configEmpty: "没有可持久化的配置值。"
+  configuration:
+    title: "适配器配置已保存"
 resourceResult:
   devices:
     title: "已配置设备"
@@ -447,6 +459,8 @@ menu:
     doctor: "检查环境"
     enable: "为当前项目启用"
     disable: "为当前项目禁用"
+    discover: "发现工具"
+    configure: "保存全局配置"
     show: "显示详情"
     logs: "显示日志"
     artifacts: "显示产物"
@@ -599,6 +613,8 @@ error:
     unknownCommand: "找不到指定命令。"
     unknownAdapter: "找不到指定适配器。"
     adapterNotFound: "找不到指定适配器。"
+    adapterConfigurationDiscoveryUnavailable: "该适配器无法自动发现其配置。"
+    adapterConfigurationIncomplete: "一个或多个必需的适配器工具无法解析。"
     operationTimeout: "操作执行超时。"
     operationAborted: "操作已中止。"
     cleanupFailed: "关键清理步骤失败。"

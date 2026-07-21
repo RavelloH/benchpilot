@@ -20,6 +20,15 @@ caches include adapter/platform, executable realpath, prefix, environment and
 probe arguments. Probe output is debug-only and never exposes the resolved
 environment.
 
+An optional `[discoveries.<id>.persistence]` declaration makes a resolved
+discovery value eligible for `benchpilot adapter <id> discover`. It names a
+schema-bound Adapter configuration `key`, selects `path` or `root` as its
+source, and may remove a declared `strip_suffix` from a resolved path.
+Discover validates every required Tool and writes only these declared values to
+global configuration. `configure --<key> <path>` validates manually supplied
+paths through the same Tool rules before writing them. Environment values and
+raw probe output are never persisted.
+
 Windows environment lookup is case-insensitive. Capture scripts run the current
 `process.execPath`, rather than a literal `node`, and script path, executable,
 and emit program are passed as separate process arguments.

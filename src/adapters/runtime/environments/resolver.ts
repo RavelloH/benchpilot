@@ -224,6 +224,7 @@ export class EnvironmentResolver {
       "benchpilot",
       "environment-cache",
     ),
+    private readonly persistentCache = true,
   ) {}
 
   async resolve(
@@ -361,7 +362,9 @@ export class EnvironmentResolver {
     const cached = this.cache.get(key);
     if (cached) return { ...cached };
     const cachedPath = path.join(this.cacheRoot, `${key}.json`);
-    const persisted = await this.readCachedEnvironment(cachedPath);
+    const persisted = this.persistentCache
+      ? await this.readCachedEnvironment(cachedPath)
+      : undefined;
     if (persisted) {
       this.cache.set(key, persisted);
       return { ...persisted };
@@ -407,7 +410,8 @@ export class EnvironmentResolver {
         );
       }
       this.cache.set(key, environment);
-      await this.writeCachedEnvironment(cachedPath, environment);
+      if (this.persistentCache)
+        await this.writeCachedEnvironment(cachedPath, environment);
       return { ...environment };
     } catch (error) {
       // Keep a parent operation/action abort intact. The internal hard limit

@@ -335,6 +335,15 @@ export const dataViewDefinitions: readonly DataViewDefinition[] = [
     id: "adapter.doctor",
     blocks: [
       {
+        component: "KeyValueTable",
+        source: "configuration",
+        title: msg("adapterResult.doctor.configuration"),
+        empty: msg("adapterResult.doctor.configurationEmpty"),
+        keyLabels: {},
+        includeName: false,
+        keyWidthFrom: { source: "checks", field: "id", min: 14, gap: 2 },
+      },
+      {
         component: "Table",
         source: "checks",
         title: msg("adapterResult.doctor.title"),
@@ -427,6 +436,85 @@ export const dataViewDefinitions: readonly DataViewDefinition[] = [
             field: "path",
             label: msg("configResult.path"),
             formatter: "string",
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: "adapter.discover",
+    blocks: [
+      {
+        component: "Table",
+        source: "tools",
+        title: msg("adapterResult.discovery.tools"),
+        empty: msg("adapterResult.discovery.empty"),
+        columns: [
+          {
+            field: "id",
+            formatter: "string",
+            tone: "command",
+            width: { kind: "content", min: 12, gap: 2 },
+          },
+          {
+            field: "status",
+            formatter: "string",
+            width: { kind: "fixed", size: 12, minimum: 1 },
+          },
+          { field: "path", formatter: "fallback-dash" },
+        ],
+      },
+      {
+        component: "ObjectTree",
+        source: "config",
+        title: msg("adapterResult.discovery.config"),
+        empty: msg("adapterResult.discovery.configEmpty"),
+        labelWidth: 18,
+        rows: [
+          {
+            field: "value",
+            label: msg("configResult.value"),
+            formatter: "string",
+            tone: "argument",
+          },
+        ],
+      },
+    ],
+  },
+  {
+    id: "adapter.configure",
+    blocks: [
+      {
+        component: "Detail",
+        source: "",
+        title: msg("adapterResult.configuration.title"),
+        labelWidth: 12,
+        rows: [
+          {
+            field: "adapter",
+            label: msg("adapterResult.id"),
+            formatter: "string",
+            tone: "command",
+          },
+          {
+            field: "path",
+            label: msg("configResult.path"),
+            formatter: "string",
+          },
+        ],
+      },
+      {
+        component: "ObjectTree",
+        source: "config",
+        title: msg("adapterResult.discovery.config"),
+        empty: msg("adapterResult.discovery.configEmpty"),
+        labelWidth: 18,
+        rows: [
+          {
+            field: "value",
+            label: msg("configResult.value"),
+            formatter: "string",
+            tone: "argument",
           },
         ],
       },

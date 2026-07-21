@@ -100,15 +100,18 @@ export const adapterDoctorDataPage = (
   adapter: string,
   input: {
     checks: readonly Json[];
+    configuration?: Json;
   },
 ): CliDataPage<{
   schema: "benchpilot.adapter-doctor";
   version: 1;
+  configuration: Json;
   checks: readonly AdapterCheck[];
 }> => {
   const data = {
     schema: "benchpilot.adapter-doctor" as const,
     version: 1 as const,
+    configuration: input.configuration ?? {},
     checks: input.checks.map((value) => check(value, adapter)),
   };
   return {
@@ -145,5 +148,51 @@ export const adapterStateDataPage = (input: {
   return {
     data,
     jsonl: [{ key: `adapter.${data.adapter}`, value: data }],
+  };
+};
+
+interface AdapterConfigurationToolData {
+  readonly id: string;
+  readonly required: boolean;
+  readonly status: "resolved" | "unavailable";
+  readonly path?: string;
+  readonly candidateId?: string;
+  readonly message?: string;
+}
+
+export const adapterConfigurationDataPage = (input: {
+  adapter: string;
+  path: string;
+  changed: boolean;
+  config: Json;
+  tools: readonly AdapterConfigurationToolData[];
+}): CliDataPage<{
+  schema: "benchpilot.adapter-configuration";
+  version: 1;
+  adapter: string;
+  path: string;
+  changed: boolean;
+  config: Json;
+  tools: readonly AdapterConfigurationToolData[];
+}> => {
+  const data = {
+    schema: "benchpilot.adapter-configuration" as const,
+    version: 1 as const,
+    ...input,
+  };
+  return {
+    data,
+    jsonl: [
+      {
+        key: `adapter.${data.adapter}`,
+        value: {
+          adapter: data.adapter,
+          path: data.path,
+          changed: data.changed,
+        },
+      },
+      ...data.tools.map((tool) => ({ key: `tools.${tool.id}`, value: tool })),
+      { key: "configuration", value: data.config },
+    ],
   };
 };

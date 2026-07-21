@@ -53,6 +53,8 @@ command:
     doctor: "Run adapter diagnostics"
     enable: "Enable an adapter for this project"
     disable: "Disable an adapter for this project"
+    discover: "Discover and save adapter configuration globally"
+    configure: "Validate and save manually supplied adapter paths"
   device:
     root: "Discover, configure, and operate devices"
     list: "List configured devices"
@@ -122,6 +124,7 @@ field:
   scopeProject: "Use project configuration"
   scopeGlobal: "Use global configuration"
   adapterId: "Adapter identifier"
+  adapterConfigPath: "Path for {key}"
   identity: "Stable device identity"
   deviceName: "Configured device name"
   port: "Device port"
@@ -255,10 +258,19 @@ adapterResult:
     title: "Adapter details"
   doctor:
     title: "Adapter diagnostics"
+    configuration: "Global adapter configuration"
+    configurationEmpty: "No global adapter configuration is persisted."
   state:
     title: "Adapter project state"
     enabled: "Enabled"
     changed: "Changed"
+  discovery:
+    tools: "Discovered tools"
+    empty: "No adapter tools were declared."
+    config: "Global adapter configuration"
+    configEmpty: "No configuration values can be persisted."
+  configuration:
+    title: "Adapter configuration saved"
 resourceResult:
   devices:
     title: "Configured devices"
@@ -447,6 +459,8 @@ menu:
     doctor: "Check environment"
     enable: "Enable for this project"
     disable: "Disable for this project"
+    discover: "Discover tools"
+    configure: "Save global configuration"
     show: "Show details"
     logs: "Show logs"
     artifacts: "Show artifacts"
@@ -599,6 +613,8 @@ error:
     unknownCommand: "The requested command was not found."
     unknownAdapter: "The requested adapter was not found."
     adapterNotFound: "The requested adapter was not found."
+    adapterConfigurationDiscoveryUnavailable: "This adapter cannot discover its configuration automatically."
+    adapterConfigurationIncomplete: "One or more required adapter tools could not be resolved."
     operationTimeout: "The operation timed out."
     operationAborted: "The operation was aborted."
     cleanupFailed: "A critical cleanup step failed."

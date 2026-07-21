@@ -558,19 +558,16 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
       selectedLocale: Locale,
       key: string,
       values: Readonly<Record<string, string | number | boolean>>,
-    ) =>
-      application.registry
-        .get(adapterId)
-        .translate?.(
-          selectedLocale,
-          key,
-          Object.fromEntries(
-            Object.entries(values).map(([name, value]) => [
-              name,
-              String(value),
-            ]),
-          ),
-        );
+    ) => {
+      const adapter = declared.find((candidate) => candidate.id === adapterId);
+      return adapter?.translate?.(
+        selectedLocale,
+        key,
+        Object.fromEntries(
+          Object.entries(values).map(([name, value]) => [name, String(value)]),
+        ),
+      );
+    };
     const adapterMessageResolver =
       (selectedLocale: Locale) =>
       ({
@@ -904,7 +901,7 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
     const completeDeclaredRecipe = async () => {
       const candidate = await parseCurrentCommand();
       if (
-        !candidate.resolved.definition.interactionRecipe ||
+        candidate.resolved.definition.interaction === "never" ||
         !candidate.missingFields.length
       )
         return false;
@@ -1398,7 +1395,9 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
             ? definedCommand.intent.input.locale
             : locale,
         color: colorEnabled(flags, stdout.isTTY),
-        ...(definedCommand.intent.commandId === "adapter.doctor"
+        ...(["doctor", "adapter.doctor"].includes(
+          definedCommand.intent.commandId,
+        )
           ? { messageResolver: adapterMessageResolver(locale) }
           : {}),
       });

@@ -136,6 +136,13 @@ export interface KeyValueTableBlockDefinition {
   readonly title: MessageRef;
   readonly empty: MessageRef;
   readonly keyLabels: Readonly<Record<string, MessageRef>>;
+  readonly includeName?: boolean;
+  readonly keyWidthFrom?: {
+    readonly source: string;
+    readonly field: string;
+    readonly min: number;
+    readonly gap: number;
+  };
 }
 
 export interface GroupedTableBlockDefinition {

@@ -31,6 +31,9 @@ macos = false
 [discoveries.python.validation]
 path_type = "file"
 executable = true
+[discoveries.python.persistence]
+key = "python_path"
+source = "path"
 [discoveries.python.probe]
 args = ["--version"]
 parser = "python-version"
@@ -72,6 +75,10 @@ macos = false
 [discoveries.idf.validation]
 path_type = "file"
 executable = false
+[discoveries.idf.persistence]
+key = "idf_path"
+source = "path"
+strip_suffix = ["tools", "idf.py"]
 [discoveries.idf.probe]
 args = ["--version"]
 parser = "idf-version"

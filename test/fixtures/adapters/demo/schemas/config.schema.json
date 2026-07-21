@@ -7,6 +7,7 @@
     "connected": { "type": "boolean", "default": true },
     "device_id": { "type": "string", "default": "demo-device-01" },
     "operation_delay_ms": { "type": "integer", "minimum": 0, "default": 50 },
-    "fail_stage": { "type": "string", "default": "" }
+    "fail_stage": { "type": "string", "default": "" },
+    "node_path": { "type": "string", "minLength": 1 }
   }
 }

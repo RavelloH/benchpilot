@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { commandCatalogDefinition } from "../dist/application/commands/definitions.js";
 import {
+  adapterConfigurationDataPage,
   adapterDoctorDataPage,
   adapterInfoDataPage,
   adapterListDataPage,
@@ -630,11 +631,17 @@ test("doctor groups and messages are rendered from locale-neutral data", () => {
     },
   });
 
-  assert.match(output, /^本地环境\n {2}检查项 {8}结果 {4}详情/);
-  assert.match(output, /config {8}通过 {4}TOML 和配置架构有效/);
+  assert.match(output, /^本地环境\n  检查项\s+结果\s+详情/);
+  assert.match(output, /config\s+通过\s+TOML 和配置架构有效/);
   assert.ok(output.indexOf("适配器：second") < output.indexOf("适配器：first"));
   assert.match(output, /adapter-ready {2}通过 {4}适配器已就绪/);
   assert.match(output, /unknown-key {4}失败 {4}Unknown key fallback/);
+  const resultColumns = output
+    .split("\n")
+    .filter((line) => /^(  config|  adapter-ready|  unknown-key)/.test(line))
+    .map((line) => line.search(/通过|失败/));
+  assert.equal(resultColumns.length, 3);
+  assert.equal(new Set(resultColumns).size, 1);
   assert.deepEqual(
     calls.map(({ adapter, key }) => ({ adapter, key })),
     [
@@ -688,11 +695,65 @@ test("adapter doctor uses the shared table and external message resolver", () =>
   });
   assert.equal(
     output,
-    "适配器诊断\n  检查项        结果    详情\n  tool          通过    probe 已就绪\n",
+    "全局适配器配置\n  尚未持久化全局适配器配置。\n\n适配器诊断\n  检查项        结果    详情\n  tool          通过    probe 已就绪\n",
   );
   assert.equal(page.data.checks[0].adapter, "demo");
   assert.equal(page.data.checks[0].message, "Tool fallback");
   assert.equal(page.screen, undefined);
+});
+
+test("adapter doctor renders global configuration as a key-value table", () => {
+  const page = adapterDoctorDataPage("esp-idf", {
+    configuration: {
+      python_path: "C:/Espressif/python.exe",
+      flash_baud: 460800,
+    },
+    checks: [
+      {
+        id: "esp-idf-environment-inherit",
+        status: "pass",
+        message: "Environment resolved.",
+      },
+    ],
+  });
+  const output = renderDataView("adapter.doctor", page.data, {
+    locale: "zh-CN",
+    color: false,
+    columns: 100,
+  });
+  const valueLine = output
+    .split("\n")
+    .find((line) => line.includes("C:/Espressif/python.exe"));
+  const resultLine = output
+    .split("\n")
+    .find((line) => line.includes("esp-idf-environment-inherit"));
+  assert.ok(valueLine);
+  assert.ok(resultLine);
+  assert.equal(
+    valueLine.indexOf("C:/Espressif/python.exe"),
+    resultLine.indexOf("通过"),
+  );
+});
+
+test("adapter discovery renders persisted configuration values", () => {
+  const page = adapterConfigurationDataPage({
+    adapter: "esp-idf",
+    path: "C:/Users/example/.benchpilot/config.toml",
+    changed: true,
+    config: {
+      python_path: "C:/Espressif/python.exe",
+      idf_path: "D:/Program/esp/esp-idf",
+    },
+    tools: [],
+  });
+  assert.equal(
+    renderDataView("adapter.discover", page.data, {
+      locale: "zh-CN",
+      color: false,
+      columns: 120,
+    }),
+    "已发现的工具\n  适配器未声明工具。\n\n全局适配器配置\n  python_path\n    值                C:/Espressif/python.exe\n\n  idf_path\n    值                D:/Program/esp/esp-idf\n",
+  );
 });
 
 test("approval detail composes binding, device, timing, and claim sections", () => {

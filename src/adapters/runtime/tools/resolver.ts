@@ -28,6 +28,8 @@ export interface ResolvedToolLaunch {
   chain: ResolvedToolLaunch[];
 }
 
+export type ToolResolutionMode = "discover" | "configured";
+
 interface DiscoveryResolution {
   path: string;
   root?: string;
@@ -125,6 +127,7 @@ export class ToolResolver {
   constructor(
     private readonly platform: "windows" | "linux" | "macos",
     private readonly env: NodeJS.ProcessEnv,
+    private readonly mode: ToolResolutionMode = "discover",
   ) {}
 
   async resolveLaunch(
@@ -353,9 +356,15 @@ export class ToolResolver {
     context: RuleObject,
   ): Promise<DiscoveryResolution> {
     const validation = object(discovery.validation);
-    for (const { candidate } of candidateOrder(
+    const candidates = candidateOrder(
       Array.isArray(discovery.candidates) ? discovery.candidates : [],
-    )) {
+    ).filter(
+      ({ candidate }) =>
+        this.mode === "discover" ||
+        candidate.type === "config" ||
+        candidate.type === "config-path",
+    );
+    for (const { candidate } of candidates) {
       if (!platformEnabled(candidate, this.platform)) continue;
       const explicit = ["config", "config-path"].includes(
         String(candidate.type),
@@ -389,9 +398,13 @@ export class ToolResolver {
     }
     throw new AdapterRuntimeError(
       "ADAPTER_TOOL_NOT_FOUND",
-      `No valid candidate found for discovery ${discoveryId}.`,
+      this.mode === "configured"
+        ? `No persisted configuration found for discovery ${discoveryId}.`
+        : `No valid candidate found for discovery ${discoveryId}.`,
       false,
-      ["Install the tool or configure its path."],
+      this.mode === "configured"
+        ? ["Run benchpilot adapter <id> discover or configure the tool path."]
+        : ["Install the tool or configure its path."],
       { discoveryId },
     );
   }

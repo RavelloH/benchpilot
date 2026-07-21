@@ -13,6 +13,15 @@ add or remove an installed Adapter from the current project's
 project configuration; they do not install tools or change global Adapter
 configuration.
 
+`benchpilot adapter <id> discover` resolves and validates the Adapter's
+declared tools without touching a device. When every required tool is available,
+it atomically persists the declared, schema-bound values to the global
+`[adapters.<id>]` table. `benchpilot adapter <id> configure --<key> <path>`
+validates manually supplied Adapter paths before saving them to the same global
+table. Persisted values are preferred by all later Adapter tool resolution,
+while device operations remain limited to Adapters enabled by the current
+project.
+
 Adapter-provided messages are loaded from optional `i18n/<locale>.toml` catalog
 files and resolved by the CLI, with `en` as the fallback. Capability input,
 output, safety, and timeout metadata participates in the Command Graph and

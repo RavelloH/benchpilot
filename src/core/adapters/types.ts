@@ -8,6 +8,29 @@ export interface AdapterContext {
   paths: PathService;
 }
 
+export interface AdapterConfigurationTool {
+  id: string;
+  required: boolean;
+  status: "resolved" | "unavailable";
+  path?: string;
+  candidateId?: string;
+  message?: string;
+}
+
+/** A human-configurable path required to run an Adapter without discovery. */
+export interface AdapterConfigurationField {
+  key: string;
+  required: boolean;
+}
+
+/** Read-only toolchain discovery result used to prepare global Adapter config. */
+export interface AdapterConfigurationDiscovery {
+  adapter: string;
+  ready: boolean;
+  config: Json;
+  tools: AdapterConfigurationTool[];
+}
+
 export interface AdapterServices extends AdapterContext {}
 
 export interface Adapter {
@@ -25,6 +48,10 @@ export interface Adapter {
     devices: Json[];
     diagnostics?: Json[];
   }>;
+  discoverConfiguration?(
+    context: AdapterContext,
+  ): Promise<AdapterConfigurationDiscovery>;
+  configurationFields?(): readonly AdapterConfigurationField[];
   doctor(context: AdapterContext): Promise<Json[]>;
   translate?(
     locale: string,

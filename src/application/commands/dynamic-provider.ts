@@ -135,14 +135,36 @@ export class ApplicationDynamicCommandProvider implements DynamicCommandProvider
     if (provider === "adapters")
       return this.dependencies.queries
         .listAdapters()
-        .adapters.map((adapter) => ({
-          value: adapter.id,
-          summary: messageRef(
-            `adapter.${adapter.id}.summary`,
-            undefined,
-            adapter.summary,
-          ),
-        }));
+        .adapters.map((adapter) => {
+          const fields =
+            context.definition.id === "adapter.configure"
+              ? this.dependencies.queries.adapterConfigurationFields(adapter.id)
+              : [];
+          return {
+            value: adapter.id,
+            summary: messageRef(
+              `adapter.${adapter.id}.summary`,
+              undefined,
+              adapter.summary,
+            ),
+            ...(fields.length
+              ? {
+                  options: fields.map((field): CommandFieldDefinition => ({
+                    name: field.key,
+                    kind: "option",
+                    summary: messageRef(
+                      "field.adapterConfigPath",
+                      { key: field.key },
+                      `Path for ${field.key}.`,
+                    ),
+                    required: field.required,
+                    value: "string",
+                    placeholder: "path",
+                  })),
+                }
+              : {}),
+          };
+        });
     if (provider === "configured-devices")
       return idValues(
         this.dependencies.queries.listConfiguredDevices().devices,

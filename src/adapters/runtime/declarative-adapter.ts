@@ -1,8 +1,10 @@
+import path from "node:path";
 import {
   BenchPilotError,
   duration,
   objectSchema,
   type Adapter,
+  type AdapterConfigurationDiscovery,
   type AdapterContext,
   type AdapterServices,
   type Capability,
@@ -10,6 +12,7 @@ import {
   type Json,
   type OperationContext,
   type RuntimeSchema,
+  setKey,
 } from "../../core.js";
 import { DeclarativeCapabilityRunner } from "./capability-runner.js";
 import { discoverDevicesDetailed } from "./devices/discovery.js";
@@ -54,6 +57,172 @@ const physicalId = (rules: RuleObject, instance: string, device: Json) => {
   if (identity.allow_port_fallback === true && typeof device.port === "string")
     return normalizePortIdentity(device.port);
   return identity.allow_instance_fallback === true ? instance : undefined;
+};
+
+const writeToolResolution = (
+  context: RuleObject,
+  launch: Awaited<ReturnType<ToolResolver["resolveLaunch"]>>,
+) => {
+  const tools = object(context.tool);
+  const discoveries = object(context.discovery);
+  for (const current of launch.chain) {
+    tools[current.toolId] = {
+      executable: current.executable,
+      argsPrefix: current.argsPrefix,
+      environmentId: current.environmentId,
+      discoveryId: current.discoveryId,
+      discoveredPath: current.discoveredPath,
+      discoveredRoot: current.discoveredRoot,
+    };
+    discoveries[current.discoveryId] = {
+      path: current.discoveredPath,
+      root: current.discoveredRoot,
+      candidateId: current.candidateId,
+    };
+  }
+  context.tool = tools;
+  context.discovery = discoveries;
+};
+
+const persistentValue = (input: {
+  discovery: RuleObject;
+  path: string;
+  root?: string;
+}) => {
+  const persistence = object(input.discovery.persistence);
+  const key = persistence.key;
+  if (typeof key !== "string" || !key) return undefined;
+  let value = persistence.source === "root" ? input.root : input.path;
+  if (typeof value !== "string" || !value) return undefined;
+  const suffix = Array.isArray(persistence.strip_suffix)
+    ? persistence.strip_suffix.map(String)
+    : [];
+  if (suffix.length) {
+    const actual = value.split(/[\\/]+/).filter(Boolean);
+    if (
+      suffix.length > actual.length ||
+      suffix.some(
+        (segment, index) =>
+          actual[actual.length - suffix.length + index] !== segment,
+      )
+    )
+      return undefined;
+    value = path.resolve(value, ...suffix.map(() => ".."));
+  }
+  return { key, value };
+};
+
+const discoverConfiguration = async (
+  runtime: RuntimeAdapter,
+  validator: AdapterDataValidator,
+  context: AdapterContext,
+): Promise<AdapterConfigurationDiscovery> => {
+  const rules = runtime.rules;
+  const resolver = new ToolResolver(runtime.platform, process.env);
+  const environments = new EnvironmentResolver(process.env, undefined, false);
+  const runtimeContext = doctorContext(
+    runtime,
+    context.adapterConfig,
+    context.paths,
+  );
+  const config: Json = {};
+  const tools: AdapterConfigurationDiscovery["tools"] = [];
+  for (const [id, raw] of Object.entries(object(rules.tools))) {
+    const tool = object(raw);
+    const required = tool.required === true;
+    try {
+      const launch = await resolver.resolveLaunch(
+        id,
+        object(rules.tools),
+        object(rules.discoveries),
+        runtimeContext,
+      );
+      writeToolResolution(runtimeContext, launch);
+      const environment = await environments.resolveDetailed(
+        launch.environmentId,
+        object(rules.environments),
+        runtimeContext,
+        new AbortController().signal,
+      );
+      await resolver.probeChain(
+        launch,
+        object(rules.discoveries),
+        runtimeContext,
+        object(rules.parsers),
+        environment.environment,
+        runtime.bundle.id,
+        undefined,
+        undefined,
+        environmentFor(
+          environments,
+          object(rules.environments),
+          runtimeContext,
+          new AbortController().signal,
+        ),
+      );
+      for (const current of launch.chain) {
+        const value = persistentValue({
+          discovery: object(object(rules.discoveries)[current.discoveryId]),
+          path: current.discoveredPath,
+          root: current.discoveredRoot,
+        });
+        if (!value) continue;
+        setKey(config, value.key, value.value);
+      }
+      tools.push({
+        id,
+        required,
+        status: "resolved",
+        path: launch.discoveredPath,
+        candidateId: launch.candidateId,
+      });
+    } catch (error) {
+      tools.push({
+        id,
+        required,
+        status: "unavailable",
+        message: (error as Error).message,
+      });
+    }
+  }
+  const ready = tools.every(
+    (tool) => !tool.required || tool.status === "resolved",
+  );
+  if (ready)
+    validator.validate("config", { ...context.adapterConfig, ...config });
+  return { adapter: runtime.bundle.id, ready, config, tools };
+};
+
+const configurationFields = (runtime: RuntimeAdapter) => {
+  const fields = new Map<string, { key: string; required: boolean }>();
+  for (const rawTool of Object.values(object(runtime.rules.tools))) {
+    const tool = object(rawTool);
+    if (tool.required !== true) continue;
+    const discoveryId = tool.discovery;
+    const discovery = object(
+      typeof discoveryId === "string"
+        ? object(runtime.rules.discoveries)[discoveryId]
+        : undefined,
+    );
+    const persistenceKey = object(discovery.persistence).key;
+    const fallbackKey = (
+      Array.isArray(discovery.candidates)
+        ? discovery.candidates.map(object)
+        : []
+    ).find(
+      (candidate) =>
+        (candidate.type === "config" || candidate.type === "config-path") &&
+        typeof candidate.key === "string",
+    )?.key;
+    const key =
+      typeof persistenceKey === "string"
+        ? persistenceKey
+        : typeof fallbackKey === "string"
+          ? fallbackKey
+          : undefined;
+    if (key) fields.set(key, { key, required: true });
+  }
+  return [...fields.values()];
 };
 
 const capabilityFor = (
@@ -327,6 +496,12 @@ export const createDeclarativeAdapter = (
         diagnostics: detailed.sources as unknown as Json[],
       };
     },
+    async discoverConfiguration(context: AdapterContext) {
+      return discoverConfiguration(runtime, validator, context);
+    },
+    configurationFields() {
+      return configurationFields(runtime);
+    },
     async doctor(context: AdapterContext) {
       const checks: Json[] = [
         {
@@ -337,7 +512,11 @@ export const createDeclarativeAdapter = (
         },
       ];
       const rules = runtime.rules;
-      const resolver = new ToolResolver(runtime.platform, process.env);
+      const resolver = new ToolResolver(
+        runtime.platform,
+        process.env,
+        "configured",
+      );
       const environments = new EnvironmentResolver();
       const runtimeContext: RuleObject = doctorContext(
         runtime,
