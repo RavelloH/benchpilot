@@ -88,6 +88,25 @@
         },
         {
           "type": "object",
+          "required": ["kind", "title", "source", "columns"],
+          "additionalProperties": false,
+          "properties": {
+            "kind": { "const": "records" },
+            "title": { "$ref": "#/$defs/message" },
+            "empty": { "$ref": "#/$defs/message" },
+            "source": {
+              "type": "string",
+              "pattern": "^[a-zA-Z][a-zA-Z0-9_]*(\\.[a-zA-Z][a-zA-Z0-9_]*)*$"
+            },
+            "columns": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "$ref": "#/$defs/field" }
+            }
+          }
+        },
+        {
+          "type": "object",
           "required": ["kind", "message"],
           "additionalProperties": false,
           "properties": {

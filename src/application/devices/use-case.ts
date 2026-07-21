@@ -10,6 +10,7 @@ import {
   type ResolvedConfig,
   type ManagedSessionPlan,
   type DeviceRuntime,
+  type OperationExecutionOptions,
 } from "../../core.js";
 
 export interface DeviceUseCaseDependencies {
@@ -98,6 +99,7 @@ export class DeviceUseCases {
     capabilityInput: Json;
     safetyConfirmed?: boolean;
     executionMode?: "interactive";
+    attachManagedSessionConsole?: OperationExecutionOptions["attachManagedSessionConsole"];
   }) {
     await this.capability(input.device, input.capability);
     return this.dependencies.runner.execute(
@@ -107,6 +109,7 @@ export class DeviceUseCases {
       {
         safetyConfirmed: input.safetyConfirmed,
         executionMode: input.executionMode,
+        attachManagedSessionConsole: input.attachManagedSessionConsole,
       },
     );
   }
@@ -118,6 +121,7 @@ export class DeviceUseCases {
     capabilityInput: Json;
     safetyConfirmed?: boolean;
     executionMode?: "interactive";
+    attachManagedSessionConsole?: OperationExecutionOptions["attachManagedSessionConsole"];
   }) {
     await this.capability(input.device, input.capability);
     let outcome: OperationOutcome | undefined;
@@ -129,6 +133,7 @@ export class DeviceUseCases {
         {
           safetyConfirmed: input.safetyConfirmed,
           executionMode: input.executionMode,
+          attachManagedSessionConsole: input.attachManagedSessionConsole,
           onOutcome: (value) => {
             outcome = value;
           },

@@ -12,7 +12,11 @@ import { renderCapabilityResult } from "../output/capability-renderer.js";
 import type { DeferredOperationReporter } from "../output/deferred-operation-reporter.js";
 import type { Locale } from "../../i18n/index.js";
 import type { AdapterCapabilityView } from "../../adapters/contract/views.js";
-import type { ManagedSessionLogRecord } from "../../core.js";
+import type {
+  ManagedSessionIdentity,
+  ManagedSessionLogRecord,
+  ManagedSessionPlan,
+} from "../../core.js";
 import { CommandResultV3 } from "../../contracts/index.js";
 import stripAnsi from "strip-ansi";
 
@@ -42,8 +46,8 @@ interface DeviceCommandContext {
   color: boolean;
   columns: number;
   console?: (input: {
-    device: string;
-    capability: string;
+    identity: ManagedSessionIdentity;
+    plan: ManagedSessionPlan;
     sessionId?: string;
   }) => Promise<void>;
   followLogs?: (input: {
@@ -188,14 +192,6 @@ export async function handleDeviceCommand({
           2,
           "Interactive terminal is required for this managed session capability.",
         );
-      await consoleHandler({
-        device: parts[1],
-        capability,
-        ...(typeof input.session_id === "string"
-          ? { sessionId: input.session_id }
-          : {}),
-      });
-      return true;
     }
     const command = {
       id: "device.execute",
@@ -209,6 +205,9 @@ export async function handleDeviceCommand({
       safetyConfirmed,
       ...(interactiveExecution
         ? { executionMode: "interactive" as const }
+        : {}),
+      ...(definition.ttyOnly && consoleHandler
+        ? { attachManagedSessionConsole: consoleHandler }
         : {}),
     });
     const result = capabilityResultFromOperation({ command, outcome });

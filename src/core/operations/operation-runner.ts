@@ -1152,6 +1152,20 @@ export class OperationRunner {
           framing,
           writtenAt: new Date().toISOString(),
         };
+      } else if (input.plan.kind === "console") {
+        const attach = input.options.attachManagedSessionConsole;
+        if (!attach)
+          throw new BenchPilotError(
+            "INTERACTIVE_TERMINAL_REQUIRED",
+            2,
+            "Interactive terminal is required for this managed session capability.",
+          );
+        await attach({
+          identity: input.runtime.identity,
+          plan: input.plan,
+          ...(sessionId ? { sessionId } : {}),
+        });
+        data = {};
       } else
         throw new BenchPilotError(
           "MANAGED_SESSION_CAPABILITY_NOT_READY",

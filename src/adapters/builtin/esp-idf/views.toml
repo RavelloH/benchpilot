@@ -254,10 +254,29 @@ key = "view.session.field.status"
 fallback = "Status"
 
 [capabilities.logs]
-kind = "tree"
+kind = "records"
+source = "records"
 [capabilities.logs.title]
 key = "view.session.logs.title"
 fallback = "Serial session logs"
+[[capabilities.logs.columns]]
+selector = "timestamp"
+formatter = "string"
+[capabilities.logs.columns.label]
+key = "view.session.field.timestamp"
+fallback = "Time"
+[[capabilities.logs.columns]]
+selector = "sequence"
+formatter = "string"
+[capabilities.logs.columns.label]
+key = "view.session.field.sequence"
+fallback = "#"
+[[capabilities.logs.columns]]
+selector = "text"
+formatter = "fallback-dash"
+[capabilities.logs.columns.label]
+key = "view.session.field.text"
+fallback = "Output"
 
 [capabilities.send]
 kind = "detail"

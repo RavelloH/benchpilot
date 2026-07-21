@@ -30,11 +30,22 @@ const hostEntry = () => {
   return path.join(path.dirname(current), `session-host-entry${extension}`);
 };
 
+export interface SerialSessionLauncherOptions {
+  /** Internal test hook for exercising the detached-host handshake. */
+  readonly hostEntry?: string;
+  readonly readyTimeoutMs?: number;
+  /** The detached host must receive the same runtime-root environment. */
+  readonly environment?: NodeJS.ProcessEnv;
+}
+
 /** Starts a detached host and returns only after its public ready state exists. */
 export class SerialSessionLauncher implements ManagedSessionStarter {
   readonly sessions: ManagedSessionManager;
 
-  constructor(private readonly paths: PathService) {
+  constructor(
+    private readonly paths: PathService,
+    private readonly options: SerialSessionLauncherOptions = {},
+  ) {
     this.sessions = new ManagedSessionManager(paths);
   }
 
@@ -79,16 +90,21 @@ export class SerialSessionLauncher implements ManagedSessionStarter {
     await this.sessions.store.writeLaunch(record.id, launch);
     const child = spawn(
       process.execPath,
-      [...process.execArgv, hostEntry(), "--session-id", record.id],
+      [
+        ...process.execArgv,
+        this.options.hostEntry ?? hostEntry(),
+        "--session-id",
+        record.id,
+      ],
       {
         detached: true,
         stdio: "ignore",
         windowsHide: true,
-        env: process.env,
+        env: this.options.environment ?? process.env,
       },
     );
     child.unref();
-    const timeoutMs = 15_000;
+    const timeoutMs = this.options.readyTimeoutMs ?? 15_000;
     const deadline = Date.now() + timeoutMs;
     for (;;) {
       const current = await this.sessions.get(record.id);

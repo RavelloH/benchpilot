@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFile, spawn } from "node:child_process";
+import { PassThrough } from "node:stream";
 import {
   mkdir,
   mkdtemp,
@@ -14,6 +15,8 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { SerialPortMock } from "serialport";
 import { SerialPortSessionTransport } from "../dist/infrastructure/serialport-session-transport.js";
+import { SerialSessionLauncher } from "../dist/infrastructure/serial-session-launcher.js";
+import { attachSerialSessionConsole } from "../dist/infrastructure/serial-session-console.js";
 import {
   AdapterRegistry,
   acquireFileGuard,
@@ -466,6 +469,233 @@ test("serial session transport uses the native binding contract", async () => {
     await new Promise((resolve) => setTimeout(resolve, 5));
   assert.deepEqual(received, [Buffer.from("ping\n")]);
   await transport.close();
+});
+
+test("detached serial session launcher waits for a host-owned ready record", async () => {
+  const root = await mkdtemp(
+    path.join(os.tmpdir(), "benchpilot-session-launcher-"),
+  );
+  try {
+    const environment = {
+      ...process.env,
+      TEMP: path.join(root, "runtime"),
+      TMP: path.join(root, "runtime"),
+    };
+    const paths = new PathService(
+      environment,
+      process.platform,
+      path.join(root, "home"),
+      path.join(root, "temp"),
+    );
+    const launcher = new SerialSessionLauncher(paths, {
+      hostEntry: path.resolve("test/fixtures/managed-session-host.mjs"),
+      readyTimeoutMs: 5_000,
+      environment,
+    });
+    const record = await launcher.start({
+      projectRoot: root,
+      command: "device.run",
+      capabilityId: "run",
+      identity: {
+        adapter: "fixture",
+        instance: "board-a",
+        physicalId: "COM8",
+      },
+      lockId: "fixture-launcher-lock",
+      plan: {
+        capabilityId: "run",
+        kind: "start",
+        sessionId: "monitor",
+        port: "COM8",
+        baud: 115200,
+        encoding: "utf8",
+        lineFraming: "line",
+        openLinePolicy: { dtr: "preserve", rts: "preserve" },
+        logRecordLimit: 100,
+        spoolLimitBytes: 1024 * 1024,
+        rawCaptureLimitBytes: 1024 * 1024,
+        writeLimitBytes: 1024,
+        protocols: [],
+      },
+      overrides: {},
+      runContext: {},
+    });
+    assert.equal(record.state, "running");
+    assert.ok(record.runId);
+    assert.ok(record.controlEndpoint);
+    assert.equal(
+      (await new LockManager(paths).inspect(record.lockId)).session,
+      record.id,
+    );
+    const stopped = await launcher.stop({
+      identity: record.identity,
+      sessionId: record.id,
+    });
+    assert.equal(stopped?.state, "stopped");
+    assert.equal((await new LockManager(paths).list()).length, 0);
+    assert.equal(
+      (await new RunManager(paths, root).get(record.runId)).manifest.status,
+      "succeeded",
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true, maxRetries: 5 });
+  }
+});
+
+test("detached serial session launcher reports a failed host without retaining a lock", async () => {
+  const root = await mkdtemp(
+    path.join(os.tmpdir(), "benchpilot-session-launcher-failure-"),
+  );
+  try {
+    const environment = {
+      ...process.env,
+      TEMP: path.join(root, "runtime"),
+      TMP: path.join(root, "runtime"),
+      BENCHPILOT_TEST_SESSION_HOST_FAIL: "1",
+    };
+    const paths = new PathService(
+      environment,
+      process.platform,
+      path.join(root, "home"),
+      path.join(root, "temp"),
+    );
+    const launcher = new SerialSessionLauncher(paths, {
+      hostEntry: path.resolve("test/fixtures/managed-session-host.mjs"),
+      readyTimeoutMs: 5_000,
+      environment,
+    });
+    await assert.rejects(
+      launcher.start({
+        projectRoot: root,
+        command: "device.run",
+        capabilityId: "run",
+        identity: {
+          adapter: "fixture",
+          instance: "board-a",
+          physicalId: "COM8",
+        },
+        lockId: "fixture-launcher-failure-lock",
+        plan: {
+          capabilityId: "run",
+          kind: "start",
+          sessionId: "monitor",
+          port: "COM8",
+          baud: 115200,
+          encoding: "utf8",
+          lineFraming: "line",
+          openLinePolicy: { dtr: "preserve", rts: "preserve" },
+          logRecordLimit: 100,
+          spoolLimitBytes: 1024 * 1024,
+          rawCaptureLimitBytes: 1024 * 1024,
+          writeLimitBytes: 1024,
+          protocols: [],
+        },
+        overrides: {},
+        runContext: {},
+      }),
+      (error) =>
+        error instanceof BenchPilotError &&
+        error.kind === "MANAGED_SESSION_HOST_FAILED",
+    );
+    const records = await launcher.sessions.list();
+    assert.equal(records.length, 1);
+    assert.equal(records[0].state, "failed");
+    assert.equal(records[0].failure.kind, "MANAGED_SESSION_HOST_FAILED");
+    assert.equal((await new LockManager(paths).list()).length, 0);
+  } finally {
+    await rm(root, { recursive: true, force: true, maxRetries: 5 });
+  }
+});
+
+test("managed session follow cancellation only detaches its reader", async () => {
+  const launcher = Object.create(SerialSessionLauncher.prototype);
+  let reads = 0;
+  let stopped = false;
+  launcher.logs = async () => {
+    reads += 1;
+    return {
+      cursor: `1:${reads}`,
+      records:
+        reads === 1
+          ? [
+              {
+                generation: 1,
+                sequence: 1,
+                timestamp: new Date().toISOString(),
+                stream: "serial",
+                encodingState: "utf8",
+                text: "booted",
+              },
+            ]
+          : [],
+    };
+  };
+  launcher.stop = async () => {
+    stopped = true;
+  };
+  const controller = new AbortController();
+  const iterator = launcher.follow({
+    identity: { adapter: "fixture", instance: "board-a", physicalId: "COM8" },
+    signal: controller.signal,
+  });
+  const first = await iterator.next();
+  assert.equal(first.value.text, "booted");
+  controller.abort();
+  const detached = await iterator.next();
+  assert.equal(detached.done, true);
+  assert.equal(stopped, false);
+  assert.equal(reads, 1);
+});
+
+test("managed session console cancellation releases its writer without stopping", async () => {
+  const stdin = new PassThrough();
+  const stdout = new PassThrough();
+  const controller = new AbortController();
+  let releases = 0;
+  let stops = 0;
+  const launcher = {
+    async find() {
+      return {
+        id: "session-fixture",
+        state: "running",
+        identity: {
+          adapter: "fixture",
+          instance: "board-a",
+          physicalId: "COM8",
+        },
+      };
+    },
+    async acquireWriterLease() {
+      return {
+        record: { id: "session-fixture", controlEndpoint: "fixture" },
+        controlToken: "control-token",
+        leaseId: "writer-lease",
+      };
+    },
+    async logs() {
+      return { records: [], cursor: "1:0" };
+    },
+    async renewWriterLease() {},
+    async writeWithLease() {
+      return 0;
+    },
+    async releaseWriterLease() {
+      releases += 1;
+    },
+    async stop() {
+      stops += 1;
+    },
+  };
+  const attached = attachSerialSessionConsole(launcher, {
+    identity: { adapter: "fixture", instance: "board-a", physicalId: "COM8" },
+    stdin,
+    stdout,
+    signal: controller.signal,
+  });
+  setTimeout(() => controller.abort(), 25);
+  await attached;
+  assert.equal(releases, 1);
+  assert.equal(stops, 0);
 });
 
 test("session reconciliation only recovers a proven stale host", async () => {
@@ -1480,6 +1710,120 @@ test("managed session start bypasses the short operation Run lifecycle", async (
       runId: "run-fixture",
       startedAt: result.output.startedAt,
     });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("managed session console stays inside the capability runner", async () => {
+  const root = await mkdtemp(
+    path.join(os.tmpdir(), "benchpilot-session-console-runner-"),
+  );
+  try {
+    const paths = new PathService(
+      { TEMP: path.join(root, "runtime") },
+      "win32",
+    );
+    const registry = new AdapterRegistry();
+    let capabilityExecuted = false;
+    registry.register({
+      id: "session-console-runtime",
+      apiVersion: 1,
+      version: "1",
+      summary: "session console runtime test",
+      configSchema: objectSchema(),
+      discover: async () => [],
+      doctor: async () => [],
+      createDevice: async (instance) => ({
+        identity: {
+          instance,
+          physicalId: "session-console-device",
+          adapter: "session-console-runtime",
+        },
+        capabilities: () => [
+          {
+            id: "console",
+            summary: "console",
+            defaultTimeoutMs: 1_000,
+            lockMode: "none",
+            createsRun: false,
+            ttyOnly: true,
+            safety: { mode: "caution", flag: "dangerously-console" },
+            execute: async () => {
+              capabilityExecuted = true;
+              return {};
+            },
+          },
+        ],
+        resolveManagedSession: () => ({
+          capabilityId: "console",
+          kind: "console",
+          sessionId: "monitor",
+          port: "COM8",
+          baud: 115200,
+          encoding: "utf8",
+          lineFraming: "line",
+          openLinePolicy: { dtr: "preserve", rts: "preserve" },
+          logRecordLimit: 100,
+          spoolLimitBytes: 1024 * 1024,
+          rawCaptureLimitBytes: 1024 * 1024,
+          writeLimitBytes: 1024,
+          protocols: [],
+        }),
+      }),
+    });
+    let attachment;
+    const result = await new OperationRunner({
+      businessLogs: recordingBusinessLogs,
+      paths,
+      registry,
+      project: { root, config: path.join(root, "benchpilot.toml") },
+      config: {
+        value: {
+          devices: { device: { adapter: "session-console-runtime" } },
+        },
+        origins: new Map(),
+        layers: [],
+      },
+      managedSessions: {},
+    }).execute(
+      "device",
+      "console",
+      { session_id: "session-existing" },
+      {
+        safetyConfirmed: true,
+        executionMode: "interactive",
+        attachManagedSessionConsole: async (value) => {
+          attachment = value;
+        },
+      },
+    );
+    assert.equal(capabilityExecuted, false);
+    assert.deepEqual(attachment, {
+      identity: {
+        adapter: "session-console-runtime",
+        instance: "device",
+        physicalId: "session-console-device",
+      },
+      plan: {
+        capabilityId: "console",
+        kind: "console",
+        sessionId: "monitor",
+        port: "COM8",
+        baud: 115200,
+        encoding: "utf8",
+        lineFraming: "line",
+        openLinePolicy: { dtr: "preserve", rts: "preserve" },
+        logRecordLimit: 100,
+        spoolLimitBytes: 1024 * 1024,
+        rawCaptureLimitBytes: 1024 * 1024,
+        writeLimitBytes: 1024,
+        protocols: [],
+      },
+      sessionId: "session-existing",
+    });
+    assert.deepEqual(result.output, {});
+    assert.equal((await new LockManager(paths).list()).length, 0);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

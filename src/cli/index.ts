@@ -1593,17 +1593,7 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
         stdin.isTTY &&
         stdout.isTTY
           ? {
-              console: async ({ device, capability, sessionId }) => {
-                const session = await devices.managedSession(
-                  device,
-                  capability,
-                );
-                if (session.plan.kind !== "console")
-                  fail(
-                    "UNSUPPORTED_CAPABILITY",
-                    3,
-                    `Device ${device} does not support interactive console.`,
-                  );
+              console: async ({ identity, sessionId }) => {
                 const controller = new AbortController();
                 const onSigint = () => controller.abort();
                 const wasRaw = stdin.isRaw === true;
@@ -1611,7 +1601,7 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
                 stdin.setRawMode?.(true);
                 try {
                   await attachSerialSessionConsole(scope.managedSessions, {
-                    identity: session.identity,
+                    identity,
                     ...(sessionId ? { sessionId } : {}),
                     stdin,
                     stdout,

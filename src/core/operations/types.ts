@@ -16,7 +16,11 @@ import type {
   OperationLogger,
 } from "../reporting/business-log.js";
 import type { OperationOutcome } from "./operation-outcome.js";
-import type { ManagedSessionStarter } from "../sessions/types.js";
+import type {
+  ManagedSessionIdentity,
+  ManagedSessionStarter,
+} from "../sessions/types.js";
+import type { ManagedSessionPlan } from "../capabilities/types.js";
 
 export interface OperationContext {
   signal: AbortSignal;
@@ -78,6 +82,15 @@ export interface OperationExecutionOptions {
   safetyConfirmed?: boolean;
   /** The CLI completed human safety and approval confirmation before execution. */
   executionMode?: "interactive";
+  /**
+   * Terminal adapters provide this only for a declared TTY-only managed-session
+   * capability. The Core still owns capability validation and safety policy.
+   */
+  attachManagedSessionConsole?(input: {
+    identity: ManagedSessionIdentity;
+    plan: ManagedSessionPlan;
+    sessionId?: string;
+  }): Promise<void>;
   /** Receives locale-neutral lifecycle facts after cleanup and Run finalization. */
   onOutcome?(outcome: OperationOutcome): void;
 }

@@ -718,22 +718,38 @@ export const validateSemantics = async (
         }
       continue;
     }
-    for (const [index, rawField] of (Array.isArray(view.fields)
-      ? view.fields
-      : []
-    ).entries()) {
+    const fields = Array.isArray(view.columns)
+      ? view.columns
+      : Array.isArray(view.fields)
+        ? view.fields
+        : [];
+    const selectorRoot =
+      view.kind === "records"
+        ? obj(schemaAtSelector(outputSchema, String(view.source ?? ""))?.items)
+        : outputSchema;
+    if (view.kind === "records" && !Object.keys(selectorRoot).length)
+      errors.push(
+        diagnostic(
+          "ADAPTER_VIEW_SELECTOR_INVALID",
+          "views.toml",
+          `Record source does not resolve to an array schema in ${String(capability.output_schema)}: ${String(view.source)}`,
+          `capabilities.${capabilityId}.source`,
+          adapter.id,
+        ),
+      );
+    for (const [index, rawField] of fields.entries()) {
       const field = obj(rawField);
       const label = obj(field.label);
       if (typeof label.key === "string") presentationMessageKeys.add(label.key);
       const selector = String(field.selector ?? "");
-      const selected = schemaAtSelector(outputSchema, selector);
+      const selected = schemaAtSelector(selectorRoot, selector);
       if (!selected)
         errors.push(
           diagnostic(
             "ADAPTER_VIEW_SELECTOR_INVALID",
             "views.toml",
             `View selector does not exist in ${String(capability.output_schema)}: ${selector}`,
-            `capabilities.${capabilityId}.fields.${index}.selector`,
+            `capabilities.${capabilityId}.${view.kind === "records" ? "columns" : "fields"}.${index}.selector`,
             adapter.id,
           ),
         );
@@ -743,7 +759,7 @@ export const validateSemantics = async (
             "ADAPTER_VIEW_SECRET_SELECTOR",
             "views.toml",
             `View selector may not expose a secret: ${selector}`,
-            `capabilities.${capabilityId}.fields.${index}.selector`,
+            `capabilities.${capabilityId}.${view.kind === "records" ? "columns" : "fields"}.${index}.selector`,
             adapter.id,
           ),
         );

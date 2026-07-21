@@ -146,6 +146,9 @@ status = "状态"
 run = "运行记录"
 bytes = "已写入"
 framing = "分帧方式"
+timestamp = "时间"
+sequence = "序号"
+text = "输出"
 
 [view.status]
 title = "设备就绪状态"

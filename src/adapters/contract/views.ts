@@ -41,6 +41,15 @@ export interface AdapterKeyValueTableView {
   readonly keys: Readonly<Record<string, AdapterViewMessage>>;
 }
 
+/** A bounded array projected through the shared terminal Table component. */
+export interface AdapterRecordsTableView {
+  readonly kind: "records";
+  readonly title: AdapterViewMessage;
+  readonly empty?: AdapterViewMessage;
+  readonly source: string;
+  readonly columns: readonly AdapterDetailViewField[];
+}
+
 export interface AdapterCompletionView {
   readonly kind: "completion";
   readonly message: AdapterViewMessage;
@@ -50,6 +59,7 @@ export type AdapterCapabilityView =
   | AdapterDetailView
   | AdapterTreeView
   | AdapterKeyValueTableView
+  | AdapterRecordsTableView
   | AdapterCompletionView;
 
 export type AdapterCapabilityViews = Readonly<

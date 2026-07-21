@@ -83,29 +83,58 @@ const adapterViewDefinition = (
               },
             ],
           }
-        : {
-            id: `adapter.${capability}`,
-            blocks: [
-              {
-                component: "KeyValueTable",
-                source: "output",
-                title: messageRef(
-                  view.title.key,
-                  undefined,
-                  view.title.fallback,
-                ),
-                empty: view.empty
-                  ? messageRef(view.empty.key, undefined, view.empty.fallback)
-                  : messageRef("capabilityResult.output.empty"),
-                keyLabels: Object.fromEntries(
-                  Object.entries(view.keys).map(([key, label]) => [
-                    key,
-                    messageRef(label.key, undefined, label.fallback),
-                  ]),
-                ),
-              },
-            ],
-          };
+        : view.kind === "records"
+          ? {
+              id: `adapter.${capability}`,
+              blocks: [
+                {
+                  component: "Table",
+                  source: `output.${view.source}`,
+                  title: messageRef(
+                    view.title.key,
+                    undefined,
+                    view.title.fallback,
+                  ),
+                  empty: view.empty
+                    ? messageRef(view.empty.key, undefined, view.empty.fallback)
+                    : messageRef("capabilityResult.output.empty"),
+                  header: true,
+                  columns: view.columns.map((column) => ({
+                    field: column.selector,
+                    header: messageRef(
+                      column.label.key,
+                      undefined,
+                      column.label.fallback,
+                    ),
+                    formatter: column.formatter,
+                    width: { kind: "content", min: 4, gap: 2 },
+                  })),
+                },
+              ],
+            }
+          : {
+              id: `adapter.${capability}`,
+              blocks: [
+                {
+                  component: "KeyValueTable",
+                  source: "output",
+                  title: messageRef(
+                    view.title.key,
+                    undefined,
+                    view.title.fallback,
+                  ),
+                  empty: view.empty
+                    ? messageRef(view.empty.key, undefined, view.empty.fallback)
+                    : messageRef("capabilityResult.output.empty"),
+                  keyLabels: Object.fromEntries(
+                    Object.entries(view.keys).map(([key, label]) => [
+                      key,
+                      messageRef(label.key, undefined, label.fallback),
+                    ]),
+                  ),
+                },
+              ],
+            };
 
 const deviceViewWithAdapterOutput = (
   capability: string,

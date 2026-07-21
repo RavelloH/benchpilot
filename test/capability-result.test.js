@@ -241,6 +241,79 @@ test("adapter key-value tables retain raw paths beside translated names", () => 
   assert.match(output.join(""), /chip\.revision\s+修订版本\s+0\.2/);
 });
 
+test("adapter record tables render bounded session logs without changing data", () => {
+  const result = capabilityResultFromOperation({
+    command: { id: "device.execute", path: ["device", "demo", "logs"] },
+    outcome: {
+      ...outcome,
+      subject: { ...outcome.subject, capability: "logs" },
+      output: {
+        records: [
+          {
+            sequence: 7,
+            timestamp: "2026-07-22T00:00:00.000Z",
+            text: "boot complete",
+          },
+        ],
+      },
+    },
+  });
+  const output = [];
+  renderCapabilityResult({
+    result,
+    flags: {},
+    output: { write: (value) => output.push(value) },
+    locale: "zh-CN",
+    color: false,
+    columns: 120,
+    adapterId: "fixture",
+    translate: (_locale, key) =>
+      ({
+        "view.logs.title": "串口会话日志",
+        "view.logs.time": "时间",
+        "view.logs.sequence": "序号",
+        "view.logs.output": "输出",
+      })[key],
+    view: {
+      kind: "records",
+      title: { key: "view.logs.title", fallback: "Serial logs" },
+      source: "records",
+      columns: [
+        {
+          selector: "timestamp",
+          label: { key: "view.logs.time", fallback: "Time" },
+          formatter: "string",
+        },
+        {
+          selector: "sequence",
+          label: { key: "view.logs.sequence", fallback: "#" },
+          formatter: "string",
+        },
+        {
+          selector: "text",
+          label: { key: "view.logs.output", fallback: "Output" },
+          formatter: "fallback-dash",
+        },
+      ],
+    },
+  });
+  assert.match(output.join(""), /串口会话日志/);
+  assert.match(output.join(""), /时间\s+序号\s+输出/);
+  assert.match(
+    output.join(""),
+    /2026-07-22T00:00:00\.000Z\s+7\s+boot complete/,
+  );
+  assert.deepEqual(result.data.output, {
+    records: [
+      {
+        sequence: 7,
+        timestamp: "2026-07-22T00:00:00.000Z",
+        text: "boot complete",
+      },
+    ],
+  });
+});
+
 test("adapter completion views hide workflow internals only after success", () => {
   const result = capabilityResultFromOperation({
     command: { id: "device.execute", path: ["device", "demo", "reset"] },

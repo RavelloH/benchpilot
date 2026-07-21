@@ -204,6 +204,9 @@ status = "Status"
 run = "Run"
 bytes = "Written"
 framing = "Framing"
+timestamp = "Time"
+sequence = "#"
+text = "Output"
 
 [progress.info]
 detect = "Detect esptool"
