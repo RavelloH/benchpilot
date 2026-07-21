@@ -498,6 +498,18 @@ export const coreErrorCatalog = {
     "error.reason.sessionControlUnavailable",
     true,
   ),
+  MANAGED_SESSION_READY_TIMEOUT: defineError(
+    4,
+    "error.operation",
+    "error.reason.managedSessionReadyTimeout",
+    true,
+  ),
+  MANAGED_SESSION_STOP_TIMEOUT: defineError(
+    4,
+    "error.operation",
+    "error.reason.managedSessionStopTimeout",
+    true,
+  ),
   SESSION_CONTROL_SESSION_MISMATCH: defineError(
     4,
     "error.operation",
@@ -577,6 +589,11 @@ export const coreErrorCatalog = {
     5,
     "error.internal",
     "error.reason.sessionControlProtocol",
+  ),
+  SESSION_CONTROL_FAILED: defineError(
+    5,
+    "error.operation",
+    "error.reason.sessionControlFailed",
   ),
   MANAGED_SESSION_HOST_ABORTED: defineError(
     6,

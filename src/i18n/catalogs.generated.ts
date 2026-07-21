@@ -398,6 +398,8 @@ export const catalogs = {
       "The managed session has not started yet.",
     "error.reason.managedSessionRawCaptureLimit":
       "The managed session raw capture limit was exceeded.",
+    "error.reason.managedSessionReadyTimeout":
+      "The managed session host did not become ready in time.",
     "error.reason.managedSessionRevisionConflict":
       "The managed session changed before the requested update completed.",
     "error.reason.managedSessionRunUnavailable":
@@ -408,6 +410,8 @@ export const catalogs = {
       "The managed session could not be started.",
     "error.reason.managedSessionStateInvalid":
       "The requested managed session state transition is invalid.",
+    "error.reason.managedSessionStopTimeout":
+      "The managed session did not stop in time.",
     "error.reason.managedSessionTerminal":
       "The managed session has already ended.",
     "error.reason.managedSessionTransportClosed":
@@ -428,6 +432,8 @@ export const catalogs = {
       "A BenchPilot project is required for project state commands.",
     "error.reason.quarantineFailed":
       "The physical resource could not be safely quarantined.",
+    "error.reason.sessionControlFailed":
+      "The managed session control request failed.",
     "error.reason.sessionControlProtocol":
       "The managed session control protocol returned an invalid response.",
     "error.reason.sessionControlSessionMismatch":
@@ -1090,12 +1096,15 @@ export const catalogs = {
     "error.reason.managedSessionNotStarted": "受管会话尚未启动。",
     "error.reason.managedSessionRawCaptureLimit":
       "受管会话原始捕捉已超过容量限制。",
+    "error.reason.managedSessionReadyTimeout":
+      "受管会话宿主未能在规定时间内就绪。",
     "error.reason.managedSessionRevisionConflict":
       "受管会话在请求更新完成前已发生变化。",
     "error.reason.managedSessionRunUnavailable": "受管会话尚未创建操作记录。",
     "error.reason.managedSessionRuntimeUnavailable": "受管会话运行时不可用。",
     "error.reason.managedSessionStartFailed": "无法启动受管会话。",
     "error.reason.managedSessionStateInvalid": "请求的受管会话状态转换无效。",
+    "error.reason.managedSessionStopTimeout": "受管会话未能在规定时间内停止。",
     "error.reason.managedSessionTerminal": "受管会话已经结束。",
     "error.reason.managedSessionTransportClosed": "受管会话串口传输意外关闭。",
     "error.reason.managedSessionWriteInvalid": "受管会话写入内容无效。",
@@ -1109,6 +1118,7 @@ export const catalogs = {
     "error.reason.projectNotFound":
       "项目状态命令需要在 BenchPilot 项目中执行。",
     "error.reason.quarantineFailed": "无法安全隔离该物理资源。",
+    "error.reason.sessionControlFailed": "受管会话控制请求失败。",
     "error.reason.sessionControlProtocol": "受管会话控制协议返回了无效响应。",
     "error.reason.sessionControlSessionMismatch":
       "控制请求的目标不是当前受管会话。",
