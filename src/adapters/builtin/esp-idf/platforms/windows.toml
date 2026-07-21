@@ -30,12 +30,12 @@ candidates = [
 
 [overrides.environments.idf]
 providers = [
-  { id = "active", type = "active", priority = 100, required_variables = ["IDF_PATH", "IDF_PYTHON_ENV_PATH"] },
-  { id = "configured-export", type = "capture-script", priority = 90, script = "${config.export_script}", shell = "powershell" },
-  { id = "configured-export-bat", type = "capture-script", priority = 80, script = "${config.export_bat_script}", shell = "cmd" },
-  { id = "idf-export-ps1", type = "capture-script", priority = 70, script = "${config.idf_path}/export.ps1", shell = "powershell" },
-  { id = "idf-export-bat", type = "capture-script", priority = 60, script = "${config.idf_path}/export.bat", shell = "cmd" },
-  { id = "env-idf-export-ps1", type = "capture-script", priority = 50, script = "${env.IDF_PATH}/export.ps1", shell = "powershell" },
-  { id = "env-idf-export-bat", type = "capture-script", priority = 40, script = "${env.IDF_PATH}/export.bat", shell = "cmd" },
-  { id = "registered-idf-export-bat", type = "capture-script", priority = 30, script = "${discovery.idf.root}/export.bat", shell = "cmd" }
+  { id = "configured-export", type = "capture-script", priority = 100, script = "${config.export_script}", shell = "powershell" },
+  { id = "configured-export-bat", type = "capture-script", priority = 95, script = "${config.export_bat_script}", shell = "cmd" },
+  { id = "idf-export-ps1", type = "capture-script", priority = 90, script = "${config.idf_path}/export.ps1", shell = "powershell" },
+  { id = "idf-export-bat", type = "capture-script", priority = 85, script = "${config.idf_path}/export.bat", shell = "cmd" },
+  { id = "active", type = "active", priority = 80, required_variables = ["IDF_PATH", "IDF_PYTHON_ENV_PATH"] },
+  { id = "env-idf-export-ps1", type = "capture-script", priority = 70, script = "${env.IDF_PATH}/export.ps1", shell = "powershell" },
+  { id = "env-idf-export-bat", type = "capture-script", priority = 60, script = "${env.IDF_PATH}/export.bat", shell = "cmd" },
+  { id = "registered-idf-export-bat", type = "capture-script", priority = 50, script = "${discovery.idf.root}/export.bat", shell = "cmd" }
 ]

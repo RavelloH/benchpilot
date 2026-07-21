@@ -17,6 +17,7 @@ type AdapterMessageResolver = (
   adapterId: string,
   key: string,
   fallback: string,
+  values: Readonly<Record<string, string | number | boolean>>,
 ) => string;
 
 type WorkflowStepStatus =
@@ -248,12 +249,22 @@ export class ScreenOperationReporter implements OperationReporter {
     const key = typeof message.key === "string" ? message.key : undefined;
     const defaultText =
       typeof message.fallback === "string" ? message.fallback : fallback;
+    const variables = Object.fromEntries(
+      Object.entries(object(message.values)).flatMap(([name, value]) =>
+        typeof value === "string" ||
+        typeof value === "number" ||
+        typeof value === "boolean"
+          ? [[name, value]]
+          : [],
+      ),
+    );
     const adapter =
       typeof this.context.adapter === "string"
         ? this.context.adapter
         : undefined;
     return key && adapter
-      ? (this.state.messageResolver?.(adapter, key, defaultText) ?? defaultText)
+      ? (this.state.messageResolver?.(adapter, key, defaultText, variables) ??
+          defaultText)
       : defaultText;
   }
 
@@ -285,7 +296,14 @@ export class ScreenOperationReporter implements OperationReporter {
       state,
     );
     const eventPrefix = cycleParent ? `${cycleParent}:progress:` : prefix;
-    const key = `${eventPrefix}${type}`;
+    const instance =
+      typeof values.instance === "string" ? `:instance:${values.instance}` : "";
+    const key = `${eventPrefix}${type}${instance}`;
+    const parentEvent =
+      typeof values.parentEvent === "string" ? values.parentEvent : undefined;
+    const nestedParentKey = parentEvent
+      ? `${eventPrefix}${parentEvent}`
+      : undefined;
     const current = this.state.steps.get(key);
     if (
       (!reentrant && current?.status === "completed" && state === "running") ||
@@ -295,18 +313,22 @@ export class ScreenOperationReporter implements OperationReporter {
         progressTotal < current.progressTotal)
     )
       return;
-    for (const step of this.state.steps.values())
-      if (
-        step.key.startsWith(eventPrefix) &&
-        step.key !== key &&
-        step.status === "running"
-      )
-        step.status = "completed";
+    // Re-entrant adapter events are concurrent detail for the active phase
+    // (for example, a tool count and the current download).  Keep them both
+    // visible; a non-re-entrant phase transition closes the prior detail.
+    if (!reentrant || values.transition === true)
+      for (const step of this.state.steps.values())
+        if (
+          step.key.startsWith(eventPrefix) &&
+          step.key !== key &&
+          step.status === "running"
+        )
+          step.status = "completed";
     this.state.steps.set(key, {
       key,
       label: this.adapterProgressLabel(values, type),
-      ...(cycleParent || parentKey
-        ? { parentKey: cycleParent ?? parentKey }
+      ...(nestedParentKey || cycleParent || parentKey
+        ? { parentKey: nestedParentKey ?? cycleParent ?? parentKey }
         : {}),
       ...(progressTotal !== undefined
         ? { progressTotal }
@@ -398,6 +420,8 @@ export class ScreenOperationReporter implements OperationReporter {
       typeof values.total === "number"
     )
       return `${label} (${values.percent.toLocaleString(undefined, { maximumFractionDigits: 1 })}%, ${this.compactBytes(values.current)}/${this.compactBytes(values.total)})`;
+    if (typeof values.percent === "number")
+      return `${label} (${values.percent.toLocaleString(undefined, { maximumFractionDigits: 1 })}%)`;
     if (typeof values.current === "number" && typeof values.total === "number")
       return `${label} (${values.current}/${values.total})`;
     if (typeof values.address === "string")

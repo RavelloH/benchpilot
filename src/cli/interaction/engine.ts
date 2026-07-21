@@ -18,6 +18,7 @@ export interface InteractionChoices {
   readonly multiple?: boolean;
   readonly prompt?: string;
   readonly serialize?: "json";
+  readonly separator?: string;
 }
 
 export type InteractionChoiceProvider = (
@@ -111,7 +112,12 @@ export class InteractionEngine {
             await this.providers[step.choices]?.({ parsed, field, values }),
           )
         : field.enum?.length
-          ? { choices: field.enum.map((value) => ({ value })) }
+          ? {
+              choices: field.enum.map((value) => ({ value })),
+              ...(field.separator
+                ? { multiple: true, separator: field.separator }
+                : {}),
+            }
           : undefined;
       let value: unknown;
       if (choiceSet?.multiple) {
@@ -122,7 +128,11 @@ export class InteractionEngine {
             )
           : [];
         value =
-          choiceSet.serialize === "json" ? JSON.stringify(selected) : selected;
+          choiceSet.serialize === "json"
+            ? JSON.stringify(selected)
+            : choiceSet.separator
+              ? selected.join(choiceSet.separator)
+              : selected;
       } else if (choiceSet?.choices.length)
         value = await this.session.choose(choiceSet.choices, {
           commandPath: path,

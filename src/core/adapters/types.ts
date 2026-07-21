@@ -30,6 +30,8 @@ export interface AdapterInstallationField {
   summary: string;
   required: boolean;
   choices?: readonly { value: string; label: string }[];
+  /** A single option may contain multiple selected values separated by this character. */
+  separator?: ",";
 }
 
 export interface AdapterInstallationEstimate {
@@ -81,6 +83,8 @@ export interface Adapter {
     context: AdapterContext,
   ): Promise<AdapterConfigurationDiscovery>;
   configurationFields?(): readonly AdapterConfigurationField[];
+  /** Allows an Adapter to distinguish a missing installation from a partial configuration. */
+  configurationNotFound?(discovery: AdapterConfigurationDiscovery): boolean;
   installation?(): AdapterInstallation | undefined;
   doctor(context: AdapterContext): Promise<Json[]>;
   translate?(

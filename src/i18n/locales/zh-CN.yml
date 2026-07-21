@@ -126,7 +126,7 @@ field:
   scopeGlobal: "使用全局配置"
   adapterId: "适配器标识符"
   adapterConfigPath: "{key} 的路径"
-  adapterInstallRoot: "安装根目录（留空使用 BenchPilot 的全局托管位置）"
+  adapterInstallRoot: "安装位置目录（留空使用 BenchPilot 的全局托管位置）"
   adapterInstallValue: "{key} 的安装值"
   identity: "稳定设备标识"
   deviceName: "配置后的设备名称"
@@ -276,9 +276,9 @@ adapterResult:
     title: "适配器配置已保存"
   installation:
     title: "适配器安装"
-    root: "安装根目录"
+    root: "安装位置目录"
     stability: "平台支持"
-    estimate: "安装前预计磁盘占用：{minimum}–{maximum}。"
+    estimate: "预计磁盘占用：{minimum}–{maximum}"
 resourceResult:
   devices:
     title: "已配置设备"
@@ -624,6 +624,7 @@ error:
     adapterNotFound: "找不到指定适配器。"
     adapterConfigurationDiscoveryUnavailable: "该适配器无法自动发现其配置。"
     adapterConfigurationIncomplete: "一个或多个必需的适配器工具无法解析。"
+    adapterConfigurationNotFound: "未找到已有的适配器安装。可使用 `benchpilot adapter {adapter} configure` 指定已有安装，或使用 `benchpilot adapter {adapter} install` 自动安装。"
     adapterInstallationUnavailable: "该适配器不提供当前平台上的安装功能。"
     adapterInstallationFailed: "适配器安装未成功完成。"
     operationTimeout: "操作执行超时。"

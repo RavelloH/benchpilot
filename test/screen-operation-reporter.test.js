@@ -435,3 +435,201 @@ test("screen operation reporter waits for its presentation configuration", () =>
   assert.match(updates[0].value, /Preparing/);
   reporter.complete();
 });
+
+test("screen operation reporter retains distinct adapter installation phases", () => {
+  const updates = [];
+  const reporter = new ScreenOperationReporter(
+    {
+      write() {},
+      append() {},
+      update(_key, value) {
+        updates.push(value);
+      },
+      remove() {},
+      close() {},
+    },
+    labels,
+    undefined,
+    undefined,
+    coloredTheme,
+  );
+  reporter.configure(labels, (_adapter, key, fallback) =>
+    key === "install.eim" ? "获取 EIM" : fallback,
+  );
+  const installation = reporter.child({ adapter: "esp-idf" });
+  installation.emit("adapter.install.phase.install.eim", {
+    state: "completed",
+    label: { key: "install.eim", fallback: "Retrieving EIM" },
+  });
+  installation.emit("adapter.install.phase.install.framework", {
+    state: "running",
+    label: { key: "install.framework", fallback: "Installing ESP-IDF" },
+  });
+  assert.equal(
+    updates.at(-1),
+    [
+      "<accent>⣾</accent> <muted>Preparing</muted>",
+      "  <success>✓</success> <muted>获取 EIM</muted>",
+      "  <accent>⣾</accent> <muted>Installing ESP-IDF</muted>",
+    ].join("\n"),
+  );
+  reporter.complete();
+});
+
+test("screen operation reporter interpolates adapter progress message values", () => {
+  const updates = [];
+  const reporter = new ScreenOperationReporter(
+    {
+      write() {},
+      append() {},
+      update(_key, value) {
+        updates.push(value);
+      },
+      remove() {},
+      close() {},
+    },
+    labels,
+    undefined,
+    undefined,
+    coloredTheme,
+  );
+  reporter.configure(labels, (_adapter, key, fallback, values) =>
+    key === "install.download" ? `下载 ${values.tool}` : fallback,
+  );
+  reporter.child({ adapter: "esp-idf" }).emit("adapter.install.download", {
+    state: "running",
+    reentrant: true,
+    label: {
+      key: "install.download",
+      fallback: "Downloading ninja",
+      values: { tool: "ninja" },
+    },
+  });
+  assert.match(updates.at(-1), /下载 ninja/);
+  reporter.complete();
+});
+
+test("screen operation reporter retains concurrent reentrant adapter installation details", () => {
+  const updates = [];
+  const reporter = new ScreenOperationReporter(
+    {
+      write() {},
+      append() {},
+      update(_key, value) {
+        updates.push(value);
+      },
+      remove() {},
+      close() {},
+    },
+    labels,
+    undefined,
+    undefined,
+    coloredTheme,
+  );
+  reporter.configure(labels);
+  const installation = reporter.child({ adapter: "esp-idf" });
+  installation.emit("adapter.install.toolchain", {
+    state: "running",
+    reentrant: true,
+    current: 4,
+    total: 14,
+    label: { key: "install.tools", fallback: "Installing tools" },
+  });
+  installation.emit("adapter.install.download", {
+    state: "running",
+    reentrant: true,
+    parentEvent: "adapter.install.toolchain",
+    instance: "ninja",
+    current: 50 * 1024 ** 2,
+    total: 100 * 1024 ** 2,
+    percent: 50,
+    label: { key: "install.download", fallback: "Downloading ninja" },
+  });
+  assert.match(updates.at(-1), /  .*Installing tools \(4\/14\)/);
+  assert.match(
+    updates.at(-1),
+    /    .*Downloading ninja \(50%, 50 MiB\/100 MiB\)/,
+  );
+  reporter.complete();
+});
+
+test("screen operation reporter retains completed tool downloads under the toolchain", () => {
+  const updates = [];
+  const reporter = new ScreenOperationReporter(
+    {
+      write() {},
+      append() {},
+      update(_key, value) {
+        updates.push(value);
+      },
+      remove() {},
+      close() {},
+    },
+    labels,
+    undefined,
+    undefined,
+    coloredTheme,
+  );
+  reporter.configure(labels);
+  const installation = reporter.child({ adapter: "esp-idf" });
+  installation.emit("adapter.install.toolchain", {
+    state: "running",
+    reentrant: true,
+    current: 2,
+    total: 14,
+    label: { key: "install.tools", fallback: "Installing tools" },
+  });
+  installation.emit("adapter.install.download", {
+    state: "completed",
+    reentrant: true,
+    parentEvent: "adapter.install.toolchain",
+    instance: "ninja",
+    label: { key: "install.download", fallback: "Downloading ninja" },
+  });
+  installation.emit("adapter.install.download", {
+    state: "running",
+    reentrant: true,
+    parentEvent: "adapter.install.toolchain",
+    instance: "clang",
+    label: { key: "install.download", fallback: "Downloading clang" },
+  });
+  assert.match(updates.at(-1), /    .*✓.*Downloading ninja/);
+  assert.match(updates.at(-1), /    .*Downloading clang/);
+  reporter.complete();
+});
+
+test("screen operation reporter lets an installation detail replace the prior phase", () => {
+  const updates = [];
+  const reporter = new ScreenOperationReporter(
+    {
+      write() {},
+      append() {},
+      update(_key, value) {
+        updates.push(value);
+      },
+      remove() {},
+      close() {},
+    },
+    labels,
+    undefined,
+    undefined,
+    coloredTheme,
+  );
+  reporter.configure(labels);
+  const installation = reporter.child({ adapter: "esp-idf" });
+  installation.emit("adapter.install.phase.install.submodules", {
+    state: "running",
+    label: { key: "install.submodules", fallback: "Initializing submodules" },
+  });
+  installation.emit("adapter.install.toolchain", {
+    state: "running",
+    reentrant: true,
+    transition: true,
+    current: 0,
+    total: 14,
+    label: { key: "install.tools", fallback: "Installing tools" },
+  });
+  assert.match(updates.at(-1), /✓.*Initializing submodules/);
+  assert.match(updates.at(-1), /Installing tools \(0\/14\)/);
+  reporter.complete();
+});

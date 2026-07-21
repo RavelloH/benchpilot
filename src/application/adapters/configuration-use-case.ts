@@ -102,13 +102,24 @@ export class AdapterConfigurationUseCases {
       this.dependencies.config.value,
       this.dependencies.paths,
     );
-    if (!discovery.ready)
+    if (!discovery.ready) {
+      const required = discovery.tools.filter((tool) => tool.required);
+      const noRequiredToolWasFound =
+        required.length > 0 &&
+        required.every((tool) => tool.status === "unavailable");
+      const installationNotFound =
+        adapter.configurationNotFound?.(discovery) ?? noRequiredToolWasFound;
       fail(
-        "ADAPTER_CONFIGURATION_INCOMPLETE",
+        installationNotFound
+          ? "ADAPTER_CONFIGURATION_NOT_FOUND"
+          : "ADAPTER_CONFIGURATION_INCOMPLETE",
         3,
-        `Adapter ${adapterId} could not resolve every required tool.`,
-        { tools: discovery.tools },
+        installationNotFound
+          ? `No existing installation was found for adapter ${adapterId}. Run adapter configure to specify one or adapter install to create one.`
+          : `Adapter ${adapterId} could not resolve every required tool.`,
+        { adapter: adapterId, tools: discovery.tools },
       );
+    }
     return this.persist({
       adapterId,
       config: discovery.config,

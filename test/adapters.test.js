@@ -250,6 +250,22 @@ test("ESP-IDF supplies a declarative View for every enabled capability", async (
   ]);
 });
 
+test("ESP-IDF prioritizes persisted activation over an inherited active SDK", async () => {
+  const result = await compileAdapter(espIdf);
+  assert.deepEqual(result.diagnostics, []);
+  const providers = result.bundle.platforms.windows.environments.idf.providers;
+  assert.deepEqual(
+    providers.slice(0, 5).map((provider) => provider.id),
+    [
+      "configured-export",
+      "configured-export-bat",
+      "idf-export-ps1",
+      "idf-export-bat",
+      "active",
+    ],
+  );
+});
+
 test("capture-script providers allow a composed declared path template", async () => {
   const root = await mkdtemp(join(tmpdir(), "benchpilot-adapter-"));
   const adapterRoot = join(root, "complete");

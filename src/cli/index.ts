@@ -628,9 +628,19 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
         cleaning: t(locale, "operationProgress.cleaning"),
         completing: t(locale, "operationProgress.completing"),
       },
-      (adapterId, key, fallback) =>
-        application.registry.get(adapterId).translate?.(locale, key) ??
-        fallback,
+      (adapterId, key, fallback, values) =>
+        application.registry
+          .get(adapterId)
+          .translate?.(
+            locale,
+            key,
+            Object.fromEntries(
+              Object.entries(values).map(([name, value]) => [
+                name,
+                String(value),
+              ]),
+            ),
+          ) ?? fallback,
     );
     const canConfirmOperationInteractively =
       !flags.agent &&
@@ -1223,8 +1233,31 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
       !flags.help &&
       !operationOutputDeferred &&
       !interactionResolutionDeferred
-    )
+    ) {
+      if (
+        parts[0] === "adapter" &&
+        typeof parts[1] === "string" &&
+        parts[2] === "install" &&
+        !flags.json &&
+        !flags.jsonl &&
+        !flags.quiet
+      ) {
+        const installation = queries.adapterInstallation(parts[1]);
+        if (installation) {
+          const gigabytes = (bytes: number) =>
+            `${(bytes / 1_000_000_000).toLocaleString(locale, {
+              maximumFractionDigits: 1,
+            })} GB`;
+          terminalSurface.write(
+            `${t(locale, "adapterResult.installation.estimate", {
+              minimum: gigabytes(installation.estimate.minimumBytes),
+              maximum: gigabytes(installation.estimate.maximumBytes),
+            })}\n\n`,
+          );
+        }
+      }
       await completeDeclaredRecipe();
+    }
     if (
       !flags.help &&
       parts[0] === "device" &&
@@ -1383,28 +1416,6 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
       hasOutcomePage(definedCommand.intent.commandId) &&
       !deferredConfirmation
     ) {
-      if (
-        definedCommand.intent.commandId === "adapter.install" &&
-        !flags.json &&
-        !flags.jsonl &&
-        !flags.quiet
-      ) {
-        const installation = queries.adapterInstallation(
-          String(definedCommand.intent.input.adapter),
-        );
-        if (installation) {
-          const gigabytes = (bytes: number) =>
-            `${(bytes / 1_000_000_000).toLocaleString(locale, {
-              maximumFractionDigits: 1,
-            })} GB`;
-          terminalSurface.write(
-            `${t(locale, "adapterResult.installation.estimate", {
-              minimum: gigabytes(installation.estimate.minimumBytes),
-              maximum: gigabytes(installation.estimate.maximumBytes),
-            })}\n\n`,
-          );
-        }
-      }
       const outcome = await scope.commandGraph.dispatcher.dispatch(
         definedCommand.intent,
       );
@@ -1885,6 +1896,9 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
         presentationLocale,
         err.kind,
         err.message,
+        typeof (err.details as { adapter?: unknown }).adapter === "string"
+          ? { adapter: String((err.details as { adapter: unknown }).adapter) }
+          : undefined,
       )}`,
       ...(failureHelp ? { help: failureHelp.trimEnd() } : {}),
     });

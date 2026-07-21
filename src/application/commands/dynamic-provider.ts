@@ -188,11 +188,16 @@ export class ApplicationDynamicCommandProvider implements DynamicCommandProvider
                         ),
                         required: field.required,
                         value: "string",
-                        placeholder: "value",
+                        placeholder: field.separator
+                          ? "value[,value...]"
+                          : "value",
                         ...(field.choices
                           ? {
                               enum: field.choices.map((choice) => choice.value),
                             }
+                          : {}),
+                        ...(field.separator
+                          ? { separator: field.separator }
                           : {}),
                       }),
                     ),

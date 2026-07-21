@@ -126,7 +126,7 @@ field:
   scopeGlobal: "Use global configuration"
   adapterId: "Adapter identifier"
   adapterConfigPath: "Path for {key}"
-  adapterInstallRoot: "Installation root (leave blank for BenchPilot's global managed location)"
+  adapterInstallRoot: "Installation directory (leave blank for BenchPilot's global managed location)"
   adapterInstallValue: "Installation value for {key}"
   identity: "Stable device identity"
   deviceName: "Configured device name"
@@ -276,9 +276,9 @@ adapterResult:
     title: "Adapter configuration saved"
   installation:
     title: "Adapter installation"
-    root: "Installation root"
+    root: "Installation directory"
     stability: "Platform support"
-    estimate: "Estimated disk use before installation: {minimum}–{maximum}."
+    estimate: "Estimated disk use: {minimum}–{maximum}"
 resourceResult:
   devices:
     title: "Configured devices"
@@ -624,6 +624,7 @@ error:
     adapterNotFound: "The requested adapter was not found."
     adapterConfigurationDiscoveryUnavailable: "This adapter cannot discover its configuration automatically."
     adapterConfigurationIncomplete: "One or more required adapter tools could not be resolved."
+    adapterConfigurationNotFound: "No existing adapter installation was found. Use `benchpilot adapter {adapter} configure` to specify one, or `benchpilot adapter {adapter} install` to install one."
     adapterInstallationUnavailable: "This adapter does not provide installation on the current platform."
     adapterInstallationFailed: "Adapter installation did not complete successfully."
     operationTimeout: "The operation timed out."

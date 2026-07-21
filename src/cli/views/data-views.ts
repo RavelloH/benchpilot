@@ -553,19 +553,12 @@ export const dataViewDefinitions: readonly DataViewDefinition[] = [
         ],
       },
       {
-        component: "ObjectTree",
+        component: "KeyValueTable",
         source: "configuration",
         title: msg("adapterResult.discovery.config"),
         empty: msg("adapterResult.discovery.configEmpty"),
-        labelWidth: 18,
-        rows: [
-          {
-            field: "value",
-            label: msg("configResult.value"),
-            formatter: "string",
-            tone: "argument",
-          },
-        ],
+        keyLabels: {},
+        includeName: false,
       },
     ],
   },

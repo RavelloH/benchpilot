@@ -43,6 +43,8 @@ export interface CommandFieldDefinition {
   readonly placeholder?: string;
   /** Static machine values accepted for this field. */
   readonly enum?: readonly string[];
+  /** Separates multiple enum values in one string option. */
+  readonly separator?: ",";
   /** Read-only provider used to expose available field values in Help. */
   readonly choiceProvider?: string;
 }

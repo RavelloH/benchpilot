@@ -8,7 +8,15 @@ import { espIdfInstallation } from "./esp-idf-installer.js";
 
 const withBuiltinInstallation = (adapter: Adapter): Adapter =>
   adapter.id === "esp-idf"
-    ? { ...adapter, installation: espIdfInstallation }
+    ? {
+        ...adapter,
+        installation: espIdfInstallation,
+        configurationNotFound(discovery) {
+          return discovery.tools.some(
+            (tool) => tool.id === "idf" && tool.status === "unavailable",
+          );
+        },
+      }
     : adapter;
 
 /** Loads the compiled built-in bundles that ship beside the runtime package. */

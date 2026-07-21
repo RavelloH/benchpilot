@@ -14,8 +14,8 @@ export const catalogs = {
     "adapterResult.id": "Adapter ID",
     "adapterResult.info.title": "Adapter details",
     "adapterResult.installation.estimate":
-      "Estimated disk use before installation: {minimum}–{maximum}.",
-    "adapterResult.installation.root": "Installation root",
+      "Estimated disk use: {minimum}–{maximum}",
+    "adapterResult.installation.root": "Installation directory",
     "adapterResult.installation.stability": "Platform support",
     "adapterResult.installation.title": "Adapter installation",
     "adapterResult.list.empty": "No adapters are installed.",
@@ -263,6 +263,8 @@ export const catalogs = {
       "This adapter cannot discover its configuration automatically.",
     "error.reason.adapterConfigurationIncomplete":
       "One or more required adapter tools could not be resolved.",
+    "error.reason.adapterConfigurationNotFound":
+      "No existing adapter installation was found. Use `benchpilot adapter {adapter} configure` to specify one, or `benchpilot adapter {adapter} install` to install one.",
     "error.reason.adapterInstallationFailed":
       "Adapter installation did not complete successfully.",
     "error.reason.adapterInstallationUnavailable":
@@ -405,7 +407,7 @@ export const catalogs = {
     "field.adapterConfigPath": "Path for {key}",
     "field.adapterId": "Adapter identifier",
     "field.adapterInstallRoot":
-      "Installation root (leave blank for BenchPilot's global managed location)",
+      "Installation directory (leave blank for BenchPilot's global managed location)",
     "field.adapterInstallValue": "Installation value for {key}",
     "field.agent": "Require non-interactive execution",
     "field.all": "Include all command details",
@@ -691,9 +693,8 @@ export const catalogs = {
     "adapterResult.doctor.title": "适配器诊断",
     "adapterResult.id": "适配器 ID",
     "adapterResult.info.title": "适配器详情",
-    "adapterResult.installation.estimate":
-      "安装前预计磁盘占用：{minimum}–{maximum}。",
-    "adapterResult.installation.root": "安装根目录",
+    "adapterResult.installation.estimate": "预计磁盘占用：{minimum}–{maximum}",
+    "adapterResult.installation.root": "安装位置目录",
     "adapterResult.installation.stability": "平台支持",
     "adapterResult.installation.title": "适配器安装",
     "adapterResult.list.empty": "当前未安装适配器。",
@@ -930,6 +931,8 @@ export const catalogs = {
       "该适配器无法自动发现其配置。",
     "error.reason.adapterConfigurationIncomplete":
       "一个或多个必需的适配器工具无法解析。",
+    "error.reason.adapterConfigurationNotFound":
+      "未找到已有的适配器安装。可使用 `benchpilot adapter {adapter} configure` 指定已有安装，或使用 `benchpilot adapter {adapter} install` 自动安装。",
     "error.reason.adapterInstallationFailed": "适配器安装未成功完成。",
     "error.reason.adapterInstallationUnavailable":
       "该适配器不提供当前平台上的安装功能。",
@@ -1034,7 +1037,7 @@ export const catalogs = {
     "field.adapterConfigPath": "{key} 的路径",
     "field.adapterId": "适配器标识符",
     "field.adapterInstallRoot":
-      "安装根目录（留空使用 BenchPilot 的全局托管位置）",
+      "安装位置目录（留空使用 BenchPilot 的全局托管位置）",
     "field.adapterInstallValue": "{key} 的安装值",
     "field.agent": "要求非交互式执行",
     "field.all": "包含所有命令详情",
@@ -1336,6 +1339,9 @@ export interface MessageValuesByKey {
   readonly "error.internal": { readonly message: string | number | boolean };
   readonly "error.lock": { readonly message: string | number | boolean };
   readonly "error.operation": { readonly message: string | number | boolean };
+  readonly "error.reason.adapterConfigurationNotFound": {
+    readonly adapter: string | number | boolean;
+  };
   readonly "error.reason.untranslated": {
     readonly kind: string | number | boolean;
   };

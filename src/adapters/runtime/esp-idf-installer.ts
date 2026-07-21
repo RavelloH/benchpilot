@@ -18,6 +18,17 @@ const EIM_RELEASE_PAGE =
 const EIM_LATEST_RELEASE_PAGE =
   "https://github.com/espressif/idf-im-ui/releases/latest";
 const ESP_IDF_VERSION = "v5.5.2";
+const ESP_IDF_TARGETS = [
+  "esp32",
+  "esp32s2",
+  "esp32s3",
+  "esp32c2",
+  "esp32c3",
+  "esp32c5",
+  "esp32c6",
+  "esp32h2",
+  "esp32p4",
+] as const;
 const installEstimate = {
   minimumBytes: 5_000_000_000,
   maximumBytes: 12_000_000_000,
@@ -81,6 +92,36 @@ const installationError = (message: string, details: Json = {}) =>
     [],
     details,
   );
+
+export const parseEspIdfTargets = (value: unknown) => {
+  if (typeof value !== "string")
+    throw installationError(
+      "ESP-IDF installation requires at least one chip target.",
+    );
+  const targets = [
+    ...new Set(
+      value
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean),
+    ),
+  ];
+  if (
+    !targets.length ||
+    targets.some(
+      (target) =>
+        !ESP_IDF_TARGETS.includes(target as (typeof ESP_IDF_TARGETS)[number]),
+    )
+  )
+    throw installationError(
+      "ESP-IDF installation contains an unsupported chip target.",
+      {
+        targets,
+        supported: ESP_IDF_TARGETS,
+      },
+    );
+  return targets;
+};
 
 const platformFor = (): Platform =>
   process.platform === "win32"
@@ -396,7 +437,10 @@ const emitPhase = (
   fallback: string,
   state: "running" | "completed" = "running",
 ) =>
-  reporter.emit("adapter.install.phase", { state, label: { key, fallback } });
+  reporter.emit(`adapter.install.phase.${key}`, {
+    state,
+    label: { key, fallback },
+  });
 
 const phaseForLine = (line: string) => {
   if (/Python installed successfully/i.test(line))
@@ -405,12 +449,6 @@ const phaseForLine = (line: string) => {
     return ["install.framework", "Downloading ESP-IDF"] as const;
   if (/submodule/i.test(line))
     return ["install.submodules", "Initializing ESP-IDF submodules"] as const;
-  if (
-    /Filtered to \d+ tools|Tool '.+' is not installed|Successfully extracted/i.test(
-      line,
-    )
-  )
-    return ["install.tools", "Installing ESP-IDF tools"] as const;
   if (
     /Creating Python virtual environment|Python environment installed successfully/i.test(
       line,
@@ -428,6 +466,305 @@ const phaseForLine = (line: string) => {
     return ["install.finalizing", "Finalizing ESP-IDF installation"] as const;
   return undefined;
 };
+
+const byteUnits: Record<string, number> = {
+  b: 1,
+  kb: 1_000,
+  mb: 1_000_000,
+  gb: 1_000_000_000,
+  kib: 1024,
+  mib: 1024 ** 2,
+  gib: 1024 ** 3,
+};
+
+const bytes = (value: string, unit: string) =>
+  Math.round(Number(value) * (byteUnits[unit.toLowerCase()] ?? 1));
+
+interface EimProgressEvent {
+  readonly type: string;
+  readonly data: Json;
+}
+
+interface EimToolDownload {
+  readonly fileName: string;
+  readonly total: number;
+}
+
+const toolsPlatformKey = () => {
+  if (process.platform === "win32") return "win64";
+  if (process.platform === "darwin")
+    return process.arch === "arm64" ? "macos-arm64" : "macos";
+  if (process.arch === "arm64") return "linux-arm64";
+  if (process.arch === "arm") return "linux-armhf";
+  return "linux-amd64";
+};
+
+/** Gets the exact downloadable archive and size declared by ESP-IDF tools.json. */
+export const eimToolDownloadMetadata = (
+  toolsJson: unknown,
+  toolName: string,
+  platformKey = toolsPlatformKey(),
+): EimToolDownload | undefined => {
+  const rawTools = record(toolsJson).tools;
+  const tool = (Array.isArray(rawTools) ? rawTools : [])
+    .map(record)
+    .find((candidate) => candidate.name === toolName);
+  if (!tool) return undefined;
+  for (const version of Array.isArray(tool.versions) ? tool.versions : []) {
+    const download = record(record(version)[platformKey]);
+    const url = string(download.url);
+    const total = download.size;
+    if (
+      !url ||
+      typeof total !== "number" ||
+      !Number.isFinite(total) ||
+      total <= 0
+    )
+      continue;
+    try {
+      return { fileName: path.basename(new URL(url).pathname), total };
+    } catch {
+      continue;
+    }
+  }
+  return undefined;
+};
+
+/**
+ * EIM hides its native indicatif bar when stdout/stderr are pipes. Its tool
+ * metadata still gives us an exact archive size, so observe the actual archive
+ * on disk and expose the same local progress independently of terminal mode.
+ */
+class EimDownloadFileMonitor {
+  private timer: ReturnType<typeof setInterval> | undefined;
+  private generation = 0;
+  private ticking = false;
+
+  constructor(
+    private readonly root: string,
+    private readonly reporter: OperationReporter,
+  ) {}
+
+  begin(tool: string) {
+    this.stop();
+    const generation = this.generation;
+    void this.observe(tool, generation);
+  }
+
+  stop() {
+    this.generation += 1;
+    if (this.timer) clearInterval(this.timer);
+    this.timer = undefined;
+  }
+
+  private async observe(tool: string, generation: number) {
+    const toolsJsonPath = path.join(
+      this.root,
+      "frameworks",
+      ESP_IDF_VERSION,
+      "esp-idf",
+      "tools",
+      "tools.json",
+    );
+    let metadata: EimToolDownload | undefined;
+    try {
+      metadata = eimToolDownloadMetadata(
+        JSON.parse(await fs.readFile(toolsJsonPath, "utf8")),
+        tool,
+      );
+    } catch {
+      return;
+    }
+    if (!metadata || generation !== this.generation) return;
+    let last = -1;
+    const tick = async () => {
+      if (this.ticking || generation !== this.generation) return;
+      this.ticking = true;
+      try {
+        const status = await fs.stat(
+          path.join(this.root, "dist", metadata.fileName),
+        );
+        const current = Math.min(status.size, metadata.total);
+        if (current === last) return;
+        last = current;
+        this.reporter.emit("adapter.install.download", {
+          state: "running",
+          reentrant: true,
+          parentEvent: "adapter.install.toolchain",
+          instance: tool,
+          tool,
+          current,
+          total: metadata.total,
+          percent: (current / metadata.total) * 100,
+          label: {
+            key: "install.download",
+            fallback: `Downloading ${tool}`,
+            values: { tool },
+          },
+        });
+      } catch {
+        // The archive may not have been created yet, or may have been moved
+        // after verification; both states are normal around EIM transitions.
+      } finally {
+        this.ticking = false;
+      }
+    };
+    await tick();
+    if (generation !== this.generation) return;
+    this.timer = setInterval(() => void tick(), 200);
+    this.timer.unref();
+  }
+}
+
+const stripAnsi = (value: string) =>
+  value.replace(/\u001B\[[0-?]*[ -/]*[@-~]/g, "");
+
+/**
+ * EIM refreshes its interactive progress display with carriage returns rather
+ * than line feeds.  Process stream chunks are arbitrary, so keep the final
+ * partial record for the next chunk and surface every complete refresh now.
+ */
+export const consumeEimOutputChunk = (input: {
+  readonly buffered: string;
+  readonly chunk: Buffer;
+}) => {
+  const parts = `${input.buffered}${input.chunk.toString("utf8")}`.split(
+    /\r\n|\r|\n/,
+  );
+  return {
+    buffered: parts.pop() ?? "",
+    lines: parts.map(stripAnsi).filter((line) => line.trim().length > 0),
+  };
+};
+
+/** Parses only EIM's local, measurable progress; it never estimates a global percentage. */
+export class EimInstallProgressParser {
+  private toolTotal: number | undefined;
+  private completedTools = 0;
+  private activeTool: string | undefined;
+  private registryActive = false;
+
+  consume(line: string): readonly EimProgressEvent[] {
+    const events: EimProgressEvent[] = [];
+    const tools = /Filtered to (\d+) tools based on user selection/i.exec(line);
+    if (tools) {
+      this.toolTotal = Number(tools[1]);
+      events.push({
+        type: "adapter.install.toolchain",
+        data: {
+          state: "running",
+          reentrant: true,
+          transition: true,
+          current: 0,
+          total: this.toolTotal,
+          label: { key: "install.tools", fallback: "Installing ESP-IDF tools" },
+        },
+      });
+    }
+    const downloading = /Tool '([^']+)' is not installed\. Downloading/i.exec(
+      line,
+    );
+    if (downloading) {
+      this.activeTool = downloading[1];
+      events.push({
+        type: "adapter.install.download",
+        data: {
+          state: "running",
+          reentrant: true,
+          parentEvent: "adapter.install.toolchain",
+          instance: this.activeTool,
+          tool: this.activeTool,
+          label: {
+            key: "install.download",
+            fallback: `Downloading ${this.activeTool}`,
+            values: { tool: this.activeTool },
+          },
+        },
+      });
+    }
+    if (/Successfully extracted /i.test(line) && this.toolTotal !== undefined) {
+      this.completedTools = Math.min(this.completedTools + 1, this.toolTotal);
+      if (this.activeTool)
+        events.push({
+          type: "adapter.install.download",
+          data: {
+            state: "completed",
+            reentrant: true,
+            parentEvent: "adapter.install.toolchain",
+            instance: this.activeTool,
+            tool: this.activeTool,
+            label: {
+              key: "install.download",
+              fallback: `Downloading ${this.activeTool}`,
+              values: { tool: this.activeTool },
+            },
+          },
+        });
+      events.push({
+        type: "adapter.install.toolchain",
+        data: {
+          state:
+            this.completedTools === this.toolTotal ? "completed" : "running",
+          reentrant: true,
+          current: this.completedTools,
+          total: this.toolTotal,
+          label: {
+            key: "install.tools",
+            fallback: this.activeTool
+              ? `Installing ESP-IDF tools: ${this.activeTool}`
+              : "Installing ESP-IDF tools",
+          },
+        },
+      });
+      this.activeTool = undefined;
+    }
+    if (/Component Registry synchronization/i.test(line))
+      this.registryActive = true;
+    const transfer =
+      /([\d.]+)\s*(KiB|MiB|GiB|KB|MB|GB|B)\s*\/\s*([\d.]+)\s*(KiB|MiB|GiB|KB|MB|GB|B)/i.exec(
+        line,
+      );
+    if (transfer && this.activeTool) {
+      const current = bytes(transfer[1]!, transfer[2]!);
+      const total = bytes(transfer[3]!, transfer[4]!);
+      if (total > 0)
+        events.push({
+          type: "adapter.install.download",
+          data: {
+            state: "running",
+            reentrant: true,
+            parentEvent: "adapter.install.toolchain",
+            instance: this.activeTool,
+            tool: this.activeTool,
+            current,
+            total,
+            percent: (current / total) * 100,
+            label: {
+              key: "install.download",
+              fallback: `Downloading ${this.activeTool}`,
+              values: { tool: this.activeTool },
+            },
+          },
+        });
+    }
+    const percentage = /(?:^|\s)(\d{1,3}(?:\.\d+)?)%/.exec(line);
+    if (percentage && this.registryActive) {
+      const percent = Math.min(100, Number(percentage[1]));
+      events.push({
+        type: "adapter.install.registry",
+        data: {
+          state: percent >= 100 ? "completed" : "running",
+          percent,
+          label: {
+            key: "install.registry",
+            fallback: "Synchronizing component registry",
+          },
+        },
+      });
+    }
+    return events;
+  }
+}
 
 const captureEnvironment = async (
   activationScript: string,
@@ -720,8 +1057,9 @@ export const espIdfInstallation = (): AdapterInstallation => ({
     {
       key: "target",
       summary:
-        "Chip target to install (a single target avoids downloading every toolchain).",
+        "Chip targets to install, separated by commas (for example esp32,esp32s3).",
       required: true,
+      separator: ",",
       choices: [
         { value: "esp32", label: "ESP32" },
         { value: "esp32s2", label: "ESP32-S2" },
@@ -737,9 +1075,19 @@ export const espIdfInstallation = (): AdapterInstallation => ({
   ],
   async install(context) {
     const platform = platformFor();
-    const target = string(context.values.target);
-    if (!target)
-      throw installationError("ESP-IDF installation requires a chip target.");
+    const interruption = new AbortController();
+    const onInterrupt = () =>
+      interruption.abort(
+        new BenchPilotError(
+          "OPERATION_ABORTED",
+          6,
+          "ESP-IDF installation was interrupted by the user.",
+          true,
+        ),
+      );
+    process.once("SIGINT", onInterrupt);
+    const targets = parseEspIdfTargets(context.values.target);
+    const target = targets.join(",");
     const report = (
       key: string,
       fallback: string,
@@ -776,15 +1124,29 @@ export const espIdfInstallation = (): AdapterInstallation => ({
         ? await windowsSideEffectsBefore(context.paths.home)
         : undefined;
     report("install.framework", "Installing ESP-IDF");
+    const progress = new EimInstallProgressParser();
+    const downloadMonitor = new EimDownloadFileMonitor(
+      context.root,
+      context.reporter,
+    );
     let buffered = "";
     const onOutput = (chunk: Buffer) => {
-      buffered += chunk.toString("utf8");
-      const lines = buffered.split(/\r?\n/);
-      buffered = lines.pop() ?? "";
-      for (const line of lines) {
+      const parsed = consumeEimOutputChunk({ buffered, chunk });
+      buffered = parsed.buffered;
+      for (const line of parsed.lines) {
         context.logger.debug(`EIM: ${line}`);
         const phase = phaseForLine(line);
         if (phase) report(phase[0], phase[1]);
+        for (const event of progress.consume(line)) {
+          if (event.type === "adapter.install.download") {
+            const eventData = record(event.data);
+            const tool = string(eventData.tool);
+            if (eventData.state === "completed") downloadMonitor.stop();
+            else if (tool && typeof eventData.current !== "number")
+              downloadMonitor.begin(tool);
+          }
+          context.reporter.emit(event.type, event.data);
+        }
       }
     };
     let result: Awaited<ReturnType<typeof runProcess>>;
@@ -822,13 +1184,15 @@ export const espIdfInstallation = (): AdapterInstallation => ({
           "--log-file",
           path.join(context.root, "logs", "eim.log"),
         ],
-        signal: new AbortController().signal,
+        signal: interruption.signal,
         captureOutput: true,
         maxCaptureBytes: 4 * 1024 * 1024,
         onStdout: onOutput,
         onStderr: onOutput,
       });
     } finally {
+      process.removeListener("SIGINT", onInterrupt);
+      downloadMonitor.stop();
       if (sideEffects)
         await cleanupWindowsSideEffects({
           before: sideEffects,
@@ -876,7 +1240,8 @@ export const espIdfInstallation = (): AdapterInstallation => ({
         python_path: verified.pythonPath,
         export_script: exportScript,
         ...(exportBatScript ? { export_bat_script: exportBatScript } : {}),
-        target,
+        target: targets[0],
+        installed_targets: targets,
       },
     };
   },

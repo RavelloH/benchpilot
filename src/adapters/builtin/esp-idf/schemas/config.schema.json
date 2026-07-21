@@ -16,6 +16,24 @@
       "pattern": "^[a-z0-9]+$",
       "default": "esp32s3"
     },
+    "installed_targets": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "esp32",
+          "esp32s2",
+          "esp32s3",
+          "esp32c2",
+          "esp32c3",
+          "esp32c5",
+          "esp32c6",
+          "esp32h2",
+          "esp32p4"
+        ]
+      },
+      "uniqueItems": true,
+      "minItems": 1
+    },
     "build_dir": {
       "type": "string",
       "pattern": "^(?![\\\\/])(?![A-Za-z]:[\\\\/])(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$))[A-Za-z0-9._/-]+$",

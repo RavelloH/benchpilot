@@ -10,6 +10,7 @@ import type { Flags } from "../parser.js";
 import { processOutputSink, type OutputSink } from "./sink.js";
 import {
   isMessageKey,
+  resolveMessage,
   t,
   type Locale,
   type MessageKey,
@@ -19,9 +20,14 @@ const localizedErrorReason = (
   locale: Locale,
   kind: string,
   fallback: string,
+  values?: Record<string, string | number | boolean>,
 ) => {
   const key = coreErrorDefinition(kind)?.reason.key;
-  if (isMessageKey(key)) return t(locale, key);
+  if (isMessageKey(key))
+    return resolveMessage(locale, {
+      key,
+      ...(values ? { values } : {}),
+    });
   return locale === "zh-CN"
     ? t(locale, "error.reason.untranslated", { kind })
     : fallback;
@@ -32,13 +38,14 @@ export const humanErrorMessage = (
   locale: Locale,
   kind: string,
   fallback: string,
+  values?: Record<string, string | number | boolean>,
 ) => {
   const category = coreErrorDefinition(kind)?.category.key;
   const categoryKey: MessageKey = isMessageKey(category)
     ? category
     : "error.unknown";
   return t(locale, categoryKey, {
-    message: localizedErrorReason(locale, kind, fallback),
+    message: localizedErrorReason(locale, kind, fallback, values),
   });
 };
 

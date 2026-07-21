@@ -8,22 +8,22 @@ strategy = "inherit"
 strategy = "first-valid"
 inherit = true
 [[environments.idf.providers]]
-id = "active"
-type = "active"
-priority = 100
-required_variables = ["IDF_PATH", "IDF_PYTHON_ENV_PATH"]
-[[environments.idf.providers]]
 id = "configured-export"
 type = "capture-script"
-priority = 90
+priority = 100
 script = "${config.export_script}"
 shell = "posix"
 [[environments.idf.providers]]
 id = "idf-export"
 type = "capture-script"
-priority = 80
+priority = 90
 script = "${config.idf_path}/export.sh"
 shell = "posix"
+[[environments.idf.providers]]
+id = "active"
+type = "active"
+priority = 80
+required_variables = ["IDF_PATH", "IDF_PYTHON_ENV_PATH"]
 [[environments.idf.providers]]
 id = "env-idf-export"
 type = "capture-script"
