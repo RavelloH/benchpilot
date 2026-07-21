@@ -13,6 +13,9 @@ if (!sessionId)
 
 const paths = new PathService();
 const sessions = new ManagedSessionManager(paths);
+const launchDelayMs = Number(process.env.BENCHPILOT_TEST_SESSION_HOST_DELAY_MS);
+if (Number.isSafeInteger(launchDelayMs) && launchDelayMs > 0)
+  await new Promise((resolve) => setTimeout(resolve, launchDelayMs));
 const launch = await sessions.store.readLaunch(sessionId);
 if (
   !launch ||

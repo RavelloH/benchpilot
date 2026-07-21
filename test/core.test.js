@@ -607,6 +607,73 @@ test("detached serial session launcher reports a failed host without retaining a
   }
 });
 
+test("detached serial session launcher marks a ready timeout failed before the host can acquire a lock", async () => {
+  const root = await mkdtemp(
+    path.join(os.tmpdir(), "benchpilot-session-launcher-timeout-"),
+  );
+  try {
+    const environment = {
+      ...process.env,
+      TEMP: path.join(root, "runtime"),
+      TMP: path.join(root, "runtime"),
+      BENCHPILOT_TEST_SESSION_HOST_DELAY_MS: "200",
+    };
+    const paths = new PathService(
+      environment,
+      process.platform,
+      path.join(root, "home"),
+      path.join(root, "temp"),
+    );
+    const launcher = new SerialSessionLauncher(paths, {
+      hostEntry: path.resolve("test/fixtures/managed-session-host.mjs"),
+      readyTimeoutMs: 10,
+      environment,
+    });
+    await assert.rejects(
+      launcher.start({
+        projectRoot: root,
+        command: "device.run",
+        capabilityId: "run",
+        identity: {
+          adapter: "fixture",
+          instance: "board-a",
+          physicalId: "COM8",
+        },
+        lockId: "fixture-launcher-timeout-lock",
+        plan: {
+          capabilityId: "run",
+          kind: "start",
+          sessionId: "monitor",
+          port: "COM8",
+          baud: 115200,
+          encoding: "utf8",
+          lineFraming: "line",
+          openLinePolicy: { dtr: "preserve", rts: "preserve" },
+          logRecordLimit: 100,
+          spoolLimitBytes: 1024 * 1024,
+          rawCaptureLimitBytes: 1024 * 1024,
+          writeLimitBytes: 1024,
+          protocols: [],
+        },
+        overrides: {},
+        runContext: {},
+      }),
+      (error) =>
+        error instanceof BenchPilotError &&
+        error.kind === "MANAGED_SESSION_READY_TIMEOUT",
+    );
+    const records = await launcher.sessions.list();
+    assert.equal(records.length, 1);
+    assert.equal(records[0].state, "failed");
+    assert.equal(records[0].failure.kind, "MANAGED_SESSION_READY_TIMEOUT");
+    assert.equal((await new LockManager(paths).list()).length, 0);
+    await new Promise((resolve) => setTimeout(resolve, 225));
+    assert.equal((await new LockManager(paths).list()).length, 0);
+  } finally {
+    await rm(root, { recursive: true, force: true, maxRetries: 5 });
+  }
+});
+
 test("managed session follow cancellation only detaches its reader", async () => {
   const launcher = Object.create(SerialSessionLauncher.prototype);
   let reads = 0;

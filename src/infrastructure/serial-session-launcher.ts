@@ -116,13 +116,21 @@ export class SerialSessionLauncher implements ManagedSessionStarter {
           current.failure?.message ?? "Managed session host failed to start.",
         );
       if (Date.now() >= deadline) {
-        child.kill("SIGTERM");
-        throw new BenchPilotError(
+        const timeoutError = new BenchPilotError(
           "MANAGED_SESSION_READY_TIMEOUT",
           4,
           "Managed session host did not become ready in time.",
           true,
         );
+        child.kill("SIGTERM");
+        await this.sessions
+          .markFailed(
+            record.id,
+            { controlToken: permit.controlToken },
+            { kind: timeoutError.kind, message: timeoutError.message },
+          )
+          .catch(() => {});
+        throw timeoutError;
       }
       await delay(25);
     }
