@@ -13,6 +13,7 @@ export const fixedFiles = [
   "devices.toml",
   "actions.toml",
   "workflows.toml",
+  "sessions.toml",
   "parsers.toml",
   "artifacts.toml",
   "schemas/config.schema.json",

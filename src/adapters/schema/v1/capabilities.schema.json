@@ -71,13 +71,15 @@
         "reason": { "type": "string", "minLength": 1 },
         "handler": {
           "type": "string",
-          "pattern": "^(action|workflow):[a-z][a-z0-9-]*$"
+          "pattern": "^(action|workflow):[a-z][a-z0-9-]*$|^session:(start|logs|stop|console|send|request)$"
         },
+        "session": { "$ref": "#/$defs/id" },
         "input_schema": { "$ref": "#/$defs/id" },
         "output_schema": { "$ref": "#/$defs/id" },
         "creates_run": { "type": "boolean" },
         "timeout": { "type": "string", "pattern": "^[1-9][0-9]*(ms|s|m|h)$" },
-        "lock": { "enum": ["none", "device"] },
+        "lock": { "enum": ["none", "device", "session-owned"] },
+        "tty_only": { "type": "boolean" },
         "safety": { "$ref": "#/$defs/safety" },
         "platforms": { "$ref": "#/$defs/platforms" },
         "platform_reasons": { "$ref": "#/$defs/platformReasons" },

@@ -14,6 +14,29 @@ const standardOutputContracts: Readonly<Record<string, string>> = {
   "status-report": "status",
   "info-report": "info",
 };
+const sessionCapabilityContracts: Readonly<
+  Record<
+    string,
+    {
+      readonly handler: string;
+      readonly createsRun: boolean;
+      readonly lock: "none" | "session-owned";
+      readonly ttyOnly?: boolean;
+    }
+  >
+> = {
+  run: { handler: "session:start", createsRun: true, lock: "session-owned" },
+  logs: { handler: "session:logs", createsRun: false, lock: "none" },
+  stop: { handler: "session:stop", createsRun: false, lock: "none" },
+  console: {
+    handler: "session:console",
+    createsRun: false,
+    lock: "none",
+    ttyOnly: true,
+  },
+  send: { handler: "session:send", createsRun: false, lock: "none" },
+  request: { handler: "session:request", createsRun: false, lock: "none" },
+};
 const obj = (value: unknown): JsonObject =>
   value && typeof value === "object" && !Array.isArray(value)
     ? (value as JsonObject)
@@ -149,6 +172,7 @@ export const validateSemantics = async (
     environments = obj(file("environments.toml").environments),
     actions = obj(file("actions.toml").actions),
     workflows = obj(file("workflows.toml").workflows),
+    sessions = obj(file("sessions.toml").sessions),
     parsers = obj(file("parsers.toml").parsers),
     sets = obj(file("artifacts.toml").sets),
     devices = file("devices.toml"),
@@ -340,27 +364,49 @@ export const validateSemantics = async (
       );
     if (typeof item.handler === "string") {
       const match = /^(action|workflow):([a-z][a-z0-9-]*)$/.exec(item.handler);
+      const sessionMatch =
+        /^session:(start|logs|stop|console|send|request)$/.exec(item.handler);
       if (!match) {
-        errors.push(
-          diagnostic(
-            "ADAPTER_CAPABILITY_INVALID",
+        if (!sessionMatch)
+          errors.push(
+            diagnostic(
+              "ADAPTER_CAPABILITY_INVALID",
+              "capabilities.toml",
+              `Capability ${key} has an invalid handler`,
+              undefined,
+              adapter.id,
+            ),
+          );
+        else if (typeof item.session !== "string")
+          errors.push(
+            diagnostic(
+              "ADAPTER_CAPABILITY_INVALID",
+              "capabilities.toml",
+              `Session capability ${key} requires a session reference`,
+              undefined,
+              adapter.id,
+            ),
+          );
+        else
+          ref(
+            errors,
+            sessions,
+            item.session,
             "capabilities.toml",
-            `Capability ${key} has an invalid handler`,
-            undefined,
             adapter.id,
-          ),
+            "Session",
+          );
+      } else {
+        const [, kind, target] = match;
+        ref(
+          errors,
+          kind === "action" ? actions : workflows,
+          target,
+          "capabilities.toml",
+          adapter.id,
+          "Handler",
         );
-        continue;
       }
-      const [, kind, target] = match;
-      ref(
-        errors,
-        kind === "action" ? actions : workflows,
-        target,
-        "capabilities.toml",
-        adapter.id,
-        "Handler",
-      );
     }
     if (
       enabled &&
@@ -381,7 +427,10 @@ export const validateSemantics = async (
               adapter.id,
             ),
           );
-    if (item.lock && !["none", "device"].includes(String(item.lock)))
+    if (
+      item.lock &&
+      !["none", "device", "session-owned"].includes(String(item.lock))
+    )
       errors.push(
         diagnostic(
           "ADAPTER_CAPABILITY_INVALID",
@@ -392,7 +441,7 @@ export const validateSemantics = async (
         ),
       );
     if (
-      item.lock === "device" &&
+      (item.lock === "device" || item.lock === "session-owned") &&
       !Array.isArray(obj(file("devices.toml").identity).fields)
     )
       errors.push(
@@ -404,6 +453,62 @@ export const validateSemantics = async (
           adapter.id,
         ),
       );
+    const sessionContract = sessionCapabilityContracts[key];
+    if (enabled && sessionContract) {
+      if (item.handler !== sessionContract.handler)
+        errors.push(
+          diagnostic(
+            "ADAPTER_CAPABILITY_INVALID",
+            "capabilities.toml",
+            `Capability ${key} must use ${sessionContract.handler}`,
+            undefined,
+            adapter.id,
+          ),
+        );
+      if (item.creates_run !== sessionContract.createsRun)
+        errors.push(
+          diagnostic(
+            "ADAPTER_CAPABILITY_INVALID",
+            "capabilities.toml",
+            `Capability ${key} has an invalid creates_run value`,
+            undefined,
+            adapter.id,
+          ),
+        );
+      if (item.lock !== sessionContract.lock)
+        errors.push(
+          diagnostic(
+            "ADAPTER_CAPABILITY_INVALID",
+            "capabilities.toml",
+            `Capability ${key} must use lock = ${sessionContract.lock}`,
+            undefined,
+            adapter.id,
+          ),
+        );
+      if (sessionContract.ttyOnly === true && item.tty_only !== true)
+        errors.push(
+          diagnostic(
+            "ADAPTER_CAPABILITY_INVALID",
+            "capabilities.toml",
+            "Console capability must declare tty_only = true",
+            undefined,
+            adapter.id,
+          ),
+        );
+      if (key === "request") {
+        const session = obj(sessions[String(item.session)]);
+        if (!Object.keys(obj(session.protocols)).length)
+          errors.push(
+            diagnostic(
+              "ADAPTER_CAPABILITY_INVALID",
+              "capabilities.toml",
+              "Request capability requires a session protocol profile",
+              undefined,
+              adapter.id,
+            ),
+          );
+      }
+    }
     for (const schema of ["input_schema", "output_schema"] as const) {
       if (enabled && typeof item[schema] !== "string")
         errors.push(
@@ -517,6 +622,42 @@ export const validateSemantics = async (
       else declaredSafetyFlags.set(safety.flag, key);
     }
   }
+  const inputDefinitions = obj(adapter.schemas.inputs.$defs);
+  const outputDefinitions = obj(adapter.schemas.outputs.$defs);
+  for (const [sessionId, raw] of entries(sessions)) {
+    const session = obj(raw);
+    for (const [profileId, profileRaw] of entries(session.protocols)) {
+      const profile = obj(profileRaw);
+      if (typeof profile.telemetry_schema === "string")
+        ref(
+          errors,
+          outputDefinitions,
+          profile.telemetry_schema,
+          "sessions.toml",
+          adapter.id,
+          `Telemetry schema for ${sessionId}/${profileId}`,
+        );
+      for (const [methodId, methodRaw] of entries(profile.methods)) {
+        const method = obj(methodRaw);
+        ref(
+          errors,
+          inputDefinitions,
+          method.request_schema,
+          "sessions.toml",
+          adapter.id,
+          `Request schema for ${sessionId}/${profileId}/${methodId}`,
+        );
+        ref(
+          errors,
+          outputDefinitions,
+          method.response_schema,
+          "sessions.toml",
+          adapter.id,
+          `Response schema for ${sessionId}/${profileId}/${methodId}`,
+        );
+      }
+    }
+  }
   if (manifest.status === "disabled")
     for (const [key, item] of [...entries(declared), ...entries(extensions)])
       if (obj(item).enabled !== false)
@@ -529,7 +670,6 @@ export const validateSemantics = async (
             adapter.id,
           ),
         );
-  const outputDefinitions = obj(adapter.schemas.outputs.$defs);
   const presentationMessageKeys = new Set<string>();
   for (const [capabilityId, rawView] of entries(views)) {
     const capability = obj(declared[capabilityId] ?? extensions[capabilityId]);

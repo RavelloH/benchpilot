@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["schema", "schema_version", "sessions"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": { "const": "benchpilot.adapter.sessions" },
+    "schema_version": { "const": 1 },
+    "sessions": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/id" },
+      "additionalProperties": { "$ref": "#/$defs/session" }
+    }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+    "template": { "type": "string", "minLength": 1 },
+    "linePolicy": {
+      "type": "object",
+      "required": ["dtr", "rts"],
+      "additionalProperties": false,
+      "properties": {
+        "dtr": { "enum": ["preserve", "off", "on"] },
+        "rts": { "enum": ["preserve", "off", "on"] }
+      }
+    },
+    "method": {
+      "type": "object",
+      "required": ["request_schema", "response_schema", "timeout", "safety"],
+      "additionalProperties": false,
+      "properties": {
+        "request_schema": { "$ref": "#/$defs/id" },
+        "response_schema": { "$ref": "#/$defs/id" },
+        "timeout": { "type": "string", "pattern": "^[1-9][0-9]*(ms|s|m|h)$" },
+        "safety": {
+          "enum": ["normal", "caution", "destructive", "irreversible"]
+        }
+      }
+    },
+    "protocol": {
+      "type": "object",
+      "required": ["framing", "max_request_bytes", "methods"],
+      "additionalProperties": false,
+      "properties": {
+        "framing": { "enum": ["json-lines", "length-prefixed", "cbor"] },
+        "max_request_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1048576
+        },
+        "telemetry_schema": { "$ref": "#/$defs/id" },
+        "methods": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": { "$ref": "#/$defs/id" },
+          "additionalProperties": { "$ref": "#/$defs/method" }
+        }
+      }
+    },
+    "session": {
+      "type": "object",
+      "required": [
+        "stream_source",
+        "port",
+        "baud",
+        "encoding",
+        "line_framing",
+        "open_line_policy",
+        "log_record_limit",
+        "spool_limit_bytes",
+        "raw_capture_limit_bytes",
+        "write_limit_bytes"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "stream_source": { "const": "serial-read" },
+        "port": { "$ref": "#/$defs/template" },
+        "baud": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1200, "maximum": 2000000 },
+            { "$ref": "#/$defs/template" }
+          ]
+        },
+        "encoding": { "enum": ["utf8", "binary"] },
+        "line_framing": { "enum": ["line", "raw"] },
+        "open_line_policy": { "$ref": "#/$defs/linePolicy" },
+        "log_record_limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000000
+        },
+        "spool_limit_bytes": {
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 1073741824
+        },
+        "raw_capture_limit_bytes": {
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 1073741824
+        },
+        "write_limit_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1048576
+        },
+        "protocols": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/id" },
+          "additionalProperties": { "$ref": "#/$defs/protocol" }
+        }
+      }
+    }
+  }
+}

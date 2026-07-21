@@ -33,6 +33,7 @@ const sections = {
   devices: { file: "devices.toml", property: null },
   actions: { file: "actions.toml", property: "actions" },
   workflows: { file: "workflows.toml", property: "workflows" },
+  sessions: { file: "sessions.toml", property: "sessions" },
   parsers: { file: "parsers.toml", property: "parsers" },
   artifacts: { file: "artifacts.toml", property: "sets" },
 } as const;
@@ -195,6 +196,7 @@ export const compileAdapter = async (
       devices: deviceRules,
       actions: adapter.files["actions.toml"].actions,
       workflows: adapter.files["workflows.toml"].workflows,
+      sessions: adapter.files["sessions.toml"].sessions,
       parsers: adapter.files["parsers.toml"].parsers,
       artifacts: adapter.files["artifacts.toml"].sets,
     };

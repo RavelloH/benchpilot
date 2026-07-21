@@ -88,6 +88,52 @@ test("the adapter template validates and compiles deterministically", async () =
   }
 });
 
+test("adapter sessions declare all managed session capability contracts", async () => {
+  const root = await mkdtemp(join(tmpdir(), "benchpilot-adapter-"));
+  const adapterRoot = join(root, "complete");
+  const sessionCapabilities = [
+    ["run", "session:start", true, "session-owned"],
+    ["logs", "session:logs", false, "none"],
+    ["stop", "session:stop", false, "none"],
+    ["console", "session:console", false, "none", "tty_only = true\n"],
+    ["send", "session:send", false, "none"],
+    ["request", "session:request", false, "none"],
+  ];
+  try {
+    await cp(complete, adapterRoot, { recursive: true });
+    let capabilities = await readFile(
+      join(adapterRoot, "capabilities.toml"),
+      "utf8",
+    );
+    for (const [
+      id,
+      handler,
+      createsRun,
+      lock,
+      extra = "",
+    ] of sessionCapabilities)
+      capabilities = capabilities.replace(
+        new RegExp(
+          `\\[capabilities\\.${id}\\][\\s\\S]*?(?=\\n\\[capabilities\\.(?!${id}(?:\\.|\\]))|$)`,
+        ),
+        `[capabilities.${id}]\nenabled = true\nhandler = "${handler}"\nsession = "monitor"\ninput_schema = "build"\noutput_schema = "build"\ncreates_run = ${createsRun}\ntimeout = "1m"\nlock = "${lock}"\n${extra}[capabilities.${id}.safety]\nmode = "normal"\n[capabilities.${id}.platforms]\nwindows = true\nlinux = true\nmacos = true\n`,
+      );
+    await writeFile(join(adapterRoot, "capabilities.toml"), capabilities);
+    await writeFile(
+      join(adapterRoot, "sessions.toml"),
+      `schema = "benchpilot.adapter.sessions"\nschema_version = 1\n\n[sessions.monitor]\nstream_source = "serial-read"\nport = "\${device.port}"\nbaud = 115200\nencoding = "utf8"\nline_framing = "line"\nopen_line_policy = { dtr = "preserve", rts = "preserve" }\nlog_record_limit = 1000\nspool_limit_bytes = 1048576\nraw_capture_limit_bytes = 1048576\nwrite_limit_bytes = 4096\n\n[sessions.monitor.protocols.control]\nframing = "json-lines"\nmax_request_bytes = 4096\n[sessions.monitor.protocols.control.methods.ping]\nrequest_schema = "build"\nresponse_schema = "build"\ntimeout = "1s"\nsafety = "normal"\n`,
+    );
+    const result = await compileAdapter(adapterRoot);
+    assert.deepEqual(result.diagnostics, []);
+    assert.equal(
+      result.bundle.platforms.windows.sessions.monitor.port,
+      "${device.port}",
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("adapter views are schema-bound and reject unknown output selectors", async () => {
   const root = await mkdtemp(join(tmpdir(), "benchpilot-adapter-view-"));
   const adapterRoot = join(root, "complete");

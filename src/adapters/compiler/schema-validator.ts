@@ -15,6 +15,7 @@ const schemaFor: Record<string, string> = {
   "devices.toml": "devices",
   "actions.toml": "actions",
   "workflows.toml": "workflows",
+  "sessions.toml": "sessions",
   "parsers.toml": "parsers",
   "artifacts.toml": "artifacts",
   "tests/cases.toml": "cases",

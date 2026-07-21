@@ -17,6 +17,7 @@
         "devices": { "$ref": "#/$defs/devices" },
         "actions": { "$ref": "#/$defs/ruleMap" },
         "workflows": { "$ref": "#/$defs/ruleMap" },
+        "sessions": { "$ref": "#/$defs/ruleMap" },
         "parsers": { "$ref": "#/$defs/ruleMap" },
         "artifacts": { "$ref": "#/$defs/ruleMap" }
       }

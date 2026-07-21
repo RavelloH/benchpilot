@@ -76,6 +76,7 @@
         "devices": { "type": "object" },
         "actions": { "type": "object" },
         "workflows": { "type": "object" },
+        "sessions": { "type": "object" },
         "parsers": { "type": "object" },
         "artifacts": { "type": "object" }
       }

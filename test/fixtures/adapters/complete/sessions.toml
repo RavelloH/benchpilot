@@ -1,0 +1,4 @@
+schema = "benchpilot.adapter.sessions"
+schema_version = 1
+
+[sessions]
