@@ -14,6 +14,9 @@ export class PathService {
   globalConfig() {
     return path.join(this.persistentRoot(), "config.toml");
   }
+  managedToolsRoot() {
+    return path.join(this.persistentRoot(), "tools");
+  }
   runtimeRoot() {
     return path.join(
       this.platform === "win32"

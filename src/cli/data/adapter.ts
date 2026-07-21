@@ -196,3 +196,47 @@ export const adapterConfigurationDataPage = (input: {
     ],
   };
 };
+
+export const adapterInstallationDataPage = (input: {
+  adapter: string;
+  root: string;
+  stability: "stable" | "experimental";
+  estimate: { minimumBytes: number; maximumBytes: number };
+  path: string;
+  changed: boolean;
+  configuration: Json;
+  result: Json;
+}): CliDataPage<{
+  schema: "benchpilot.adapter-installation";
+  version: 1;
+  adapter: string;
+  root: string;
+  stability: "stable" | "experimental";
+  estimate: { minimumBytes: number; maximumBytes: number };
+  path: string;
+  changed: boolean;
+  configuration: Json;
+  result: Json;
+}> => {
+  const data = {
+    schema: "benchpilot.adapter-installation" as const,
+    version: 1 as const,
+    ...input,
+  };
+  return {
+    data,
+    jsonl: [
+      {
+        key: `adapter.${data.adapter}`,
+        value: {
+          adapter: data.adapter,
+          root: data.root,
+          path: data.path,
+          changed: data.changed,
+          stability: data.stability,
+        },
+      },
+      { key: "configuration", value: data.configuration },
+    ],
+  };
+};

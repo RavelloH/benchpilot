@@ -106,11 +106,13 @@ export class InteractionEngine {
       completed.add(name);
       const field = fieldByName(parsed, name);
       if (!field) throw new Error(`Unknown interaction field: ${name}`);
-      const choiceSet = step.choices
+      const choiceSet: InteractionChoices | undefined = step.choices
         ? normalizedChoices(
             await this.providers[step.choices]?.({ parsed, field, values }),
           )
-        : undefined;
+        : field.enum?.length
+          ? { choices: field.enum.map((value) => ({ value })) }
+          : undefined;
       let value: unknown;
       if (choiceSet?.multiple) {
         const selected = choiceSet.choices.length

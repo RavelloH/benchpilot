@@ -674,7 +674,18 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
               value: adapter.id,
               label: `${adapter.id} — ${adapter.summary}`,
             })),
-          actionChoices: async () => graphMenuChoices("adapter.resource"),
+          actionChoices: async (adapterId) =>
+            graphMenuChoices("adapter.resource", [
+              "adapter.show",
+              "adapter.doctor",
+              "adapter.discover",
+              "adapter.configure",
+              ...(queries.adapterInstallation(adapterId)
+                ? ["adapter.install"]
+                : []),
+              "adapter.enable",
+              "adapter.disable",
+            ]),
           interaction: () => interactive(locale, parts),
           color: colorEnabled(flags, stdout.isTTY),
         }),
@@ -1372,9 +1383,33 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
       hasOutcomePage(definedCommand.intent.commandId) &&
       !deferredConfirmation
     ) {
+      if (
+        definedCommand.intent.commandId === "adapter.install" &&
+        !flags.json &&
+        !flags.jsonl &&
+        !flags.quiet
+      ) {
+        const installation = queries.adapterInstallation(
+          String(definedCommand.intent.input.adapter),
+        );
+        if (installation) {
+          const gigabytes = (bytes: number) =>
+            `${(bytes / 1_000_000_000).toLocaleString(locale, {
+              maximumFractionDigits: 1,
+            })} GB`;
+          terminalSurface.write(
+            `${t(locale, "adapterResult.installation.estimate", {
+              minimum: gigabytes(installation.estimate.minimumBytes),
+              maximum: gigabytes(installation.estimate.maximumBytes),
+            })}\n\n`,
+          );
+        }
+      }
       const outcome = await scope.commandGraph.dispatcher.dispatch(
         definedCommand.intent,
       );
+      if (definedCommand.intent.commandId === "adapter.install")
+        screenOperationReporter?.complete();
       renderDataPage({
         command: {
           id: definedCommand.intent.commandId,

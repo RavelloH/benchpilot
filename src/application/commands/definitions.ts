@@ -120,6 +120,7 @@ const outputSchemas: Readonly<Record<string, string>> = {
   "adapter.disable": "benchpilot.adapter-state",
   "adapter.discover": "benchpilot.adapter-configuration",
   "adapter.configure": "benchpilot.adapter-configuration",
+  "adapter.install": "benchpilot.adapter-installation",
   "device.list": "benchpilot.device-list",
   "device.scan": "benchpilot.device-scan",
   "device.add": "benchpilot.device-added",
@@ -526,47 +527,71 @@ export const staticCommandDefinitions: readonly CommandDefinition[] = [
     path: adapterPath,
     summaryKey: "command.adapter.resource",
   }),
-  ...["show", "doctor", "discover", "configure", "enable", "disable"].map(
-    (action) =>
-      leaf({
-        id: `adapter.${action}`,
-        parentId: "adapter.resource",
-        path: [...adapterPath, literal(action)],
-        summaryKey: `command.adapter.${action}` as
-          | "command.adapter.show"
-          | "command.adapter.doctor"
-          | "command.adapter.discover"
-          | "command.adapter.configure"
-          | "command.adapter.enable"
-          | "command.adapter.disable",
-        handler: `adapter.${action}`,
-        interactionMenu: {
-          summaryKey: `menu.action.${action}` as
-            | "menu.action.show"
-            | "menu.action.doctor"
-            | "menu.action.discover"
-            | "menu.action.configure"
-            | "menu.action.enable"
-            | "menu.action.disable",
-          order: {
-            show: 10,
-            doctor: 20,
-            discover: 30,
-            configure: 40,
-            enable: 50,
-            disable: 60,
-          }[action]!,
-        },
-        arguments: [
-          argument("adapter", "field.adapterId", 0, { required: true }),
-        ],
-        ...(action === "configure"
-          ? {
-              interaction: "when-incomplete" as const,
-              options: [],
-            }
-          : {}),
-      }),
+  ...[
+    "show",
+    "doctor",
+    "discover",
+    "configure",
+    "install",
+    "enable",
+    "disable",
+  ].map((action) =>
+    leaf({
+      id: `adapter.${action}`,
+      parentId: "adapter.resource",
+      path: [...adapterPath, literal(action)],
+      summaryKey: `command.adapter.${action}` as
+        | "command.adapter.show"
+        | "command.adapter.doctor"
+        | "command.adapter.discover"
+        | "command.adapter.configure"
+        | "command.adapter.install"
+        | "command.adapter.enable"
+        | "command.adapter.disable",
+      handler: `adapter.${action}`,
+      interactionMenu: {
+        summaryKey: `menu.action.${action}` as
+          | "menu.action.show"
+          | "menu.action.doctor"
+          | "menu.action.discover"
+          | "menu.action.configure"
+          | "menu.action.install"
+          | "menu.action.enable"
+          | "menu.action.disable",
+        order: {
+          show: 10,
+          doctor: 20,
+          discover: 30,
+          configure: 40,
+          install: 50,
+          enable: 60,
+          disable: 70,
+        }[action]!,
+      },
+      arguments: [
+        argument("adapter", "field.adapterId", 0, { required: true }),
+      ],
+      ...(action === "configure" || action === "install"
+        ? {
+            interaction: "when-incomplete" as const,
+            options:
+              action === "install"
+                ? [
+                    option("root", "field.adapterInstallRoot", {
+                      placeholder: "path",
+                    }),
+                  ]
+                : [],
+            ...(action === "install"
+              ? {
+                  interactionRecipe: {
+                    steps: [{ field: "root", collect: "absent" as const }],
+                  },
+                }
+              : {}),
+          }
+        : {}),
+    }),
   ),
   branch({
     id: "device",

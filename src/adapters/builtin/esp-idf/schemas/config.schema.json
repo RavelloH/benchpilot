@@ -9,6 +9,8 @@
     "python_path": { "type": "string", "minLength": 1 },
     "export_script": { "type": "string", "minLength": 1 },
     "export_bat_script": { "type": "string", "minLength": 1 },
+    "managed_root": { "type": "string", "minLength": 1 },
+    "installation_source": { "enum": ["eim"] },
     "target": {
       "type": "string",
       "pattern": "^[a-z0-9]+$",

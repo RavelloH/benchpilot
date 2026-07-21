@@ -55,6 +55,7 @@ command:
     disable: "为当前项目禁用适配器"
     discover: "发现并保存全局适配器配置"
     configure: "校验并保存手动提供的适配器路径"
+    install: "安装并配置适配器工具链"
   device:
     root: "发现、配置和操作设备"
     list: "列出已配置设备"
@@ -125,6 +126,8 @@ field:
   scopeGlobal: "使用全局配置"
   adapterId: "适配器标识符"
   adapterConfigPath: "{key} 的路径"
+  adapterInstallRoot: "安装根目录（留空使用 BenchPilot 的全局托管位置）"
+  adapterInstallValue: "{key} 的安装值"
   identity: "稳定设备标识"
   deviceName: "配置后的设备名称"
   port: "设备端口"
@@ -271,6 +274,11 @@ adapterResult:
     configEmpty: "没有可持久化的配置值。"
   configuration:
     title: "适配器配置已保存"
+  installation:
+    title: "适配器安装"
+    root: "安装根目录"
+    stability: "平台支持"
+    estimate: "安装前预计磁盘占用：{minimum}–{maximum}。"
 resourceResult:
   devices:
     title: "已配置设备"
@@ -461,6 +469,7 @@ menu:
     disable: "为当前项目禁用"
     discover: "发现工具"
     configure: "保存全局配置"
+    install: "安装工具链"
     show: "显示详情"
     logs: "显示日志"
     artifacts: "显示产物"
@@ -615,6 +624,8 @@ error:
     adapterNotFound: "找不到指定适配器。"
     adapterConfigurationDiscoveryUnavailable: "该适配器无法自动发现其配置。"
     adapterConfigurationIncomplete: "一个或多个必需的适配器工具无法解析。"
+    adapterInstallationUnavailable: "该适配器不提供当前平台上的安装功能。"
+    adapterInstallationFailed: "适配器安装未成功完成。"
     operationTimeout: "操作执行超时。"
     operationAborted: "操作已中止。"
     cleanupFailed: "关键清理步骤失败。"

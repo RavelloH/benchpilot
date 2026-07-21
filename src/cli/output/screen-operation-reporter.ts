@@ -95,8 +95,17 @@ export class ScreenOperationReporter implements OperationReporter {
     const labels = this.state.labels;
     if (!labels) return;
     const values = object(data);
-    if (type === "operation.failed" || type === "operation.completed") {
+    if (
+      type === "operation.failed" ||
+      type === "operation.completed" ||
+      type === "adapter.install.failed" ||
+      type === "adapter.install.completed"
+    ) {
       this.complete();
+      return;
+    }
+    if (type === "adapter.install.started") {
+      this.set(labels.preparing);
       return;
     }
     if (type === "operation.started") {

@@ -4,6 +4,12 @@ import { resolve } from "node:path";
 import { AdapterBundleLoader } from "./bundle-loader.js";
 import { createDeclarativeAdapter } from "./declarative-adapter.js";
 import { RuntimeAdapterRegistry } from "./registry.js";
+import { espIdfInstallation } from "./esp-idf-installer.js";
+
+const withBuiltinInstallation = (adapter: Adapter): Adapter =>
+  adapter.id === "esp-idf"
+    ? { ...adapter, installation: espIdfInstallation }
+    : adapter;
 
 /** Loads the compiled built-in bundles that ship beside the runtime package. */
 export const loadBuiltinAdapters = async (
@@ -14,7 +20,9 @@ export const loadBuiltinAdapters = async (
     entries
       .filter((entry) => entry.status !== "disabled")
       .map(async (entry) =>
-        createDeclarativeAdapter(await registry.get(entry.id)),
+        withBuiltinInstallation(
+          createDeclarativeAdapter(await registry.get(entry.id)),
+        ),
       ),
   );
   const testBundles = process.env.BENCHPILOT_TEST_ADAPTER_BUNDLES;
@@ -28,7 +36,9 @@ export const loadBuiltinAdapters = async (
     fixtureEntries
       .filter((entry) => entry.status !== "disabled")
       .map(async (entry) =>
-        createDeclarativeAdapter(await fixtures.get(entry.id)),
+        withBuiltinInstallation(
+          createDeclarativeAdapter(await fixtures.get(entry.id)),
+        ),
       ),
   );
   return [...builtins, ...fixtureAdapters].sort((left, right) =>

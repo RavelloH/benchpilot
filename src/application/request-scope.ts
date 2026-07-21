@@ -47,6 +47,10 @@ import {
   createAdapterConfigurationUseCases,
   type AdapterConfigurationUseCases,
 } from "./adapters/configuration-use-case.js";
+import {
+  createAdapterInstallationUseCases,
+  type AdapterInstallationUseCases,
+} from "./adapters/installation-use-case.js";
 import { CommandCatalog } from "./commands/catalog.js";
 import {
   commandCatalogDefinition,
@@ -90,6 +94,7 @@ export interface ApplicationRequestScope {
   configurationCommands: ConfigurationCommandUseCases;
   adapterManagement: AdapterManagementUseCases;
   adapterConfiguration: AdapterConfigurationUseCases;
+  adapterInstallation: AdapterInstallationUseCases;
   catalog: CommandCatalog;
   commandGraph: {
     definitions: typeof staticCommandDefinitions;
@@ -175,6 +180,13 @@ export async function openApplicationRequest(
     paths,
     config,
   });
+  const adapterInstallation = createAdapterInstallationUseCases({
+    registry: adapterCatalog.registry,
+    paths,
+    businessLogs: request.businessLogs,
+    configuration: adapterConfiguration,
+    ...(request.reporter ? { reporter: request.reporter } : {}),
+  });
   const catalog = new CommandCatalog({
     async configuredDevices() {
       return queries.listConfiguredDevices().devices.map((device) => ({
@@ -214,6 +226,7 @@ export async function openApplicationRequest(
       configuration: configurationCommands,
       adapterManagement,
       adapterConfiguration,
+      adapterInstallation,
       runtime: runtimeCommands,
       queries,
       resolvedConfig: config,
@@ -234,6 +247,7 @@ export async function openApplicationRequest(
     configurationCommands,
     adapterManagement,
     adapterConfiguration,
+    adapterInstallation,
     catalog,
     commandGraph,
   };

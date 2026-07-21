@@ -25,6 +25,9 @@ export type {
   AdapterConfigurationField,
   AdapterConfigurationDiscovery,
   AdapterConfigurationTool,
+  AdapterInstallation,
+  AdapterInstallationEstimate,
+  AdapterInstallationField,
   AdapterContext,
   AdapterServices,
 } from "./core/adapters/types.js";

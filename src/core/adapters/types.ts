@@ -2,6 +2,8 @@ import type { DeviceRuntime } from "../capabilities/types.js";
 import type { Json } from "../config/config.js";
 import type { RuntimeSchema } from "./schemas.js";
 import type { PathService } from "../paths/path-service.js";
+import type { OperationReporter } from "../reporting/types.js";
+import type { BusinessLog } from "../reporting/business-log.js";
 
 export interface AdapterContext {
   adapterConfig: Json;
@@ -21,6 +23,33 @@ export interface AdapterConfigurationTool {
 export interface AdapterConfigurationField {
   key: string;
   required: boolean;
+}
+
+export interface AdapterInstallationField {
+  key: string;
+  summary: string;
+  required: boolean;
+  choices?: readonly { value: string; label: string }[];
+}
+
+export interface AdapterInstallationEstimate {
+  minimumBytes: number;
+  maximumBytes: number;
+}
+
+/** Adapter-owned installer contract. Core provides paths and reporting only. */
+export interface AdapterInstallation {
+  platforms: readonly ("windows" | "linux" | "macos")[];
+  stability: "stable" | "experimental";
+  estimate: AdapterInstallationEstimate;
+  fields: readonly AdapterInstallationField[];
+  install(context: {
+    paths: PathService;
+    root: string;
+    values: Json;
+    reporter: OperationReporter;
+    logger: BusinessLog;
+  }): Promise<Json>;
 }
 
 /** Read-only toolchain discovery result used to prepare global Adapter config. */
@@ -52,6 +81,7 @@ export interface Adapter {
     context: AdapterContext,
   ): Promise<AdapterConfigurationDiscovery>;
   configurationFields?(): readonly AdapterConfigurationField[];
+  installation?(): AdapterInstallation | undefined;
   doctor(context: AdapterContext): Promise<Json[]>;
   translate?(
     locale: string,

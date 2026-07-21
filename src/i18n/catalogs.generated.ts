@@ -13,6 +13,11 @@ export const catalogs = {
     "adapterResult.doctor.title": "Adapter diagnostics",
     "adapterResult.id": "Adapter ID",
     "adapterResult.info.title": "Adapter details",
+    "adapterResult.installation.estimate":
+      "Estimated disk use before installation: {minimum}–{maximum}.",
+    "adapterResult.installation.root": "Installation root",
+    "adapterResult.installation.stability": "Platform support",
+    "adapterResult.installation.title": "Adapter installation",
     "adapterResult.list.empty": "No adapters are installed.",
     "adapterResult.list.title": "Installed adapters",
     "adapterResult.state.changed": "Changed",
@@ -107,6 +112,7 @@ export const catalogs = {
       "Discover and save adapter configuration globally",
     "command.adapter.doctor": "Run adapter diagnostics",
     "command.adapter.enable": "Enable an adapter for this project",
+    "command.adapter.install": "Install and configure an adapter toolchain",
     "command.adapter.list": "List installed adapters",
     "command.adapter.resource": "Select an installed adapter",
     "command.adapter.root": "Inspect installed device adapters",
@@ -257,6 +263,10 @@ export const catalogs = {
       "This adapter cannot discover its configuration automatically.",
     "error.reason.adapterConfigurationIncomplete":
       "One or more required adapter tools could not be resolved.",
+    "error.reason.adapterInstallationFailed":
+      "Adapter installation did not complete successfully.",
+    "error.reason.adapterInstallationUnavailable":
+      "This adapter does not provide installation on the current platform.",
     "error.reason.adapterNotFound": "The requested adapter was not found.",
     "error.reason.agentInteractionUnsupported":
       "This invocation requires interactive completion or human confirmation. Agent mode can still run commands with complete arguments that do not require interaction.",
@@ -394,6 +404,9 @@ export const catalogs = {
     "error.usage": "Usage error: {message}",
     "field.adapterConfigPath": "Path for {key}",
     "field.adapterId": "Adapter identifier",
+    "field.adapterInstallRoot":
+      "Installation root (leave blank for BenchPilot's global managed location)",
+    "field.adapterInstallValue": "Installation value for {key}",
     "field.agent": "Require non-interactive execution",
     "field.all": "Include all command details",
     "field.approvalId": "Approval request identifier",
@@ -537,6 +550,7 @@ export const catalogs = {
     "menu.action.explain": "Explain configuration source",
     "menu.action.get": "Read configuration",
     "menu.action.inspect": "Inspect",
+    "menu.action.install": "Install toolchain",
     "menu.action.list": "List",
     "menu.action.logs": "Show logs",
     "menu.action.member": "Manage members",
@@ -677,6 +691,11 @@ export const catalogs = {
     "adapterResult.doctor.title": "适配器诊断",
     "adapterResult.id": "适配器 ID",
     "adapterResult.info.title": "适配器详情",
+    "adapterResult.installation.estimate":
+      "安装前预计磁盘占用：{minimum}–{maximum}。",
+    "adapterResult.installation.root": "安装根目录",
+    "adapterResult.installation.stability": "平台支持",
+    "adapterResult.installation.title": "适配器安装",
     "adapterResult.list.empty": "当前未安装适配器。",
     "adapterResult.list.title": "已安装适配器",
     "adapterResult.state.changed": "已变更",
@@ -765,6 +784,7 @@ export const catalogs = {
     "command.adapter.discover": "发现并保存全局适配器配置",
     "command.adapter.doctor": "运行适配器诊断",
     "command.adapter.enable": "为当前项目启用适配器",
+    "command.adapter.install": "安装并配置适配器工具链",
     "command.adapter.list": "列出已安装适配器",
     "command.adapter.resource": "选择已安装适配器",
     "command.adapter.root": "检查已安装的设备适配器",
@@ -910,6 +930,9 @@ export const catalogs = {
       "该适配器无法自动发现其配置。",
     "error.reason.adapterConfigurationIncomplete":
       "一个或多个必需的适配器工具无法解析。",
+    "error.reason.adapterInstallationFailed": "适配器安装未成功完成。",
+    "error.reason.adapterInstallationUnavailable":
+      "该适配器不提供当前平台上的安装功能。",
     "error.reason.adapterNotFound": "找不到指定适配器。",
     "error.reason.agentInteractionUnsupported":
       "当前调用需要交互补全或人工确认。Agent 模式仍可执行已提供完整参数且无需交互确认的命令。",
@@ -1010,6 +1033,9 @@ export const catalogs = {
     "error.usage": "用法错误：{message}",
     "field.adapterConfigPath": "{key} 的路径",
     "field.adapterId": "适配器标识符",
+    "field.adapterInstallRoot":
+      "安装根目录（留空使用 BenchPilot 的全局托管位置）",
+    "field.adapterInstallValue": "{key} 的安装值",
     "field.agent": "要求非交互式执行",
     "field.all": "包含所有命令详情",
     "field.approvalId": "审批请求标识符",
@@ -1147,6 +1173,7 @@ export const catalogs = {
     "menu.action.explain": "解释配置来源",
     "menu.action.get": "读取配置",
     "menu.action.inspect": "查看",
+    "menu.action.install": "安装工具链",
     "menu.action.list": "列出",
     "menu.action.logs": "显示日志",
     "menu.action.member": "管理成员",
@@ -1280,6 +1307,10 @@ export type Locale = keyof typeof catalogs;
 export type MessageKey = keyof typeof catalogs.en;
 
 export interface MessageValuesByKey {
+  readonly "adapterResult.installation.estimate": {
+    readonly maximum: string | number | boolean;
+    readonly minimum: string | number | boolean;
+  };
   readonly "approval.actionUnavailable": {
     readonly status: string | number | boolean;
   };
@@ -1314,6 +1345,9 @@ export interface MessageValuesByKey {
   readonly "error.upgrade": { readonly message: string | number | boolean };
   readonly "error.usage": { readonly message: string | number | boolean };
   readonly "field.adapterConfigPath": {
+    readonly key: string | number | boolean;
+  };
+  readonly "field.adapterInstallValue": {
     readonly key: string | number | boolean;
   };
   readonly "lock.clearStale.remaining": {

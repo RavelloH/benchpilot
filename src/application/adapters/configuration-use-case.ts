@@ -87,6 +87,14 @@ export class AdapterConfigurationUseCases {
     };
   }
 
+  /** Persists an installer result only after the installer completed verification. */
+  async persistVerified(
+    adapterId: string,
+    config: Json,
+  ): Promise<AdapterConfigurationResult> {
+    return this.persist({ adapterId, config, tools: [] });
+  }
+
   async discover(adapterId: string): Promise<AdapterConfigurationResult> {
     const adapter = this.dependencies.registry.get(adapterId);
     const discovery = await this.dependencies.registry.discoverConfiguration(

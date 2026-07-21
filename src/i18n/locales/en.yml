@@ -55,6 +55,7 @@ command:
     disable: "Disable an adapter for this project"
     discover: "Discover and save adapter configuration globally"
     configure: "Validate and save manually supplied adapter paths"
+    install: "Install and configure an adapter toolchain"
   device:
     root: "Discover, configure, and operate devices"
     list: "List configured devices"
@@ -125,6 +126,8 @@ field:
   scopeGlobal: "Use global configuration"
   adapterId: "Adapter identifier"
   adapterConfigPath: "Path for {key}"
+  adapterInstallRoot: "Installation root (leave blank for BenchPilot's global managed location)"
+  adapterInstallValue: "Installation value for {key}"
   identity: "Stable device identity"
   deviceName: "Configured device name"
   port: "Device port"
@@ -271,6 +274,11 @@ adapterResult:
     configEmpty: "No configuration values can be persisted."
   configuration:
     title: "Adapter configuration saved"
+  installation:
+    title: "Adapter installation"
+    root: "Installation root"
+    stability: "Platform support"
+    estimate: "Estimated disk use before installation: {minimum}–{maximum}."
 resourceResult:
   devices:
     title: "Configured devices"
@@ -461,6 +469,7 @@ menu:
     disable: "Disable for this project"
     discover: "Discover tools"
     configure: "Save global configuration"
+    install: "Install toolchain"
     show: "Show details"
     logs: "Show logs"
     artifacts: "Show artifacts"
@@ -615,6 +624,8 @@ error:
     adapterNotFound: "The requested adapter was not found."
     adapterConfigurationDiscoveryUnavailable: "This adapter cannot discover its configuration automatically."
     adapterConfigurationIncomplete: "One or more required adapter tools could not be resolved."
+    adapterInstallationUnavailable: "This adapter does not provide installation on the current platform."
+    adapterInstallationFailed: "Adapter installation did not complete successfully."
     operationTimeout: "The operation timed out."
     operationAborted: "The operation was aborted."
     cleanupFailed: "A critical cleanup step failed."

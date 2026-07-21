@@ -6,6 +6,7 @@ import type { LockRecord } from "../../core.js";
 import {
   adapterDoctorDataPage,
   adapterConfigurationDataPage,
+  adapterInstallationDataPage,
   adapterInfoDataPage,
   adapterListDataPage,
   adapterStateDataPage,
@@ -116,6 +117,10 @@ const factories: Readonly<Record<string, OutcomePageFactory>> = {
   "adapter.configure": (_intent, outcome) =>
     adapterConfigurationDataPage(
       outcome.data as Parameters<typeof adapterConfigurationDataPage>[0],
+    ),
+  "adapter.install": (_intent, outcome) =>
+    adapterInstallationDataPage(
+      outcome.data as Parameters<typeof adapterInstallationDataPage>[0],
     ),
   "run.list": (_intent, outcome) =>
     runListDataPage(outcome.data as Parameters<typeof runListDataPage>[0]),

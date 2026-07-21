@@ -72,6 +72,10 @@ export class QueryUseCases {
     );
   }
 
+  adapterInstallation(id: string) {
+    return this.dependencies.adapterCatalog.get(id).installation?.();
+  }
+
   resolvedConfiguration() {
     return {
       config: this.dependencies.config.value,

@@ -140,6 +140,10 @@ export class ApplicationDynamicCommandProvider implements DynamicCommandProvider
             context.definition.id === "adapter.configure"
               ? this.dependencies.queries.adapterConfigurationFields(adapter.id)
               : [];
+          const installation =
+            context.definition.id === "adapter.install"
+              ? this.dependencies.queries.adapterInstallation(adapter.id)
+              : undefined;
           return {
             value: adapter.id,
             summary: messageRef(
@@ -161,6 +165,38 @@ export class ApplicationDynamicCommandProvider implements DynamicCommandProvider
                     value: "string",
                     placeholder: "path",
                   })),
+                }
+              : {}),
+            ...(installation
+              ? {
+                  options: [
+                    {
+                      name: "root",
+                      kind: "option" as const,
+                      summary: messageRef("field.adapterInstallRoot"),
+                      value: "string" as const,
+                      placeholder: "path",
+                    },
+                    ...installation.fields.map(
+                      (field): CommandFieldDefinition => ({
+                        name: field.key,
+                        kind: "option",
+                        summary: messageRef(
+                          "field.adapterInstallValue",
+                          { key: field.key },
+                          field.summary,
+                        ),
+                        required: field.required,
+                        value: "string",
+                        placeholder: "value",
+                        ...(field.choices
+                          ? {
+                              enum: field.choices.map((choice) => choice.value),
+                            }
+                          : {}),
+                      }),
+                    ),
+                  ],
                 }
               : {}),
           };

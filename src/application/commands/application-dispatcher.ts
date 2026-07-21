@@ -2,6 +2,7 @@ import { BenchPilotError, type Json } from "../../core.js";
 import type { ConfigurationCommandUseCases } from "../config/command-use-case.js";
 import type { AdapterManagementUseCases } from "../adapters/management-use-case.js";
 import type { AdapterConfigurationUseCases } from "../adapters/configuration-use-case.js";
+import type { AdapterInstallationUseCases } from "../adapters/installation-use-case.js";
 import type { QueryUseCases } from "../queries/use-case.js";
 import type { RuntimeCommandUseCases } from "../runtime/command-use-case.js";
 import type { CommandIntent, CommandOutcome } from "./contracts.js";
@@ -11,6 +12,7 @@ interface ApplicationCommandDispatcherDependencies {
   readonly configuration: ConfigurationCommandUseCases;
   readonly adapterManagement: AdapterManagementUseCases;
   readonly adapterConfiguration: AdapterConfigurationUseCases;
+  readonly adapterInstallation: AdapterInstallationUseCases;
   readonly runtime: RuntimeCommandUseCases;
   readonly queries: QueryUseCases;
   readonly resolvedConfig: { readonly value: Json };
@@ -170,6 +172,23 @@ export const createApplicationCommandDispatcher = (
       )) as unknown as Json,
     ),
   );
+  dispatcher.register("adapter.install", async (intent) => {
+    const root =
+      typeof intent.options.root === "string" ? intent.options.root : undefined;
+    return outcome(
+      intent,
+      "adapter.install",
+      (await dependencies.adapterInstallation.install(
+        String(intent.input.adapter),
+        Object.fromEntries(
+          Object.entries(intent.options).filter(
+            ([key, value]) => key !== "root" && typeof value === "string",
+          ),
+        ) as Json,
+        root,
+      )) as Json,
+    );
+  });
 
   const runtime = async (
     intent: CommandIntent,

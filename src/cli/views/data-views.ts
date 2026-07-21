@@ -521,6 +521,55 @@ export const dataViewDefinitions: readonly DataViewDefinition[] = [
     ],
   },
   {
+    id: "adapter.install",
+    blocks: [
+      {
+        component: "Detail",
+        source: "",
+        title: msg("adapterResult.installation.title"),
+        labelWidth: 16,
+        rows: [
+          {
+            field: "adapter",
+            label: msg("adapterResult.id"),
+            formatter: "string",
+            tone: "command",
+          },
+          {
+            field: "root",
+            label: msg("adapterResult.installation.root"),
+            formatter: "string",
+          },
+          {
+            field: "stability",
+            label: msg("adapterResult.installation.stability"),
+            formatter: "string",
+          },
+          {
+            field: "path",
+            label: msg("configResult.path"),
+            formatter: "string",
+          },
+        ],
+      },
+      {
+        component: "ObjectTree",
+        source: "configuration",
+        title: msg("adapterResult.discovery.config"),
+        empty: msg("adapterResult.discovery.configEmpty"),
+        labelWidth: 18,
+        rows: [
+          {
+            field: "value",
+            label: msg("configResult.value"),
+            formatter: "string",
+            tone: "argument",
+          },
+        ],
+      },
+    ],
+  },
+  {
     id: "doctor",
     blocks: [
       {
