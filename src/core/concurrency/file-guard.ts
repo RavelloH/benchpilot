@@ -13,7 +13,7 @@ export interface GuardRecord {
   hostname: string;
   createdAt: string;
   expiresAt: string;
-  resourceType: "lock-update" | "approval-update";
+  resourceType: "lock-update" | "approval-update" | "session-update";
   resourceId: string;
 }
 

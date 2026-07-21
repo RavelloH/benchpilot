@@ -91,6 +91,27 @@ export {
   type OperationAbortReason,
 } from "./core/operations/abort.js";
 export { PathService } from "./core/paths/path-service.js";
+export { ManagedSessionManager } from "./core/sessions/session-manager.js";
+export { ManagedSessionStore } from "./core/sessions/session-store.js";
+export {
+  ManagedSessionControlServer,
+  managedSessionControlEndpoint,
+  requestManagedSessionControl,
+} from "./core/sessions/session-control.js";
+export type {
+  CreateManagedSessionInput,
+  ManagedSessionControlRecord,
+  ManagedSessionControlRequest,
+  ManagedSessionControlResponse,
+  ManagedSessionFailure,
+  ManagedSessionIdentity,
+  ManagedSessionLaunchPermit,
+  ManagedSessionRecord,
+  ManagedSessionRunningUpdate,
+  ManagedSessionStartClaim,
+  ManagedSessionState,
+} from "./core/sessions/types.js";
+export { MANAGED_SESSION_ID_PATTERN } from "./core/sessions/types.js";
 export { atomicJson, readJson } from "./core/utilities/atomic-json.js";
 export { sha, stable } from "./core/utilities/stable-json.js";
 export {
@@ -135,6 +156,10 @@ export type {
   Capability,
   CapabilityDescriptor,
   DeviceRuntime,
+  ManagedSessionCapabilityKind,
+  ManagedSessionPlan,
+  ManagedSessionProtocol,
+  ManagedSessionProtocolMethod,
   OptionDefinition,
   Safety,
 } from "./core/capabilities/types.js";

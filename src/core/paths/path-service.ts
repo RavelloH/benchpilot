@@ -26,6 +26,14 @@ export class PathService {
       "locks",
     );
   }
+  /**
+   * Process-independent index for long-lived device sessions.  It deliberately
+   * lives beside locks rather than under a project because another project must
+   * still be able to locate and stop a session that owns the same device.
+   */
+  managedSessionsRoot() {
+    return path.join(path.dirname(this.runtimeRoot()), "sessions");
+  }
   lockGuardsRoot() {
     return path.join(path.dirname(this.runtimeRoot()), "guards");
   }

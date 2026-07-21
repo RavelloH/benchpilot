@@ -22,6 +22,7 @@ import { bundleSha256 } from "../dist/adapters/contract/bundle.js";
 import { runCases } from "../dist/adapters/compiler/case-runner.js";
 import { loadAdapter } from "../dist/adapters/compiler/loader.js";
 import { validateSemantics } from "../dist/adapters/compiler/semantic-validator.js";
+import { createDeclarativeAdapter } from "../dist/adapters/runtime/declarative-adapter.js";
 
 const template = join(process.cwd(), "src", "adapters", "_template");
 const complete = join(
@@ -160,6 +161,37 @@ test("adapter sessions declare all managed session capability contracts", async 
     assert.equal(
       result.bundle.platforms.windows.sessions.monitor.port,
       "${device.port}",
+    );
+    const adapter = createDeclarativeAdapter({
+      bundle: result.bundle,
+      platform: "windows",
+      rules: result.bundle.platforms.windows,
+    });
+    const device = await adapter.createDevice(
+      "fixture",
+      { port: "COM8", serial: "fixture-serial" },
+      { adapterConfig: {}, paths: {} },
+    );
+    const plan = device.resolveManagedSession("request", {
+      projectRoot: "C:/work/project",
+    });
+    assert.deepEqual(
+      {
+        capabilityId: plan?.capabilityId,
+        kind: plan?.kind,
+        port: plan?.port,
+        baud: plan?.baud,
+        protocol: plan?.protocols[0]?.id,
+        method: plan?.protocols[0]?.methods[0]?.id,
+      },
+      {
+        capabilityId: "request",
+        kind: "request",
+        port: "COM8",
+        baud: 115200,
+        protocol: "control",
+        method: "ping",
+      },
     );
   } finally {
     await rm(root, { recursive: true, force: true });

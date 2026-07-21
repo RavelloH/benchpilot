@@ -1,7 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFile, spawn } from "node:child_process";
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -23,11 +30,15 @@ import {
   lockIdentity,
   isSupportedNodeVersion,
   LockManager,
+  ManagedSessionControlServer,
+  ManagedSessionManager,
+  managedSessionControlEndpoint,
   objectSchema,
   OperationRunner,
   OperationSession,
   redactResolvedConfig,
   readJson,
+  requestManagedSessionControl,
   runProcess,
   startProcess,
   setKey,
@@ -149,6 +160,130 @@ test("project state and runtime locks are isolated", () => {
     paths.runtimeRoot(),
     path.join(root, "runtime", "benchpilot", "locks"),
   );
+});
+
+test("managed sessions keep global public state separate from control tokens", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "benchpilot-session-"));
+  let controlServer;
+  try {
+    const paths = new PathService(
+      { TEMP: path.join(root, "runtime") },
+      "win32",
+      path.join(root, "home"),
+      path.join(root, "temp"),
+    );
+    const sessions = new ManagedSessionManager(paths);
+    const { record, permit } = await sessions.create({
+      projectRoot: path.join(root, "project-a"),
+      capabilityId: "run",
+      identity: {
+        adapter: "fixture",
+        instance: "board-a",
+        physicalId: "COM8",
+      },
+    });
+    assert.equal(record.state, "creating");
+    assert.equal(record.revision, 0);
+    assert.equal(
+      sessions.store.root(),
+      path.join(root, "runtime", "benchpilot", "sessions"),
+    );
+    const publicState = await readFile(
+      sessions.store.publicFile(record.id),
+      "utf8",
+    );
+    assert.doesNotMatch(publicState, new RegExp(permit.controlToken));
+    assert.doesNotMatch(publicState, new RegExp(permit.handshakeToken));
+    assert.equal(JSON.parse(publicState).controlToken, undefined);
+    assert.equal(JSON.parse(publicState).handshakeToken, undefined);
+    await assert.rejects(
+      sessions.claimStart({
+        sessionId: record.id,
+        handshakeToken: "invalid",
+        expectedRevision: 0,
+        ownerPid: process.pid,
+      }),
+      (error) =>
+        error instanceof BenchPilotError &&
+        error.kind === "MANAGED_SESSION_AUTH_FAILED",
+    );
+    const starting = await sessions.claimStart({
+      sessionId: record.id,
+      handshakeToken: permit.handshakeToken,
+      expectedRevision: 0,
+      ownerPid: process.pid,
+    });
+    const endpoint = managedSessionControlEndpoint(paths, record.id);
+    controlServer = new ManagedSessionControlServer({
+      endpoint,
+      async handle(request) {
+        assert.equal(request.sessionId, record.id);
+        assert.equal(request.type, "stop");
+        const session = await sessions.requestStop(
+          request.sessionId,
+          request.controlToken,
+        );
+        return { session };
+      },
+    });
+    await controlServer.listen();
+    const running = await sessions.markRunning({
+      sessionId: record.id,
+      controlToken: permit.controlToken,
+      expectedRevision: starting.revision,
+      runId: "20260721T120000.000Z-device-run-abcdef",
+      lockId: "fixture-device-lock",
+      controlEndpoint: endpoint,
+    });
+    assert.equal(running.state, "running");
+    assert.equal(running.revision, 2);
+    await assert.rejects(
+      sessions.markRunning({
+        sessionId: record.id,
+        controlToken: permit.controlToken,
+        expectedRevision: 1,
+        runId: "another-run",
+        lockId: "another-lock",
+      }),
+      (error) =>
+        error instanceof BenchPilotError &&
+        error.kind === "MANAGED_SESSION_REVISION_CONFLICT",
+    );
+    const rejectedStop = await requestManagedSessionControl(endpoint, {
+      schema: "benchpilot.managed-session-control-request",
+      version: 1,
+      type: "stop",
+      sessionId: record.id,
+      controlToken: "invalid",
+    });
+    assert.equal(rejectedStop.ok, false);
+    assert.equal(rejectedStop.error?.kind, "MANAGED_SESSION_AUTH_FAILED");
+    const remoteStop = await requestManagedSessionControl(endpoint, {
+      schema: "benchpilot.managed-session-control-request",
+      version: 1,
+      type: "stop",
+      sessionId: record.id,
+      controlToken: permit.controlToken,
+    });
+    assert.equal(remoteStop.ok, true);
+    const stopping = await sessions.get(record.id);
+    const repeatedStop = await sessions.requestStop(
+      record.id,
+      permit.controlToken,
+    );
+    assert.equal(stopping?.state, "stopping");
+    assert.equal(repeatedStop.revision, stopping.revision);
+    const stopped = await sessions.markStopped(
+      record.id,
+      permit.controlToken,
+      stopping.revision,
+    );
+    assert.equal(stopped.state, "stopped");
+    assert.equal((await sessions.list())[0]?.id, record.id);
+  } finally {
+    await controlServer?.close();
+    await rm(root, { recursive: true, force: true });
+  }
 });
 
 test("BENCHPILOT_ environment configuration preserves the first key segment", async () => {

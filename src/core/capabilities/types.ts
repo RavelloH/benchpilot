@@ -62,6 +62,45 @@ export interface CapabilityDescriptor {
   availability: "available";
 }
 
+export type ManagedSessionCapabilityKind =
+  "start" | "logs" | "stop" | "console" | "send" | "request";
+
+export interface ManagedSessionProtocolMethod {
+  id: string;
+  requestSchema: RuntimeSchema<Json>;
+  responseSchema: RuntimeSchema<Json>;
+  timeoutMs: number;
+  safety: Safety["mode"];
+}
+
+export interface ManagedSessionProtocol {
+  id: string;
+  framing: "json-lines" | "length-prefixed" | "cbor";
+  maxRequestBytes: number;
+  telemetrySchema?: RuntimeSchema<Json>;
+  methods: readonly ManagedSessionProtocolMethod[];
+}
+
+/** Fully rendered adapter declaration consumed by the future session host. */
+export interface ManagedSessionPlan {
+  capabilityId: string;
+  kind: ManagedSessionCapabilityKind;
+  sessionId: string;
+  port: string;
+  baud: number;
+  encoding: "utf8" | "binary";
+  lineFraming: "line" | "raw";
+  openLinePolicy: {
+    dtr: "preserve" | "off" | "on";
+    rts: "preserve" | "off" | "on";
+  };
+  logRecordLimit: number;
+  spoolLimitBytes: number;
+  rawCaptureLimitBytes: number;
+  writeLimitBytes: number;
+  protocols: readonly ManagedSessionProtocol[];
+}
+
 export interface DeviceRuntime {
   identity: {
     instance: string;
@@ -71,4 +110,8 @@ export interface DeviceRuntime {
     stable?: boolean;
   };
   capabilities(): Capability[];
+  resolveManagedSession?(
+    capabilityId: string,
+    context: { projectRoot: string },
+  ): ManagedSessionPlan | undefined;
 }

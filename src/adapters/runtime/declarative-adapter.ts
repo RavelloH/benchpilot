@@ -10,8 +10,11 @@ import {
   type Capability,
   type DeviceRuntime,
   type Json,
+  type ManagedSessionCapabilityKind,
+  type ManagedSessionPlan,
   type OperationContext,
   type RuntimeSchema,
+  type Safety,
   setKey,
 } from "../../core.js";
 import { DeclarativeCapabilityRunner } from "./capability-runner.js";
@@ -23,7 +26,12 @@ import {
   environmentFor,
 } from "./environments/resolver.js";
 import { AdapterRuntimeError } from "./errors.js";
-import { lookup, object, type RuleObject } from "./rules/template.js";
+import {
+  lookup,
+  object,
+  renderRequiredTemplate,
+  type RuleObject,
+} from "./rules/template.js";
 import type { RuntimeAdapter } from "./types.js";
 import { ToolResolver } from "./tools/resolver.js";
 import { inspectSchemaProperties } from "./validation/schema-inspector.js";
@@ -394,6 +402,103 @@ class DeclarativeDevice implements DeviceRuntime {
         ];
       },
     );
+  }
+
+  resolveManagedSession(
+    capabilityId: string,
+    context: { projectRoot: string },
+  ): ManagedSessionPlan | undefined {
+    const capability = object(
+      object(this.adapter.rules.capabilities)[capabilityId],
+    );
+    const match = /^session:(start|logs|stop|console|send|request)$/.exec(
+      String(capability.handler ?? ""),
+    );
+    if (capability.enabled !== true || !match) return undefined;
+    const sessionId = String(capability.session ?? "");
+    const session = object(object(this.adapter.rules.sessions)[sessionId]);
+    if (!sessionId || !Object.keys(session).length)
+      throw new AdapterRuntimeError(
+        "ADAPTER_BUNDLE_INVALID",
+        `Session declaration is unavailable for capability ${capabilityId}.`,
+      );
+    const renderContext: RuleObject = {
+      adapter: { id: this.adapter.bundle.id },
+      platform: this.adapter.platform,
+      config: this.adapterConfig,
+      device: this.device,
+      project: { root: context.projectRoot },
+      home: process.env.HOME ?? process.env.USERPROFILE ?? "",
+      env: process.env,
+    };
+    const number = (value: unknown, field: string) => {
+      const parsed = Number(
+        renderRequiredTemplate(value, renderContext, field),
+      );
+      if (!Number.isSafeInteger(parsed) || parsed <= 0)
+        throw new AdapterRuntimeError(
+          "ADAPTER_CONFIG_INVALID",
+          `Session ${sessionId} has an invalid ${field} value.`,
+        );
+      return parsed;
+    };
+    const openLinePolicy = object(session.open_line_policy);
+    const validator = new AdapterDataValidator(this.adapter.bundle);
+    const schema = (kind: "input" | "output", definition: string) =>
+      validatorSchema(validator, kind, capabilityId, definition);
+    const protocols = Object.entries(object(session.protocols)).map(
+      ([id, raw]) => {
+        const profile = object(raw);
+        return {
+          id,
+          framing: String(profile.framing) as
+            "json-lines" | "length-prefixed" | "cbor",
+          maxRequestBytes: number(
+            profile.max_request_bytes,
+            "max_request_bytes",
+          ),
+          ...(typeof profile.telemetry_schema === "string"
+            ? { telemetrySchema: schema("output", profile.telemetry_schema) }
+            : {}),
+          methods: Object.entries(object(profile.methods)).map(
+            ([methodId, methodRaw]) => {
+              const method = object(methodRaw);
+              return {
+                id: methodId,
+                requestSchema: schema("input", String(method.request_schema)),
+                responseSchema: schema(
+                  "output",
+                  String(method.response_schema),
+                ),
+                timeoutMs: duration(String(method.timeout)),
+                safety: String(method.safety) as Safety["mode"],
+              };
+            },
+          ),
+        };
+      },
+    );
+    return {
+      capabilityId,
+      kind: match[1] as ManagedSessionCapabilityKind,
+      sessionId,
+      port: String(renderRequiredTemplate(session.port, renderContext, "port")),
+      baud: number(session.baud, "baud"),
+      encoding: String(session.encoding) as "utf8" | "binary",
+      lineFraming: String(session.line_framing) as "line" | "raw",
+      openLinePolicy: {
+        dtr: String(openLinePolicy.dtr) as "preserve" | "off" | "on",
+        rts: String(openLinePolicy.rts) as "preserve" | "off" | "on",
+      },
+      logRecordLimit: number(session.log_record_limit, "log_record_limit"),
+      spoolLimitBytes: number(session.spool_limit_bytes, "spool_limit_bytes"),
+      rawCaptureLimitBytes: number(
+        session.raw_capture_limit_bytes,
+        "raw_capture_limit_bytes",
+      ),
+      writeLimitBytes: number(session.write_limit_bytes, "write_limit_bytes"),
+      protocols,
+    };
   }
 }
 
