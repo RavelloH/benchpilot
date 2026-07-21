@@ -78,6 +78,7 @@
     "ajv-formats": "^3.0.1",
     "intl-messageformat": "^11.2.12",
     "rlog-js": "^3.0.0",
+    "serialport": "^13.0.0",
     "string-width": "^8.2.2",
     "strip-ansi": "^7.2.0",
     "wrap-ansi": "^10.0.0"

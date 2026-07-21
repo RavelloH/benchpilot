@@ -47,9 +47,15 @@ const parseRequest = (
   const request = value as Partial<ManagedSessionControlRequest>;
   return request.schema === "benchpilot.managed-session-control-request" &&
     request.version === 1 &&
-    request.type === "stop" &&
     typeof request.sessionId === "string" &&
-    typeof request.controlToken === "string"
+    typeof request.controlToken === "string" &&
+    (request.type === "stop" ||
+      request.type === "acquire-writer" ||
+      ((request.type === "write" ||
+        request.type === "renew-writer" ||
+        request.type === "release-writer") &&
+        typeof request.leaseId === "string" &&
+        (request.type !== "write" || typeof request.dataBase64 === "string")))
     ? (request as ManagedSessionControlRequest)
     : undefined;
 };

@@ -130,6 +130,80 @@ description = "Verify the configured serial target is reachable and return a com
 [capability.status.safety]
 confirm = "Confirm the device connection safety requirement."
 effect = "Connects to the target and may toggle DTR/RTS while esptool reads its status."
+[capability.run]
+summary = "Start a managed serial session."
+description = "Open the configured ESP serial port and retain its logs in a managed session."
+[capability.run.safety]
+confirm = "Confirm the managed serial session safety requirement."
+effect = "Opens a managed serial session; opening a USB serial port can affect DTR/RTS and reset the target."
+[capability.stop]
+summary = "Stop the managed serial session."
+description = "Stop the active managed serial session and release its device lock."
+[capability.logs]
+summary = "Read managed serial logs."
+description = "Read bounded records retained by a managed serial session without reopening the device port."
+[capability.send]
+summary = "Send raw bytes through a managed serial session."
+description = "Write one bounded raw message to a managed serial session and return a transport acknowledgement."
+[capability.send.safety]
+confirm = "Confirm the managed serial write safety requirement."
+effect = "Writes raw bytes to a managed serial session. The target firmware may interpret the data as a physical control command."
+[capability.console]
+summary = "Attach an interactive serial console."
+description = "Attach this human terminal to a managed serial session without stopping it."
+[capability.console.safety]
+confirm = "Confirm the interactive serial console safety requirement."
+effect = "Attaches terminal input to a managed serial session; target firmware may interpret typed bytes as control commands."
+[capability.run.option.baud]
+summary = "Override the serial baud rate for this session."
+[capability.run.option.encoding]
+summary = "Record session data as UTF-8 text or binary records."
+[capability.run.option.line_framing]
+summary = "Store incoming serial data by line or raw chunk."
+[capability.run.option.dtr]
+summary = "Initial DTR policy when opening the serial port."
+[capability.run.option.rts]
+summary = "Initial RTS policy when opening the serial port."
+[capability.stop.option.session_id]
+summary = "Managed session identifier; defaults to this device's active session."
+[capability.console.option.session_id]
+summary = "Managed session identifier; defaults to this device's active session."
+[capability.logs.option.session_id]
+summary = "Managed session identifier; defaults to this device's latest session."
+[capability.logs.option.tail]
+summary = "Maximum number of retained log records to return."
+[capability.logs.option.cursor]
+summary = "Opaque cursor after which retained records are returned."
+[capability.logs.option.follow]
+summary = "Keep reading newly appended session records until detached."
+[capability.send.option.session_id]
+summary = "Managed session identifier that owns the serial port."
+[capability.send.option.text]
+summary = "UTF-8 payload to write; it is not echoed in command output."
+[capability.send.option.hex]
+summary = "Hexadecimal payload to write; it is not echoed in command output."
+[capability.send.option.base64]
+summary = "Base64 payload to write; it is not echoed in command output."
+[capability.send.option.framing]
+summary = "Append a line terminator or write the payload unchanged."
+
+[view.session]
+[view.session.run]
+title = "Managed serial session"
+[view.session.stop]
+title = "Managed session stop"
+[view.session.logs]
+title = "Serial session logs"
+[view.session.send]
+title = "Serial write"
+[view.session.console]
+completed = "Console detached."
+[view.session.field]
+id = "Session"
+status = "Status"
+run = "Run"
+bytes = "Written"
+framing = "Framing"
 
 [progress.info]
 detect = "Detect esptool"

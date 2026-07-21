@@ -37,6 +37,139 @@
           "default": false
         }
       }
+    },
+    "session-run": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "baud": {
+          "type": "integer",
+          "minimum": 1200,
+          "maximum": 2000000,
+          "x-benchpilot-cli": { "flag": "baud" }
+        },
+        "encoding": {
+          "enum": ["utf8", "binary"],
+          "x-benchpilot-cli": { "flag": "encoding" }
+        },
+        "line_framing": {
+          "enum": ["line", "raw"],
+          "x-benchpilot-cli": { "flag": "line-framing" }
+        },
+        "dtr": {
+          "enum": ["preserve", "off", "on"],
+          "x-benchpilot-cli": { "flag": "dtr" }
+        },
+        "rts": {
+          "enum": ["preserve", "off", "on"],
+          "x-benchpilot-cli": { "flag": "rts" }
+        }
+      }
+    },
+    "session-stop": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "session_id": {
+          "type": "string",
+          "pattern": "^session-[a-zA-Z0-9_-]+$",
+          "x-benchpilot-cli": { "flag": "session-id" }
+        }
+      }
+    },
+    "session-console": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "session_id": {
+          "type": "string",
+          "pattern": "^session-[a-zA-Z0-9_-]+$",
+          "x-benchpilot-cli": { "flag": "session-id" }
+        }
+      }
+    },
+    "session-logs": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "session_id": {
+          "type": "string",
+          "pattern": "^session-[a-zA-Z0-9_-]+$",
+          "x-benchpilot-cli": { "flag": "session-id" }
+        },
+        "tail": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000,
+          "x-benchpilot-cli": { "flag": "tail" }
+        },
+        "cursor": {
+          "type": "string",
+          "pattern": "^1:[0-9]+$",
+          "x-benchpilot-cli": { "flag": "cursor" }
+        },
+        "follow": {
+          "type": "boolean",
+          "x-benchpilot-cli": { "flag": "follow" }
+        }
+      }
+    },
+    "session-send": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["session_id"],
+      "properties": {
+        "session_id": {
+          "type": "string",
+          "pattern": "^session-[a-zA-Z0-9_-]+$",
+          "x-benchpilot-cli": { "flag": "session-id" }
+        },
+        "text": {
+          "type": "string",
+          "maxLength": 4096,
+          "x-benchpilot-cli": { "flag": "text", "secret": true }
+        },
+        "hex": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]+$",
+          "maxLength": 8192,
+          "x-benchpilot-cli": { "flag": "hex", "secret": true }
+        },
+        "base64": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9+/]+={0,2}$",
+          "maxLength": 5464,
+          "x-benchpilot-cli": { "flag": "base64", "secret": true }
+        },
+        "framing": {
+          "enum": ["line", "raw"],
+          "x-benchpilot-cli": { "flag": "framing" }
+        }
+      },
+      "allOf": [
+        {
+          "oneOf": [
+            {
+              "required": ["text"],
+              "not": {
+                "anyOf": [{ "required": ["hex"] }, { "required": ["base64"] }]
+              }
+            },
+            {
+              "required": ["hex"],
+              "not": {
+                "anyOf": [{ "required": ["text"] }, { "required": ["base64"] }]
+              }
+            },
+            {
+              "required": ["base64"],
+              "not": {
+                "anyOf": [{ "required": ["text"] }, { "required": ["hex"] }]
+              }
+            }
+          ]
+        }
+      ]
     }
   }
 }

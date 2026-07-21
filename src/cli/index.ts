@@ -61,6 +61,7 @@ import { commandContractError } from "./commands/command-errors.js";
 import { packageVersion } from "../version.js";
 import { localizeAdapterCapabilities } from "./i18n/adapter-messages.js";
 import { RLogBusinessLogFactory } from "../infrastructure/rlog-business-log.js";
+import { attachSerialSessionConsole } from "../infrastructure/serial-session-console.js";
 import { displayWidth, padDisplay } from "./terminal/text.js";
 import { detectTerminalCapabilities } from "./terminal/capabilities.js";
 import { StreamTerminalSurface } from "./terminal/surface.js";
@@ -1585,6 +1586,72 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
         locale,
         color: colorEnabled(flags, stdout.isTTY),
         columns: stdout.columns ?? 80,
+        ...(!flags.agent &&
+        !flags.json &&
+        !flags.jsonl &&
+        !agent &&
+        stdin.isTTY &&
+        stdout.isTTY
+          ? {
+              console: async ({ device, capability, sessionId }) => {
+                const session = await devices.managedSession(
+                  device,
+                  capability,
+                );
+                if (session.plan.kind !== "console")
+                  fail(
+                    "UNSUPPORTED_CAPABILITY",
+                    3,
+                    `Device ${device} does not support interactive console.`,
+                  );
+                const controller = new AbortController();
+                const onSigint = () => controller.abort();
+                const wasRaw = stdin.isRaw === true;
+                process.once("SIGINT", onSigint);
+                stdin.setRawMode?.(true);
+                try {
+                  await attachSerialSessionConsole(scope.managedSessions, {
+                    identity: session.identity,
+                    ...(sessionId ? { sessionId } : {}),
+                    stdin,
+                    stdout,
+                    signal: controller.signal,
+                  });
+                } finally {
+                  process.removeListener("SIGINT", onSigint);
+                  stdin.setRawMode?.(wasRaw);
+                }
+              },
+            }
+          : {}),
+        followLogs: ({
+          device,
+          capability,
+          sessionId,
+          tail,
+          cursor,
+          signal,
+        }) => {
+          const result = devices.managedSession(device, capability);
+          return {
+            async *[Symbol.asyncIterator]() {
+              const session = await result;
+              if (session.plan.kind !== "logs")
+                fail(
+                  "UNSUPPORTED_CAPABILITY",
+                  3,
+                  `Device ${device} does not support managed session log follow.`,
+                );
+              yield* scope.managedSessions.follow({
+                identity: session.identity,
+                ...(sessionId ? { sessionId } : {}),
+                ...(tail === undefined ? {} : { tail }),
+                ...(cursor ? { cursor } : {}),
+                signal,
+              });
+            },
+          };
+        },
       })
     )
       return;

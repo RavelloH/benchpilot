@@ -304,13 +304,18 @@ test("ESP-IDF supplies a declarative View for every enabled capability", async (
     "build",
     "capture",
     "clean",
+    "console",
     "deploy",
     "flash",
     "fullclean",
     "info",
+    "logs",
     "reset",
+    "run",
+    "send",
     "size",
     "status",
+    "stop",
   ]);
 });
 

@@ -63,6 +63,7 @@ import { CommandArgvParser } from "./commands/parser.js";
 import { HelpDocumentService } from "./commands/help.js";
 import { CommandInteractionService } from "./commands/interaction.js";
 import { createApplicationCommandDispatcher } from "./commands/application-dispatcher.js";
+import { SerialSessionLauncher } from "../infrastructure/serial-session-launcher.js";
 
 export interface ApplicationRequest {
   cwd: string;
@@ -85,6 +86,7 @@ export interface ApplicationRequestScope {
   project: { root: string; config: string } | undefined;
   config: ResolvedConfig;
   runner: OperationRunner;
+  managedSessions: SerialSessionLauncher;
   runtime: RuntimeUseCases;
   runtimeCommands: RuntimeCommandUseCases;
   queries: QueryUseCases;
@@ -137,6 +139,7 @@ export async function openApplicationRequest(
     approvals: (projectRoot: string) => new ApprovalManager(paths, projectRoot),
     runs: (projectRoot: string) => new RunManager(paths, projectRoot),
   };
+  const managedSessions = new SerialSessionLauncher(paths);
   const runner = new OperationRunner({
     paths,
     registry: application.registry,
@@ -145,6 +148,7 @@ export async function openApplicationRequest(
     defaults: request.operation,
     reporter: request.reporter,
     businessLogs: request.businessLogs,
+    managedSessions,
     lifecycle,
   });
   const runtime = createRuntimeUseCases({ paths, project, config, lifecycle });
@@ -162,6 +166,7 @@ export async function openApplicationRequest(
     runner,
     config,
     paths,
+    project,
   });
   const systems = createSystemUseCases({ runner, config, devices });
   const configuration = createConfigurationUseCases({ paths, project });
@@ -238,6 +243,7 @@ export async function openApplicationRequest(
     project,
     config,
     runner,
+    managedSessions,
     runtime,
     runtimeCommands,
     queries,

@@ -12,10 +12,11 @@ import {
 
 const publicFileName = "session.json";
 const controlFileName = "control.json";
+const launchFileName = "launch.json";
 
 /** Persists the public index and its token-bearing private counterpart. */
 export class ManagedSessionStore {
-  constructor(private readonly paths: PathService) {}
+  constructor(readonly paths: PathService) {}
 
   root() {
     return this.paths.managedSessionsRoot();
@@ -32,6 +33,10 @@ export class ManagedSessionStore {
 
   controlFile(sessionId: string) {
     return path.join(this.directory(sessionId), controlFileName);
+  }
+
+  launchFile(sessionId: string) {
+    return path.join(this.directory(sessionId), launchFileName);
   }
 
   guardFile(sessionId: string) {
@@ -92,6 +97,22 @@ export class ManagedSessionStore {
 
   async write(record: ManagedSessionRecord) {
     await atomicJson(this.publicFile(record.id), record);
+  }
+
+  async writeLaunch(sessionId: string, launch: unknown) {
+    await atomicJson(this.launchFile(sessionId), launch);
+  }
+
+  async readLaunch<T>(sessionId: string): Promise<T | undefined> {
+    return readJson<T>(this.launchFile(sessionId));
+  }
+
+  async removeLaunch(sessionId: string) {
+    await fs
+      .unlink(this.launchFile(sessionId))
+      .catch((error: NodeJS.ErrnoException) => {
+        if (error.code !== "ENOENT") throw error;
+      });
   }
 
   async list(): Promise<ManagedSessionRecord[]> {

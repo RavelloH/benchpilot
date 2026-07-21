@@ -292,6 +292,7 @@ const capabilityFor = (
     defaultTimeoutMs: duration(value.timeout, 10_000),
     lockMode: value.lock === "device" ? "exclusive" : "none",
     createsRun: value.creates_run === true,
+    ttyOnly: value.tty_only === true,
     safety: {
       mode:
         safety.mode === "caution" ||

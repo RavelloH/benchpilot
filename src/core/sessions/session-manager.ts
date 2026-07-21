@@ -1,4 +1,5 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
+import os from "node:os";
 import { BenchPilotError } from "../errors/benchpilot-error.js";
 import { withFileGuard } from "../concurrency/file-guard.js";
 import { PathService } from "../paths/path-service.js";
@@ -105,6 +106,15 @@ export class ManagedSessionManager {
     return this.store.list();
   }
 
+  async controlToken(sessionId: string) {
+    return (await this.requireControl(sessionId)).controlToken;
+  }
+
+  async authorizeControl(sessionId: string, controlToken: string) {
+    const control = await this.requireControl(sessionId);
+    this.requireToken(control.controlToken, controlToken, "control");
+  }
+
   async claimStart(
     input: ManagedSessionStartClaim,
   ): Promise<ManagedSessionRecord> {
@@ -115,7 +125,10 @@ export class ManagedSessionManager {
         "handshake",
       );
       this.requireRevision(record, input.expectedRevision);
-      return this.transition(record, "starting", { ownerPid: input.ownerPid });
+      return this.transition(record, "starting", {
+        ownerPid: input.ownerPid,
+        ownerHostname: os.hostname(),
+      });
     });
   }
 

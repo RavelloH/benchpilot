@@ -406,6 +406,183 @@ export const coreErrorCatalog = {
     "error.internal",
     "error.reason.operationSessionStateInvalid",
   ),
+  INVALID_MANAGED_SESSION: defineError(
+    2,
+    "error.usage",
+    "error.reason.invalidManagedSession",
+  ),
+  INVALID_MANAGED_SESSION_ID: defineError(
+    2,
+    "error.usage",
+    "error.reason.invalidManagedSessionId",
+  ),
+  MANAGED_SESSION_ID_REQUIRED: defineError(
+    2,
+    "error.usage",
+    "error.reason.managedSessionIdRequired",
+  ),
+  MANAGED_SESSION_LOG_CURSOR_INVALID: defineError(
+    2,
+    "error.usage",
+    "error.reason.managedSessionLogCursorInvalid",
+  ),
+  MANAGED_SESSION_LOG_TAIL_INVALID: defineError(
+    2,
+    "error.usage",
+    "error.reason.managedSessionLogTailInvalid",
+  ),
+  MANAGED_SESSION_WRITE_INVALID: defineError(
+    2,
+    "error.usage",
+    "error.reason.managedSessionWriteInvalid",
+  ),
+  MANAGED_SESSION_FOLLOW_JSON_UNSUPPORTED: defineError(
+    2,
+    "error.usage",
+    "error.reason.managedSessionFollowJsonUnsupported",
+  ),
+  MANAGED_SESSION_NOT_FOUND: defineError(
+    3,
+    "error.operation",
+    "error.reason.managedSessionNotFound",
+  ),
+  MANAGED_SESSION_NOT_STARTED: defineError(
+    4,
+    "error.operation",
+    "error.reason.managedSessionNotStarted",
+    true,
+  ),
+  MANAGED_SESSION_RUN_UNAVAILABLE: defineError(
+    4,
+    "error.operation",
+    "error.reason.managedSessionRunUnavailable",
+    true,
+  ),
+  MANAGED_SESSION_TERMINAL: defineError(
+    4,
+    "error.operation",
+    "error.reason.managedSessionTerminal",
+  ),
+  MANAGED_SESSION_AUTH_FAILED: defineError(
+    4,
+    "error.operation",
+    "error.reason.managedSessionAuthFailed",
+  ),
+  MANAGED_SESSION_REVISION_CONFLICT: defineError(
+    4,
+    "error.operation",
+    "error.reason.managedSessionRevisionConflict",
+    true,
+  ),
+  MANAGED_SESSION_BUSY: defineError(
+    4,
+    "error.operation",
+    "error.reason.managedSessionBusy",
+    true,
+  ),
+  MANAGED_SESSION_WRITER_BUSY: defineError(
+    4,
+    "error.operation",
+    "error.reason.managedSessionWriterBusy",
+    true,
+  ),
+  MANAGED_SESSION_WRITER_LEASE_INVALID: defineError(
+    4,
+    "error.operation",
+    "error.reason.managedSessionWriterLeaseInvalid",
+    true,
+  ),
+  SESSION_CONTROL_UNAVAILABLE: defineError(
+    4,
+    "error.operation",
+    "error.reason.sessionControlUnavailable",
+    true,
+  ),
+  SESSION_CONTROL_SESSION_MISMATCH: defineError(
+    4,
+    "error.operation",
+    "error.reason.sessionControlSessionMismatch",
+  ),
+  MANAGED_SESSION_CORRUPT: defineError(
+    5,
+    "error.internal",
+    "error.reason.managedSessionCorrupt",
+  ),
+  MANAGED_SESSION_STATE_INVALID: defineError(
+    5,
+    "error.internal",
+    "error.reason.managedSessionStateInvalid",
+  ),
+  MANAGED_SESSION_LOG_WRITE_FAILED: defineError(
+    5,
+    "error.operation",
+    "error.reason.managedSessionLogWriteFailed",
+  ),
+  MANAGED_SESSION_LOG_NOT_OPEN: defineError(
+    5,
+    "error.internal",
+    "error.reason.managedSessionLogNotOpen",
+  ),
+  MANAGED_SESSION_RAW_CAPTURE_LIMIT: defineError(
+    5,
+    "error.operation",
+    "error.reason.managedSessionRawCaptureLimit",
+  ),
+  MANAGED_SESSION_LOG_RECORD_LIMIT: defineError(
+    5,
+    "error.operation",
+    "error.reason.managedSessionLogRecordLimit",
+  ),
+  MANAGED_SESSION_LOG_SPOOL_LIMIT: defineError(
+    5,
+    "error.operation",
+    "error.reason.managedSessionLogSpoolLimit",
+  ),
+  MANAGED_SESSION_LOG_CORRUPT: defineError(
+    5,
+    "error.internal",
+    "error.reason.managedSessionLogCorrupt",
+  ),
+  MANAGED_SESSION_TRANSPORT_CLOSED: defineError(
+    5,
+    "error.operation",
+    "error.reason.managedSessionTransportClosed",
+  ),
+  MANAGED_SESSION_HOST_FAILED: defineError(
+    5,
+    "error.operation",
+    "error.reason.managedSessionHostFailed",
+  ),
+  MANAGED_SESSION_RUNTIME_UNAVAILABLE: defineError(
+    5,
+    "error.internal",
+    "error.reason.managedSessionRuntimeUnavailable",
+  ),
+  MANAGED_SESSION_CAPABILITY_NOT_READY: defineError(
+    5,
+    "error.internal",
+    "error.reason.managedSessionCapabilityNotReady",
+  ),
+  MANAGED_SESSION_FOLLOW_UNAVAILABLE: defineError(
+    5,
+    "error.internal",
+    "error.reason.managedSessionFollowUnavailable",
+  ),
+  MANAGED_SESSION_START_FAILED: defineError(
+    5,
+    "error.operation",
+    "error.reason.managedSessionStartFailed",
+  ),
+  SESSION_CONTROL_PROTOCOL: defineError(
+    5,
+    "error.internal",
+    "error.reason.sessionControlProtocol",
+  ),
+  MANAGED_SESSION_HOST_ABORTED: defineError(
+    6,
+    "error.operation",
+    "error.reason.managedSessionHostAborted",
+  ),
   FILE_GUARD_BUSY: defineError(
     4,
     "error.internal",

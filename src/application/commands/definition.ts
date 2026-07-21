@@ -129,6 +129,7 @@ export interface CommandOperationDescriptor {
   readonly lockMode?: "none" | "exclusive";
   readonly safety?: Safety;
   readonly createsRun?: boolean;
+  readonly ttyOnly?: boolean;
 }
 
 export interface CommandDefinition {

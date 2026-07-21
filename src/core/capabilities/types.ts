@@ -34,6 +34,7 @@ export interface Capability {
   defaultTimeoutMs: number;
   lockMode: "none" | "exclusive";
   createsRun: boolean;
+  ttyOnly?: boolean;
   safety: Safety;
   execute(context: OperationContext, input: Json): Promise<Json>;
 }
@@ -58,6 +59,7 @@ export interface CapabilityDescriptor {
   defaultTimeoutMs: number;
   lockMode: "none" | "exclusive";
   createsRun: boolean;
+  ttyOnly?: boolean;
   safety: Safety;
   availability: "available";
 }

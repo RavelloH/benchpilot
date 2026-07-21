@@ -12,6 +12,8 @@ import {
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+import { SerialPortMock } from "serialport";
+import { SerialPortSessionTransport } from "../dist/infrastructure/serialport-session-transport.js";
 import {
   AdapterRegistry,
   acquireFileGuard,
@@ -31,7 +33,10 @@ import {
   isSupportedNodeVersion,
   LockManager,
   ManagedSessionControlServer,
+  ManagedSessionHost,
+  ManagedSessionLogSpool,
   ManagedSessionManager,
+  ManagedSessionReconciler,
   managedSessionControlEndpoint,
   objectSchema,
   OperationRunner,
@@ -282,6 +287,242 @@ test("managed sessions keep global public state separate from control tokens", a
     assert.equal((await sessions.list())[0]?.id, record.id);
   } finally {
     await controlServer?.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("managed session host owns the Run and lock until authenticated stop", async () => {
+  const root = await mkdtemp(
+    path.join(os.tmpdir(), "benchpilot-session-host-"),
+  );
+  try {
+    const paths = new PathService(
+      { TEMP: path.join(root, "runtime") },
+      "win32",
+      path.join(root, "home"),
+      path.join(root, "temp"),
+    );
+    const sessions = new ManagedSessionManager(paths);
+    const { permit } = await sessions.create({
+      projectRoot: root,
+      capabilityId: "run",
+      identity: {
+        adapter: "fixture",
+        instance: "board-a",
+        physicalId: "COM8",
+      },
+    });
+    let ready;
+    const readyPromise = new Promise((resolve) => {
+      ready = resolve;
+    });
+    const transport = {
+      opened: false,
+      closed: false,
+      writes: [],
+      listener: undefined,
+      async open() {
+        this.opened = true;
+      },
+      async close() {
+        this.closed = true;
+      },
+      async write(data) {
+        this.writes.push(Buffer.from(data));
+        return data.byteLength;
+      },
+      onData(listener) {
+        this.listener = listener;
+        return () => {
+          this.listener = undefined;
+        };
+      },
+    };
+    const host = new ManagedSessionHost(
+      {
+        permit,
+        command: "device.run",
+        lockId: "fixture-device-lock",
+        lockIdentity: {
+          adapter: "fixture",
+          kind: "device",
+          physicalId: "COM8",
+        },
+        runContext: {},
+        log: {
+          encoding: "utf8",
+          lineFraming: "line",
+          logRecordLimit: 100,
+          spoolLimitBytes: 1024 * 1024,
+          rawCaptureLimitBytes: 1024 * 1024,
+        },
+      },
+      {
+        sessions,
+        locks: new LockManager(paths),
+        runs: new RunManager(paths, root),
+        businessLogs: recordingBusinessLogs,
+        async createTransport() {
+          return transport;
+        },
+        onReady(record) {
+          ready(record);
+        },
+      },
+    );
+    const runningPromise = host.run();
+    const running = await readyPromise;
+    assert.equal(running.state, "running");
+    assert.equal(transport.opened, true);
+    assert.equal(
+      (await new LockManager(paths).inspect(running.lockId)).session,
+      permit.sessionId,
+    );
+    const runningRun = await new RunManager(paths, root).get(running.runId);
+    assert.equal(runningRun.manifest.status, "running");
+    transport.listener(Buffer.from("first line\r\nsecond line\n"));
+    const lease = await requestManagedSessionControl(running.controlEndpoint, {
+      schema: "benchpilot.managed-session-control-request",
+      version: 1,
+      type: "acquire-writer",
+      sessionId: permit.sessionId,
+      controlToken: permit.controlToken,
+    });
+    assert.equal(lease.ok, true);
+    const write = await requestManagedSessionControl(running.controlEndpoint, {
+      schema: "benchpilot.managed-session-control-request",
+      version: 1,
+      type: "write",
+      sessionId: permit.sessionId,
+      controlToken: permit.controlToken,
+      leaseId: lease.result.leaseId,
+      dataBase64: Buffer.from("set 1\n").toString("base64"),
+    });
+    assert.deepEqual(write.result, {
+      sessionId: permit.sessionId,
+      bytesWritten: 6,
+    });
+    assert.deepEqual(transport.writes, [Buffer.from("set 1\n")]);
+    await requestManagedSessionControl(running.controlEndpoint, {
+      schema: "benchpilot.managed-session-control-request",
+      version: 1,
+      type: "release-writer",
+      sessionId: permit.sessionId,
+      controlToken: permit.controlToken,
+      leaseId: lease.result.leaseId,
+    });
+    const response = await requestManagedSessionControl(
+      running.controlEndpoint,
+      {
+        schema: "benchpilot.managed-session-control-request",
+        version: 1,
+        type: "stop",
+        sessionId: permit.sessionId,
+        controlToken: permit.controlToken,
+      },
+    );
+    assert.equal(response.ok, true);
+    const stopped = await runningPromise;
+    assert.equal(stopped.state, "stopped");
+    assert.equal(transport.closed, true);
+    assert.equal((await new LockManager(paths).list()).length, 0);
+    const finalRun = await new RunManager(paths, root).get(running.runId);
+    assert.equal(finalRun.manifest.status, "succeeded");
+    const records = (
+      await readFile(
+        path.join(finalRun.dir, "captures", "session-records.ndjson"),
+        "utf8",
+      )
+    )
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    assert.deepEqual(
+      records.map((record) => record.text),
+      ["first line", "second line"],
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("serial session transport uses the native binding contract", async () => {
+  const portPath = `COM-BENCHPILOT-${Date.now()}`;
+  SerialPortMock.binding.createPort(portPath, { echo: true });
+  const transport = new SerialPortSessionTransport(
+    {
+      path: portPath,
+      baudRate: 115200,
+      dtr: "preserve",
+      rts: "preserve",
+    },
+    (options) => new SerialPortMock(options),
+  );
+  const received = [];
+  transport.onData((chunk) => received.push(Buffer.from(chunk)));
+  await transport.open();
+  assert.equal(await transport.write(Buffer.from("ping\n")), 5);
+  for (let attempt = 0; attempt < 20 && !received.length; attempt += 1)
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.deepEqual(received, [Buffer.from("ping\n")]);
+  await transport.close();
+});
+
+test("session reconciliation only recovers a proven stale host", async () => {
+  const root = await mkdtemp(
+    path.join(os.tmpdir(), "benchpilot-session-stale-"),
+  );
+  try {
+    const paths = new PathService(
+      { TEMP: path.join(root, "runtime") },
+      "win32",
+      path.join(root, "home"),
+      path.join(root, "temp"),
+    );
+    const sessions = new ManagedSessionManager(paths);
+    const { record, permit } = await sessions.create({
+      projectRoot: root,
+      capabilityId: "run",
+      identity: { adapter: "fixture", instance: "board-a", physicalId: "COM8" },
+    });
+    const starting = await sessions.claimStart({
+      sessionId: record.id,
+      handshakeToken: permit.handshakeToken,
+      expectedRevision: record.revision,
+      ownerPid: process.pid,
+    });
+    await sessions.store.write({
+      ...starting,
+      ownerPid: 999_999_999,
+    });
+    const reconciled = await new ManagedSessionReconciler(paths).reconcile();
+    assert.deepEqual(reconciled, { reconciled: [record.id], unresolved: [] });
+    assert.equal((await sessions.get(record.id)).state, "failed");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("session log spool closes files after a capacity failure", async () => {
+  const root = await mkdtemp(
+    path.join(os.tmpdir(), "benchpilot-session-spool-"),
+  );
+  try {
+    const spool = new ManagedSessionLogSpool({
+      run: { id: "run", dir: root, started: Date.now(), command: "device.run" },
+      encoding: "utf8",
+      lineFraming: "line",
+      logRecordLimit: 10,
+      spoolLimitBytes: 1024,
+      rawCaptureLimitBytes: 2,
+    });
+    await spool.open();
+    await assert.rejects(spool.append(Buffer.from("toolong\n")), {
+      name: "BenchPilotError",
+    });
+    await assert.rejects(spool.close(), { name: "BenchPilotError" });
+    await rm(root, { recursive: true, force: true });
+  } finally {
     await rm(root, { recursive: true, force: true });
   }
 });
@@ -1132,6 +1373,113 @@ test("output schema failures are classified as INVALID_CAPABILITY_OUTPUT", async
       {},
     );
     assert.deepEqual(unregistered.artifacts, []);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("managed session start bypasses the short operation Run lifecycle", async () => {
+  const root = await mkdtemp(
+    path.join(os.tmpdir(), "benchpilot-session-runner-"),
+  );
+  try {
+    const paths = new PathService(
+      { TEMP: path.join(root, "runtime") },
+      "win32",
+    );
+    const registry = new AdapterRegistry();
+    let capabilityExecuted = false;
+    registry.register({
+      id: "session-runtime",
+      apiVersion: 1,
+      version: "1",
+      summary: "session runtime test",
+      configSchema: objectSchema(),
+      discover: async () => [],
+      doctor: async () => [],
+      createDevice: async (instance) => ({
+        identity: {
+          instance,
+          physicalId: "session-runtime-device",
+          adapter: "session-runtime",
+        },
+        capabilities: () => [
+          {
+            id: "run",
+            summary: "run",
+            defaultTimeoutMs: 1_000,
+            lockMode: "none",
+            createsRun: true,
+            safety: { mode: "normal" },
+            execute: async () => {
+              capabilityExecuted = true;
+              return {};
+            },
+          },
+        ],
+        resolveManagedSession: () => ({
+          capabilityId: "run",
+          kind: "start",
+          sessionId: "monitor",
+          port: "COM8",
+          baud: 115200,
+          encoding: "utf8",
+          lineFraming: "line",
+          openLinePolicy: { dtr: "preserve", rts: "preserve" },
+          logRecordLimit: 100,
+          spoolLimitBytes: 1024 * 1024,
+          rawCaptureLimitBytes: 1024 * 1024,
+          writeLimitBytes: 1024,
+          protocols: [],
+        }),
+      }),
+    });
+    let request;
+    const runner = new OperationRunner({
+      businessLogs: recordingBusinessLogs,
+      paths,
+      registry,
+      project: { root, config: path.join(root, "benchpilot.toml") },
+      config: {
+        value: { devices: { device: { adapter: "session-runtime" } } },
+        origins: new Map(),
+        layers: [],
+      },
+      managedSessions: {
+        async start(input) {
+          request = input;
+          return {
+            schema: "benchpilot.managed-session",
+            version: 1,
+            id: "session-fixture",
+            state: "running",
+            revision: 2,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            startedAt: new Date().toISOString(),
+            projectRoot: root,
+            capabilityId: "run",
+            identity: {
+              adapter: "session-runtime",
+              instance: "device",
+              physicalId: "session-runtime-device",
+            },
+            runId: "run-fixture",
+            lockId: "lock-fixture",
+          };
+        },
+      },
+    });
+    const result = await runner.execute("device", "run", {});
+    assert.equal(capabilityExecuted, false);
+    assert.equal(request.command, "device.run");
+    assert.equal(request.plan.port, "COM8");
+    assert.deepEqual(result.output, {
+      sessionId: "session-fixture",
+      status: "running",
+      runId: "run-fixture",
+      startedAt: result.output.startedAt,
+    });
   } finally {
     await rm(root, { recursive: true, force: true });
   }

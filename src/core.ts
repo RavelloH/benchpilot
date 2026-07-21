@@ -93,6 +93,27 @@ export {
 export { PathService } from "./core/paths/path-service.js";
 export { ManagedSessionManager } from "./core/sessions/session-manager.js";
 export { ManagedSessionStore } from "./core/sessions/session-store.js";
+export { ManagedSessionHost } from "./core/sessions/session-host.js";
+export type {
+  ManagedSessionHostDependencies,
+  ManagedSessionHostLaunch,
+  ManagedSessionTransport,
+} from "./core/sessions/session-host.js";
+export { ManagedSessionLogSpool } from "./core/sessions/session-log-spool.js";
+export type { ManagedSessionLogRecord } from "./core/sessions/session-log-spool.js";
+export {
+  managedSessionRecordsPath,
+  readManagedSessionLog,
+} from "./core/sessions/session-log-reader.js";
+export {
+  ManagedSessionReconciler,
+  managedSessionOwnerLiveness,
+} from "./core/sessions/session-reconciler.js";
+export type { ManagedSessionOwnerLiveness } from "./core/sessions/session-reconciler.js";
+export type {
+  ManagedSessionLogQuery,
+  ManagedSessionLogReadResult,
+} from "./core/sessions/session-log-reader.js";
 export {
   ManagedSessionControlServer,
   managedSessionControlEndpoint,
@@ -103,11 +124,18 @@ export type {
   ManagedSessionControlRecord,
   ManagedSessionControlRequest,
   ManagedSessionControlResponse,
+  ManagedSessionAcquireWriterControlRequest,
+  ManagedSessionReleaseWriterControlRequest,
+  ManagedSessionRenewWriterControlRequest,
+  ManagedSessionStopControlRequest,
+  ManagedSessionWriteControlRequest,
   ManagedSessionFailure,
   ManagedSessionIdentity,
   ManagedSessionLaunchPermit,
   ManagedSessionRecord,
   ManagedSessionRunningUpdate,
+  ManagedSessionStarter,
+  ManagedSessionStartRequest,
   ManagedSessionStartClaim,
   ManagedSessionState,
 } from "./core/sessions/types.js";

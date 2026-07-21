@@ -340,6 +340,10 @@ export const catalogs = {
     "error.reason.invalidDuration": "The duration value is invalid.",
     "error.reason.invalidLockId":
       "The physical resource lock identifier is invalid.",
+    "error.reason.invalidManagedSession":
+      "The managed session definition is incomplete or invalid.",
+    "error.reason.invalidManagedSessionId":
+      "The managed session identifier is invalid.",
     "error.reason.invalidPath":
       "The requested path is invalid or outside the permitted directory.",
     "error.reason.invalidProjectName": "The project name is invalid.",
@@ -357,6 +361,63 @@ export const catalogs = {
     "error.reason.lockQuarantined": "The resource lock is quarantined.",
     "error.reason.lockRecoveryNotFound":
       "The requested lock recovery record was not found.",
+    "error.reason.managedSessionAuthFailed":
+      "Managed session control authentication failed.",
+    "error.reason.managedSessionBusy":
+      "The managed session state is being updated by another process.",
+    "error.reason.managedSessionCapabilityNotReady":
+      "The managed session capability is not ready.",
+    "error.reason.managedSessionCorrupt":
+      "The managed session state record is corrupted.",
+    "error.reason.managedSessionFollowJsonUnsupported":
+      "Following managed session logs is not supported with JSON output.",
+    "error.reason.managedSessionFollowUnavailable":
+      "Following managed session logs is unavailable for this capability.",
+    "error.reason.managedSessionHostAborted":
+      "The managed session host was stopped unexpectedly.",
+    "error.reason.managedSessionHostFailed": "The managed session host failed.",
+    "error.reason.managedSessionIdRequired":
+      "This operation requires a managed session identifier.",
+    "error.reason.managedSessionLogCorrupt":
+      "The managed session log contains an invalid record.",
+    "error.reason.managedSessionLogCursorInvalid":
+      "The managed session log cursor is invalid.",
+    "error.reason.managedSessionLogNotOpen":
+      "The managed session log is not open.",
+    "error.reason.managedSessionLogRecordLimit":
+      "The managed session log record limit was exceeded.",
+    "error.reason.managedSessionLogSpoolLimit":
+      "The managed session log spool limit was exceeded.",
+    "error.reason.managedSessionLogTailInvalid":
+      "The managed session log tail value is invalid.",
+    "error.reason.managedSessionLogWriteFailed":
+      "The managed session log could not be written.",
+    "error.reason.managedSessionNotFound":
+      "The requested managed session was not found.",
+    "error.reason.managedSessionNotStarted":
+      "The managed session has not started yet.",
+    "error.reason.managedSessionRawCaptureLimit":
+      "The managed session raw capture limit was exceeded.",
+    "error.reason.managedSessionRevisionConflict":
+      "The managed session changed before the requested update completed.",
+    "error.reason.managedSessionRunUnavailable":
+      "The managed session does not have an operation record yet.",
+    "error.reason.managedSessionRuntimeUnavailable":
+      "The managed session runtime is unavailable.",
+    "error.reason.managedSessionStartFailed":
+      "The managed session could not be started.",
+    "error.reason.managedSessionStateInvalid":
+      "The requested managed session state transition is invalid.",
+    "error.reason.managedSessionTerminal":
+      "The managed session has already ended.",
+    "error.reason.managedSessionTransportClosed":
+      "The managed session serial transport closed unexpectedly.",
+    "error.reason.managedSessionWriteInvalid":
+      "The managed session write payload is invalid.",
+    "error.reason.managedSessionWriterBusy":
+      "Another writer is currently attached to the managed session.",
+    "error.reason.managedSessionWriterLeaseInvalid":
+      "The managed session writer lease is unavailable or expired.",
     "error.reason.operationAborted": "The operation was aborted.",
     "error.reason.operationSessionStateInvalid":
       "The operation lifecycle entered an invalid state.",
@@ -367,6 +428,12 @@ export const catalogs = {
       "A BenchPilot project is required for project state commands.",
     "error.reason.quarantineFailed":
       "The physical resource could not be safely quarantined.",
+    "error.reason.sessionControlProtocol":
+      "The managed session control protocol returned an invalid response.",
+    "error.reason.sessionControlSessionMismatch":
+      "The control request does not target this managed session.",
+    "error.reason.sessionControlUnavailable":
+      "The managed session control endpoint is unavailable.",
     "error.reason.systemCapabilityUnavailable":
       "This operation is not safely available on every system member.",
     "error.reason.systemMemberExists":
@@ -986,6 +1053,8 @@ export const catalogs = {
     "error.reason.invalidDeviceConfig": "设备配置无效。",
     "error.reason.invalidDuration": "时长值无效。",
     "error.reason.invalidLockId": "物理资源锁标识符无效。",
+    "error.reason.invalidManagedSession": "受管会话定义不完整或无效。",
+    "error.reason.invalidManagedSessionId": "受管会话标识符无效。",
     "error.reason.invalidPath": "请求的路径无效，或不在允许的目录中。",
     "error.reason.invalidProjectName": "项目名称无效。",
     "error.reason.invalidRunId": "操作记录标识符无效。",
@@ -997,6 +1066,42 @@ export const catalogs = {
     "error.reason.lockOwnershipLost": "已失去资源锁的所有权。",
     "error.reason.lockQuarantined": "该资源锁已被隔离。",
     "error.reason.lockRecoveryNotFound": "找不到指定的锁恢复记录。",
+    "error.reason.managedSessionAuthFailed": "受管会话控制认证失败。",
+    "error.reason.managedSessionBusy": "其他进程正在更新受管会话状态。",
+    "error.reason.managedSessionCapabilityNotReady": "受管会话能力尚未就绪。",
+    "error.reason.managedSessionCorrupt": "受管会话状态记录已损坏。",
+    "error.reason.managedSessionFollowJsonUnsupported":
+      "JSON 输出不支持持续跟随受管会话日志。",
+    "error.reason.managedSessionFollowUnavailable":
+      "该能力不能持续跟随受管会话日志。",
+    "error.reason.managedSessionHostAborted": "受管会话宿主被意外停止。",
+    "error.reason.managedSessionHostFailed": "受管会话宿主运行失败。",
+    "error.reason.managedSessionIdRequired": "该操作需要指定受管会话标识符。",
+    "error.reason.managedSessionLogCorrupt": "受管会话日志中包含无效记录。",
+    "error.reason.managedSessionLogCursorInvalid": "受管会话日志游标无效。",
+    "error.reason.managedSessionLogNotOpen": "受管会话日志尚未打开。",
+    "error.reason.managedSessionLogRecordLimit":
+      "受管会话日志记录数已超过限制。",
+    "error.reason.managedSessionLogSpoolLimit":
+      "受管会话日志缓冲已超过容量限制。",
+    "error.reason.managedSessionLogTailInvalid": "受管会话日志尾部数量无效。",
+    "error.reason.managedSessionLogWriteFailed": "无法写入受管会话日志。",
+    "error.reason.managedSessionNotFound": "找不到请求的受管会话。",
+    "error.reason.managedSessionNotStarted": "受管会话尚未启动。",
+    "error.reason.managedSessionRawCaptureLimit":
+      "受管会话原始捕捉已超过容量限制。",
+    "error.reason.managedSessionRevisionConflict":
+      "受管会话在请求更新完成前已发生变化。",
+    "error.reason.managedSessionRunUnavailable": "受管会话尚未创建操作记录。",
+    "error.reason.managedSessionRuntimeUnavailable": "受管会话运行时不可用。",
+    "error.reason.managedSessionStartFailed": "无法启动受管会话。",
+    "error.reason.managedSessionStateInvalid": "请求的受管会话状态转换无效。",
+    "error.reason.managedSessionTerminal": "受管会话已经结束。",
+    "error.reason.managedSessionTransportClosed": "受管会话串口传输意外关闭。",
+    "error.reason.managedSessionWriteInvalid": "受管会话写入内容无效。",
+    "error.reason.managedSessionWriterBusy": "已有其他写入方附加到该受管会话。",
+    "error.reason.managedSessionWriterLeaseInvalid":
+      "受管会话写入租约不可用或已过期。",
     "error.reason.operationAborted": "操作已中止。",
     "error.reason.operationSessionStateInvalid": "操作生命周期进入了无效状态。",
     "error.reason.operationTimeout": "操作执行超时。",
@@ -1004,6 +1109,10 @@ export const catalogs = {
     "error.reason.projectNotFound":
       "项目状态命令需要在 BenchPilot 项目中执行。",
     "error.reason.quarantineFailed": "无法安全隔离该物理资源。",
+    "error.reason.sessionControlProtocol": "受管会话控制协议返回了无效响应。",
+    "error.reason.sessionControlSessionMismatch":
+      "控制请求的目标不是当前受管会话。",
+    "error.reason.sessionControlUnavailable": "受管会话控制端点不可用。",
     "error.reason.systemCapabilityUnavailable":
       "该操作无法在系统的所有成员上安全执行。",
     "error.reason.systemMemberExists": "指定设备已是该系统成员。",

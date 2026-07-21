@@ -28,12 +28,17 @@ const commandSummary = (child: HelpChildData) =>
 const fieldName = (field: HelpFieldData) => {
   if (field.kind === "argument")
     return `<${field.name}${field.variadic === true ? "..." : ""}>`;
+  const preferredAlias = (Array.isArray(field.aliases) ? field.aliases : [])
+    .filter((alias): alias is string => typeof alias === "string")
+    .map((alias) => alias.replace(/^--/, ""))
+    .find((alias) => alias && alias !== field.name);
+  const flag = preferredAlias ?? field.name;
   const placeholder =
     typeof field.placeholder === "string" ? field.placeholder : field.name;
   if (field.value === "boolean" && field.negatable === true)
-    return `--${field.name} / --no-${field.name}`;
+    return `--${flag} / --no-${flag}`;
   const value = field.value === "boolean" ? "" : ` <${placeholder}>`;
-  return `--${field.name}${value}`;
+  return `--${flag}${value}`;
 };
 
 const renderCommandPath = (value: string, theme: TerminalTheme) =>

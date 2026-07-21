@@ -1,5 +1,6 @@
 import {
   type AdapterRegistry,
+  BenchPilotError,
   type Capability,
   fail,
   type Json,
@@ -7,6 +8,8 @@ import {
   type OperationOutcome,
   type PathService,
   type ResolvedConfig,
+  type ManagedSessionPlan,
+  type DeviceRuntime,
 } from "../../core.js";
 
 export interface DeviceUseCaseDependencies {
@@ -14,6 +17,7 @@ export interface DeviceUseCaseDependencies {
   runner: OperationRunner;
   config: ResolvedConfig;
   paths: PathService;
+  project: { root: string; config: string } | undefined;
 }
 
 /** Device command semantics, independent from argv, terminals, and rendering. */
@@ -59,6 +63,33 @@ export class DeviceUseCases {
         `Device ${instance} does not support ${capabilityId}.`,
       );
     return { adapter, capability: capability as Capability };
+  }
+
+  async managedSession(
+    instance: string,
+    capabilityId: string,
+  ): Promise<{
+    identity: DeviceRuntime["identity"];
+    plan: ManagedSessionPlan;
+  }> {
+    const { runtime } = await this.resolve(instance);
+    const project = this.dependencies.project;
+    if (!project)
+      throw new BenchPilotError(
+        "PROJECT_NOT_FOUND",
+        3,
+        "A BenchPilot project is required for managed sessions.",
+      );
+    const plan = runtime.resolveManagedSession?.(capabilityId, {
+      projectRoot: project.root,
+    });
+    if (!plan)
+      throw new BenchPilotError(
+        "UNSUPPORTED_CAPABILITY",
+        3,
+        `Device ${instance} does not support managed session ${capabilityId}.`,
+      );
+    return { identity: runtime.identity, plan };
   }
 
   async execute(input: {

@@ -16,6 +16,7 @@ import type {
   OperationLogger,
 } from "../reporting/business-log.js";
 import type { OperationOutcome } from "./operation-outcome.js";
+import type { ManagedSessionStarter } from "../sessions/types.js";
 
 export interface OperationContext {
   signal: AbortSignal;
@@ -59,6 +60,7 @@ export interface OperationServices {
   lockLeaseMs?: number;
   reporter?: OperationReporter;
   businessLogs: BusinessLogFactory;
+  managedSessions?: ManagedSessionStarter;
   lifecycle?: OperationLifecycleFactories;
 }
 

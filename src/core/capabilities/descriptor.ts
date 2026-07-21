@@ -31,6 +31,7 @@ export const describeCapability = (
   defaultTimeoutMs: capability.defaultTimeoutMs,
   lockMode: capability.lockMode,
   createsRun: capability.createsRun,
+  ...(capability.ttyOnly ? { ttyOnly: true } : {}),
   safety: structuredClone(capability.safety),
   availability: "available",
 });

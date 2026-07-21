@@ -131,6 +131,101 @@
         }
       }
     },
+    "session-run": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sessionId", "status", "runId", "startedAt"],
+      "properties": {
+        "sessionId": {
+          "type": "string",
+          "pattern": "^session-[a-zA-Z0-9_-]+$"
+        },
+        "status": { "const": "running" },
+        "runId": { "type": "string", "minLength": 1 },
+        "startedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "session-stop": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status"],
+      "properties": {
+        "sessionId": {
+          "type": "string",
+          "pattern": "^session-[a-zA-Z0-9_-]+$"
+        },
+        "status": { "enum": ["stopped", "failed", "not-running"] },
+        "stoppedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "session-logs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["records"],
+      "properties": {
+        "sessionId": {
+          "type": "string",
+          "pattern": "^session-[a-zA-Z0-9_-]+$"
+        },
+        "status": {
+          "enum": [
+            "creating",
+            "starting",
+            "running",
+            "stopping",
+            "stopped",
+            "failed"
+          ]
+        },
+        "cursor": { "type": "string", "pattern": "^1:[0-9]+$" },
+        "records": {
+          "type": "array",
+          "maxItems": 10000,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "generation",
+              "sequence",
+              "timestamp",
+              "stream",
+              "encodingState"
+            ],
+            "properties": {
+              "generation": { "const": 1 },
+              "sequence": { "type": "integer", "minimum": 1 },
+              "timestamp": { "type": "string", "format": "date-time" },
+              "stream": { "const": "serial" },
+              "text": { "type": "string" },
+              "base64": { "type": "string" },
+              "encodingState": { "enum": ["complete", "replacement", "binary"] }
+            },
+            "anyOf": [{ "required": ["text"] }, { "required": ["base64"] }]
+          }
+        }
+      }
+    },
+    "session-send": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sessionId",
+        "status",
+        "bytesWritten",
+        "framing",
+        "writtenAt"
+      ],
+      "properties": {
+        "sessionId": {
+          "type": "string",
+          "pattern": "^session-[a-zA-Z0-9_-]+$"
+        },
+        "status": { "const": "written" },
+        "bytesWritten": { "type": "integer", "minimum": 0 },
+        "framing": { "enum": ["line", "raw"] },
+        "writtenAt": { "type": "string", "format": "date-time" }
+      }
+    },
     "reset": { "type": "object", "additionalProperties": true },
     "deploy": { "type": "object", "additionalProperties": true }
   }

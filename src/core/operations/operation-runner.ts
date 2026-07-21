@@ -26,6 +26,11 @@ import { RunManager } from "../runs/run-manager.js";
 import { ArtifactRegistry } from "../artifacts/artifact-registry.js";
 import type { ArtifactRecord as RegisteredArtifactRecord } from "../artifacts/types.js";
 import { describeCapability } from "../capabilities/descriptor.js";
+import type {
+  Capability,
+  DeviceRuntime,
+  ManagedSessionPlan,
+} from "../capabilities/types.js";
 import {
   approvalLevel,
   duration,
@@ -260,6 +265,15 @@ export class OperationRunner {
         (error as Error).message,
       );
     }
+    const managedPlan = runtime.resolveManagedSession?.(capabilityId, {
+      projectRoot: project.root,
+    });
+    if (managedPlan && runtime.identity.stable === false)
+      fail(
+        "DEVICE_IDENTITY_UNAVAILABLE",
+        3,
+        "A managed session requires a stable physical device identity.",
+      );
     if (
       capability.lockMode === "exclusive" &&
       runtime.identity.stable === false
@@ -370,6 +384,22 @@ export class OperationRunner {
       });
       return result;
     }
+    if (managedPlan)
+      return this.executeManagedSession({
+        instance,
+        adapterId: String(d.adapter),
+        runtime,
+        capability,
+        plan: managedPlan,
+        input,
+        command,
+        lockId,
+        project,
+        approvalRequired,
+        binding,
+        storedBinding,
+        options,
+      });
     if (approvalRequired) {
       const existing =
         (await approvals.findMatchingApproval(binding)) ||
@@ -930,6 +960,315 @@ export class OperationRunner {
       reporter?.emit("device.operation.completed", { outcome: outcome.result });
     else reporter?.emit("operation.completed", { outcome: outcome.result });
     return outcome.result;
+  }
+
+  private async executeManagedSession(input: {
+    instance: string;
+    adapterId: string;
+    runtime: DeviceRuntime;
+    capability: Capability;
+    plan: ManagedSessionPlan;
+    input: Json;
+    command: string;
+    lockId: string;
+    project: { root: string; config: string };
+    approvalRequired: boolean;
+    binding: Json;
+    storedBinding: Json;
+    options: OperationExecutionOptions;
+  }): Promise<Json> {
+    const starter = this.s.managedSessions;
+    if (!starter)
+      throw new BenchPilotError(
+        "MANAGED_SESSION_RUNTIME_UNAVAILABLE",
+        5,
+        "Managed session runtime is not configured.",
+      );
+    const started = Date.now();
+    const approvals = this.lifecycle.approvals(input.project.root);
+    let claimedApproval: ApprovalRecord | undefined;
+    let approvalLease: ApprovalLease | undefined;
+    let primaryError: BenchPilotError | undefined;
+    let record: import("../sessions/types.js").ManagedSessionRecord | undefined;
+    let data: Json | undefined;
+    try {
+      if (input.approvalRequired) {
+        const approval =
+          (await approvals.findMatchingApproval(input.binding)) ||
+          (await approvals.recoverMatchingStaleClaim(input.binding));
+        if (!approval) {
+          const requested = await approvals.request(
+            input.binding,
+            input.capability.safety.approvalTtlMs,
+            input.storedBinding,
+          );
+          throw new BenchPilotError(
+            "HUMAN_APPROVAL_REQUIRED",
+            7,
+            "Human approval is required before this operation can run.",
+            false,
+            undefined,
+            [],
+            { approvalId: requested.id },
+          );
+        }
+        claimedApproval = await approvals.claim(input.binding);
+        if (!claimedApproval)
+          throw new BenchPilotError(
+            "APPROVAL_ALREADY_CLAIMED",
+            7,
+            "Matching approval is no longer available.",
+          );
+        approvalLease = approvals.startClaimLease(claimedApproval);
+      }
+      const choice = <T extends string>(
+        value: unknown,
+        allowed: readonly T[],
+      ): T | undefined =>
+        typeof value === "string" && allowed.includes(value as T)
+          ? (value as T)
+          : undefined;
+      const sessionId =
+        typeof input.input.session_id === "string"
+          ? input.input.session_id
+          : undefined;
+      if (input.plan.kind === "start") {
+        const baud =
+          typeof input.input.baud === "number" &&
+          Number.isSafeInteger(input.input.baud)
+            ? input.input.baud
+            : undefined;
+        record = await starter.start({
+          projectRoot: input.project.root,
+          command: input.command,
+          capabilityId: input.capability.id,
+          identity: input.runtime.identity,
+          lockId: input.lockId,
+          plan: input.plan,
+          overrides: {
+            baud,
+            encoding: choice(input.input.encoding, ["utf8", "binary"]),
+            lineFraming: choice(input.input.line_framing, ["line", "raw"]),
+            dtr: choice(input.input.dtr, ["preserve", "off", "on"]),
+            rts: choice(input.input.rts, ["preserve", "off", "on"]),
+          },
+          runContext: {
+            adapter: input.adapterId,
+            capability: input.capability.id,
+            device: input.runtime.identity,
+            physicalIdentity: input.runtime.identity,
+            configDigest: sha(this.s.config.value),
+            benchpilotVersion: this.s.defaults?.benchpilotVersion ?? "unknown",
+            nodeVersion: process.version,
+          },
+        });
+        data = {
+          sessionId: record.id,
+          status: record.state,
+          runId: record.runId,
+          startedAt: record.startedAt,
+        };
+      } else if (input.plan.kind === "stop") {
+        record = await starter.stop({
+          identity: input.runtime.identity,
+          sessionId,
+        });
+        data = record
+          ? {
+              sessionId: record.id,
+              status: record.state,
+              stoppedAt: record.endedAt,
+            }
+          : { status: "not-running" };
+      } else if (input.plan.kind === "logs") {
+        record = await starter.find({
+          identity: input.runtime.identity,
+          sessionId,
+        });
+        const logs = await starter.logs({
+          identity: input.runtime.identity,
+          sessionId: record?.id ?? sessionId,
+          tail:
+            typeof input.input.tail === "number" ? input.input.tail : undefined,
+          cursor:
+            typeof input.input.cursor === "string"
+              ? input.input.cursor
+              : undefined,
+        });
+        data = {
+          ...(record ? { sessionId: record.id, status: record.state } : {}),
+          ...logs,
+        };
+      } else if (input.plan.kind === "send") {
+        if (!sessionId)
+          throw new BenchPilotError(
+            "MANAGED_SESSION_ID_REQUIRED",
+            2,
+            "Managed session send requires a session ID.",
+          );
+        const values = [
+          typeof input.input.text === "string" ? "text" : undefined,
+          typeof input.input.hex === "string" ? "hex" : undefined,
+          typeof input.input.base64 === "string" ? "base64" : undefined,
+        ].filter(Boolean);
+        if (values.length !== 1)
+          throw new BenchPilotError(
+            "MANAGED_SESSION_WRITE_INVALID",
+            2,
+            "Managed session send requires exactly one payload encoding.",
+          );
+        let bytes: Buffer;
+        if (typeof input.input.text === "string")
+          bytes = Buffer.from(input.input.text, "utf8");
+        else if (typeof input.input.hex === "string") {
+          if (
+            input.input.hex.length % 2 !== 0 ||
+            !/^[0-9a-fA-F]*$/.test(input.input.hex)
+          )
+            throw new BenchPilotError(
+              "MANAGED_SESSION_WRITE_INVALID",
+              2,
+              "Managed session hexadecimal payload is invalid.",
+            );
+          bytes = Buffer.from(input.input.hex, "hex");
+        } else {
+          const value = String(input.input.base64);
+          bytes = Buffer.from(value, "base64");
+          if (!value || bytes.toString("base64") !== value)
+            throw new BenchPilotError(
+              "MANAGED_SESSION_WRITE_INVALID",
+              2,
+              "Managed session base64 payload is invalid.",
+            );
+        }
+        const framing = choice(input.input.framing, ["line", "raw"]) ?? "line";
+        if (framing === "line")
+          bytes = Buffer.concat([bytes, Buffer.from("\n")]);
+        const bytesWritten = await starter.write({ sessionId, data: bytes });
+        data = {
+          sessionId,
+          status: "written",
+          bytesWritten,
+          framing,
+          writtenAt: new Date().toISOString(),
+        };
+      } else
+        throw new BenchPilotError(
+          "MANAGED_SESSION_CAPABILITY_NOT_READY",
+          5,
+          `Managed session capability ${input.capability.id} is not ready.`,
+        );
+      try {
+        data = input.capability.outputSchema?.parse(data ?? {}) ?? data;
+      } catch (error) {
+        if (error instanceof SchemaValidationError)
+          throw new BenchPilotError(
+            "INVALID_CAPABILITY_OUTPUT",
+            5,
+            error.message,
+            false,
+            undefined,
+            [],
+            {
+              path: error.path,
+              expected: error.expected,
+              actual: error.actual,
+            },
+          );
+        throw error;
+      }
+      if (claimedApproval) await approvals.consumeClaim(claimedApproval);
+    } catch (error: unknown) {
+      primaryError =
+        error instanceof BenchPilotError
+          ? error
+          : new BenchPilotError(
+              "MANAGED_SESSION_START_FAILED",
+              5,
+              error instanceof Error
+                ? error.message
+                : "Managed session could not start.",
+            );
+      if (claimedApproval)
+        await approvals.releaseClaim(claimedApproval).catch(() => {});
+    } finally {
+      await approvalLease?.stop().catch(() => {});
+    }
+    const endedAt = new Date();
+    const durationMs = Math.max(0, endedAt.getTime() - started);
+    const execution = {
+      startedAt: new Date(started).toISOString(),
+      endedAt: endedAt.toISOString(),
+      durationMs,
+      ...(record?.runId ? { runId: record.runId } : {}),
+      dryRun: false,
+    };
+    const output = data
+      ? (input.capability.redactOutput?.(data) ?? data)
+      : undefined;
+    const result: Json = primaryError
+      ? {
+          schema: "benchpilot.operation-outcome",
+          version: 1,
+          status: "failed",
+          command: input.command,
+          subject: {
+            adapter: input.adapterId,
+            capability: input.capability.id,
+            device: input.runtime.identity,
+          },
+          execution,
+          error: {
+            kind: primaryError.kind,
+            diagnosticId: primaryError.diagnosticId,
+            message: primaryError.message,
+            retryable: primaryError.retryable,
+            stage: primaryError.stage,
+            recovery: primaryError.recovery,
+            details: primaryError.details,
+          },
+          lifecycle: { lockFinalStatus: "session-owned", cleanupErrors: [] },
+        }
+      : {
+          schema: "benchpilot.operation-outcome",
+          version: 1,
+          status: "succeeded",
+          command: input.command,
+          subject: {
+            adapter: input.adapterId,
+            capability: input.capability.id,
+            device: input.runtime.identity,
+          },
+          execution,
+          output,
+          artifacts: [],
+          lifecycle: { lockFinalStatus: "session-owned", cleanupErrors: [] },
+        };
+    const outcome: OperationOutcome = {
+      status: primaryError ? "failed" : "succeeded",
+      command: input.command,
+      subject: {
+        adapter: input.adapterId,
+        capability: input.capability.id,
+        device: {
+          instance: input.instance,
+          physicalId: input.runtime.identity.physicalId,
+        },
+      },
+      execution: {
+        status: primaryError ? "failed" : "succeeded",
+        ...execution,
+      },
+      ...(output ? { output } : {}),
+      artifacts: [],
+      result,
+      primaryError,
+      cleanupErrors: [],
+      lockFinalStatus: "not-required",
+    };
+    input.options.onOutcome?.(outcome);
+    if (primaryError) throw Object.assign(primaryError, { result, outcome });
+    return result;
   }
 
   private requireProject(): { root: string; config: string } {

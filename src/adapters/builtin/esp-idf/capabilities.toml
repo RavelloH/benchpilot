@@ -167,44 +167,91 @@ linux = true
 macos = true
 
 [capabilities.run]
-enabled = false
-reason = "Interactive ESP-IDF monitor sessions are intentionally outside v1."
+enabled = true
+handler = "session:start"
+session = "monitor"
+input_schema = "session-run"
+output_schema = "session-run"
+creates_run = true
+timeout = "30s"
+lock = "session-owned"
+[capabilities.run.safety]
+mode = "caution"
+flag = "dangerously-run"
+description = "Opens a managed serial session; opening a USB serial port can affect DTR/RTS and reset the target."
 [capabilities.run.platforms]
-windows = false
-linux = false
-macos = false
+windows = true
+linux = true
+macos = true
 
 [capabilities.stop]
-enabled = false
-reason = "No persistent ESP-IDF process is started by v1."
+enabled = true
+handler = "session:stop"
+session = "monitor"
+input_schema = "session-stop"
+output_schema = "session-stop"
+creates_run = false
+timeout = "45s"
+lock = "none"
+[capabilities.stop.safety]
+mode = "normal"
 [capabilities.stop.platforms]
-windows = false
-linux = false
-macos = false
+windows = true
+linux = true
+macos = true
 
 [capabilities.logs]
-enabled = false
-reason = "Interactive log streaming is intentionally outside v1."
+enabled = true
+handler = "session:logs"
+session = "monitor"
+input_schema = "session-logs"
+output_schema = "session-logs"
+creates_run = false
+timeout = "30s"
+lock = "none"
+[capabilities.logs.safety]
+mode = "normal"
 [capabilities.logs.platforms]
-windows = false
-linux = false
-macos = false
+windows = true
+linux = true
+macos = true
 
 [capabilities.console]
-enabled = false
-reason = "Managed ESP-IDF serial sessions are not implemented yet."
+enabled = true
+handler = "session:console"
+session = "monitor"
+input_schema = "session-console"
+output_schema = "empty"
+creates_run = false
+timeout = "24h"
+lock = "none"
+tty_only = true
+[capabilities.console.safety]
+mode = "caution"
+flag = "dangerously-console"
+description = "Attaches terminal input to a managed serial session; target firmware may interpret typed bytes as control commands."
 [capabilities.console.platforms]
-windows = false
-linux = false
-macos = false
+windows = true
+linux = true
+macos = true
 
 [capabilities.send]
-enabled = false
-reason = "Managed ESP-IDF serial sessions are not implemented yet."
+enabled = true
+handler = "session:send"
+session = "monitor"
+input_schema = "session-send"
+output_schema = "session-send"
+creates_run = false
+timeout = "30s"
+lock = "none"
+[capabilities.send.safety]
+mode = "caution"
+flag = "dangerously-send"
+description = "Writes raw bytes to a managed serial session. The target firmware may interpret the data as a physical control command."
 [capabilities.send.platforms]
-windows = false
-linux = false
-macos = false
+windows = true
+linux = true
+macos = true
 
 [capabilities.request]
 enabled = false

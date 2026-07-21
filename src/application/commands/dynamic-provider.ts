@@ -86,6 +86,7 @@ const capabilityValue = (
       lockMode: capability.lockMode,
       safety: capability.safety,
       createsRun: capability.createsRun,
+      ...(capability.ttyOnly ? { ttyOnly: true } : {}),
     },
     output: {
       id: `${namespace}.${capability.id}`,

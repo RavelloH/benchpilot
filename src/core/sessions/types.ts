@@ -22,6 +22,7 @@ export interface ManagedSessionRecord {
   readonly capabilityId: string;
   readonly identity: ManagedSessionIdentity;
   readonly ownerPid?: number;
+  readonly ownerHostname?: string;
   readonly runId?: string;
   readonly lockId?: string;
   /** Publicly discoverable local endpoint; authorization still needs controlToken. */
@@ -80,13 +81,94 @@ export interface ManagedSessionFailure {
   readonly quarantinedLock?: boolean;
 }
 
-export interface ManagedSessionControlRequest {
+export interface ManagedSessionStartRequest {
+  readonly projectRoot: string;
+  readonly command: string;
+  readonly capabilityId: string;
+  readonly identity: ManagedSessionIdentity;
+  readonly lockId: string;
+  readonly plan: import("../capabilities/types.js").ManagedSessionPlan;
+  readonly overrides: {
+    readonly baud?: number;
+    readonly encoding?: "utf8" | "binary";
+    readonly lineFraming?: "line" | "raw";
+    readonly dtr?: "preserve" | "off" | "on";
+    readonly rts?: "preserve" | "off" | "on";
+  };
+  readonly runContext: Record<string, unknown>;
+}
+
+/** Infrastructure starts the child process; Core owns the request contract. */
+export interface ManagedSessionStarter {
+  start(input: ManagedSessionStartRequest): Promise<ManagedSessionRecord>;
+  find(input: {
+    identity: ManagedSessionIdentity;
+    sessionId?: string;
+    activeOnly?: boolean;
+  }): Promise<ManagedSessionRecord | undefined>;
+  stop(input: {
+    identity: ManagedSessionIdentity;
+    sessionId?: string;
+  }): Promise<ManagedSessionRecord | undefined>;
+  logs(input: {
+    identity: ManagedSessionIdentity;
+    sessionId?: string;
+    tail?: number;
+    cursor?: string;
+  }): Promise<import("./session-log-reader.js").ManagedSessionLogReadResult>;
+  write(input: { sessionId: string; data: Uint8Array }): Promise<number>;
+}
+
+export interface ManagedSessionStopControlRequest {
   readonly schema: "benchpilot.managed-session-control-request";
   readonly version: 1;
   readonly type: "stop";
   readonly sessionId: string;
   readonly controlToken: string;
 }
+
+export interface ManagedSessionWriteControlRequest {
+  readonly schema: "benchpilot.managed-session-control-request";
+  readonly version: 1;
+  readonly type: "write";
+  readonly sessionId: string;
+  readonly controlToken: string;
+  readonly leaseId: string;
+  readonly dataBase64: string;
+}
+
+export interface ManagedSessionAcquireWriterControlRequest {
+  readonly schema: "benchpilot.managed-session-control-request";
+  readonly version: 1;
+  readonly type: "acquire-writer";
+  readonly sessionId: string;
+  readonly controlToken: string;
+}
+
+export interface ManagedSessionRenewWriterControlRequest {
+  readonly schema: "benchpilot.managed-session-control-request";
+  readonly version: 1;
+  readonly type: "renew-writer";
+  readonly sessionId: string;
+  readonly controlToken: string;
+  readonly leaseId: string;
+}
+
+export interface ManagedSessionReleaseWriterControlRequest {
+  readonly schema: "benchpilot.managed-session-control-request";
+  readonly version: 1;
+  readonly type: "release-writer";
+  readonly sessionId: string;
+  readonly controlToken: string;
+  readonly leaseId: string;
+}
+
+export type ManagedSessionControlRequest =
+  | ManagedSessionStopControlRequest
+  | ManagedSessionWriteControlRequest
+  | ManagedSessionAcquireWriterControlRequest
+  | ManagedSessionRenewWriterControlRequest
+  | ManagedSessionReleaseWriterControlRequest;
 
 export interface ManagedSessionControlResponse {
   readonly schema: "benchpilot.managed-session-control-response";
