@@ -108,6 +108,14 @@ Set `BENCHPILOT_ESP_ALLOW_CAPTURE=1` to include the bounded boot-marker
 capture. It passes `--dangerously-capture`, because opening USB serial can
 reset the board; it asserts `BENCHPILOT_ESP32S3_OK` and Lock release.
 
+Set `BENCHPILOT_ESP_ALLOW_SESSION=1` to exercise the managed serial lifecycle:
+`run`, bounded `logs`, and `stop`. This opens the configured serial port and
+therefore may affect DTR/RTS. Set `BENCHPILOT_ESP_ALLOW_SESSION_WRITE=1` only
+when the installed firmware can safely receive the line
+`benchpilot-hardware-check`; it additionally verifies the raw `send` transport
+acknowledgement. The test never automates `console`, because it requires a
+human TTY attachment.
+
 See the Adapter [README](../../src/adapters/builtin/esp-idf/README.md) for the
 configuration example, safety model, and explicit hardware test entry point.
 

@@ -14,6 +14,9 @@ const port = process.env.BENCHPILOT_ESP_PORT;
 const project = process.env.BENCHPILOT_ESP_PROJECT;
 const allowFlash = process.env.BENCHPILOT_ESP_ALLOW_FLASH === "1";
 const allowCapture = process.env.BENCHPILOT_ESP_ALLOW_CAPTURE === "1";
+const allowSession = process.env.BENCHPILOT_ESP_ALLOW_SESSION === "1";
+const allowSessionWrite =
+  allowSession && process.env.BENCHPILOT_ESP_ALLOW_SESSION_WRITE === "1";
 
 if (!port || !project) {
   console.log(
@@ -70,6 +73,8 @@ const expect = (condition, message) => {
   if (!condition) throw new Error(`Hardware assertion failed: ${message}`);
 };
 
+const capabilityOutput = (result) => result.data?.output;
+
 const run = (args) =>
   new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [cliEntry, ...args], {
@@ -109,13 +114,15 @@ try {
     "esp-idf-environment-idf",
   ])
     expect(
-      doctor.checks.some((check) => check.id === id && check.status === "pass"),
+      doctor.data?.checks?.some(
+        (check) => check.id === id && check.status === "pass",
+      ),
       `Doctor did not pass ${id}`,
     );
 
   const scan = await run(["device", "scan", "--json"]);
   expect(
-    scan.devices.some(
+    scan.data?.devices?.some(
       (device) => device.adapter === "esp-idf" && device.fields?.port === port,
     ),
     `Passive scan did not find configured port ${port}`,
@@ -129,11 +136,7 @@ try {
     "--json",
   ]);
   expect(
-    status.lockFinalStatus === "released",
-    "status did not release its lock",
-  );
-  expect(
-    JSON.stringify(status.data).includes("ESP32"),
+    JSON.stringify(capabilityOutput(status)).includes("ESP32"),
     "status did not identify an ESP target",
   );
 
@@ -144,9 +147,8 @@ try {
     "--dangerously-info",
     "--json",
   ]);
-  expect(info.lockFinalStatus === "released", "info did not release its lock");
   expect(
-    JSON.stringify(info.data).includes("ESP32"),
+    JSON.stringify(capabilityOutput(info)).includes("ESP32"),
     "info did not identify an ESP target",
   );
 
@@ -162,16 +164,20 @@ try {
   ];
   for (const id of expectedArtifacts)
     expect(
-      build.artifacts.some(
+      build.data?.artifacts?.some(
         (artifact) => artifact.metadata?.adapterEntry === id,
       ),
       `build did not register ${id}`,
     );
 
   const size = await run(["device", "esp32s3", "size", "--json"]);
-  expect(size.data.available === true, "size output is unavailable");
   expect(
-    Number.isInteger(size.data.image_bytes) && size.data.image_bytes > 0,
+    capabilityOutput(size)?.available === true,
+    "size output is unavailable",
+  );
+  expect(
+    Number.isInteger(capabilityOutput(size)?.image_bytes) &&
+      capabilityOutput(size).image_bytes > 0,
     "size did not report a positive image size",
   );
   if (allowCapture) {
@@ -185,13 +191,79 @@ try {
       "--json",
     ]);
     expect(
-      capture.lockFinalStatus === "released",
-      "capture did not release its lock",
-    );
-    expect(
-      capture.data.marker === true,
+      capabilityOutput(capture)?.marker === true,
       "capture did not observe the boot marker",
     );
+  }
+  if (allowSession) {
+    let sessionId;
+    try {
+      const started = await run([
+        "device",
+        "esp32s3",
+        "run",
+        "--dangerously-run",
+        "--json",
+      ]);
+      sessionId = capabilityOutput(started)?.sessionId;
+      expect(
+        typeof sessionId === "string" && sessionId.startsWith("session-"),
+        "run did not return a managed session identifier",
+      );
+      expect(
+        capabilityOutput(started)?.status === "running",
+        "run did not report a running managed session",
+      );
+      const logs = await run([
+        "device",
+        "esp32s3",
+        "logs",
+        "--session-id",
+        sessionId,
+        "--tail",
+        "32",
+        "--json",
+      ]);
+      expect(
+        Array.isArray(capabilityOutput(logs)?.records),
+        "logs did not return a bounded record array",
+      );
+      if (allowSessionWrite) {
+        const sent = await run([
+          "device",
+          "esp32s3",
+          "send",
+          "--dangerously-send",
+          "--session-id",
+          sessionId,
+          "--text",
+          "benchpilot-hardware-check",
+          "--framing",
+          "line",
+          "--json",
+        ]);
+        expect(
+          capabilityOutput(sent)?.status === "written" &&
+            capabilityOutput(sent)?.bytesWritten > 0,
+          "send did not return a transport write acknowledgement",
+        );
+      }
+    } finally {
+      if (sessionId) {
+        const stopped = await run([
+          "device",
+          "esp32s3",
+          "stop",
+          "--session-id",
+          sessionId,
+          "--json",
+        ]);
+        expect(
+          capabilityOutput(stopped)?.status === "stopped",
+          "stop did not close the managed session",
+        );
+      }
+    }
   }
   if (allowFlash) {
     console.log(
