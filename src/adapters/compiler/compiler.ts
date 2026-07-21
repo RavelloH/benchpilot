@@ -11,7 +11,7 @@ import { sha, stable } from "../../core/utilities/stable-json.js";
 import { bundleSha256 } from "../contract/bundle.js";
 import { diagnostic, hasErrors } from "./diagnostics.js";
 import { validateAdapterLayout } from "./layout.js";
-import { fixedFiles } from "./layout.js";
+import { fixedFiles, optionalFiles } from "./layout.js";
 import { loadAdapter } from "./loader.js";
 import { mergePlatform } from "../contract/platform.js";
 import { validateBundle, validateSchemas } from "./schema-validator.js";
@@ -38,6 +38,19 @@ const sections = {
   artifacts: { file: "artifacts.toml", property: "sets" },
 } as const;
 const sectionNames = Object.keys(sections) as Array<keyof typeof sections>;
+const noInstallation: JsonObject = {
+  schema: "benchpilot.adapter.installation",
+  schema_version: 1,
+  provider: "none",
+  stability: "experimental",
+  fields: [],
+  platforms: {
+    windows: "unsupported",
+    linux: "unsupported",
+    macos: "unsupported",
+  },
+  estimate: { minimum_bytes: 0, maximum_bytes: 0 },
+};
 
 export const validateAdapter = async (
   root: string,
@@ -207,7 +220,7 @@ export const compileAdapter = async (
     catalogContent,
   ) as JsonObject;
   const source = await Promise.all(
-    fixedFiles
+    [...fixedFiles, ...optionalFiles.filter((file) => adapter.files[file])]
       .slice()
       .sort()
       .map(async (file) => [file, await readFile(resolve(root, file), "utf8")]),
@@ -225,6 +238,7 @@ export const compileAdapter = async (
     i18n: adapter.i18n,
     views: adapter.files["views.toml"]
       .capabilities as CompiledAdapterBundleV2["views"],
+    installation: adapter.files["installation.toml"] ?? noInstallation,
     platforms,
   };
   const bundle: CompiledAdapterBundleV2 = {

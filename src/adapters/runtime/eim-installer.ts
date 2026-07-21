@@ -17,24 +17,35 @@ const EIM_RELEASE_PAGE =
   "https://github.com/espressif/idf-im-ui/releases/expanded_assets";
 const EIM_LATEST_RELEASE_PAGE =
   "https://github.com/espressif/idf-im-ui/releases/latest";
-const ESP_IDF_VERSION = "v5.5.2";
-const ESP_IDF_TARGETS = [
-  "esp32",
-  "esp32s2",
-  "esp32s3",
-  "esp32c2",
-  "esp32c3",
-  "esp32c5",
-  "esp32c6",
-  "esp32h2",
-  "esp32p4",
-] as const;
-const installEstimate = {
-  minimumBytes: 5_000_000_000,
-  maximumBytes: 12_000_000_000,
-} as const;
-
 type Platform = "windows" | "linux" | "macos";
+
+export interface EimInstallationDefinition {
+  readonly platforms: readonly Platform[];
+  readonly stability: "stable" | "experimental";
+  readonly estimate: {
+    readonly minimumBytes: number;
+    readonly maximumBytes: number;
+  };
+  readonly fields: AdapterInstallation["fields"];
+  readonly targetField: string;
+  readonly allowedTargets: readonly string[];
+  /** Maps persisted Adapter configuration keys to generic EIM result values. */
+  readonly configuration: Readonly<
+    Record<
+      string,
+      | "root"
+      | "release"
+      | "idf_path"
+      | "idf_py_path"
+      | "python_path"
+      | "export_script"
+      | "export_bat_script"
+      | "target"
+      | "installed_targets"
+      | "eim"
+    >
+  >;
+}
 
 interface GithubAsset {
   readonly name: string;
@@ -93,11 +104,12 @@ const installationError = (message: string, details: Json = {}) =>
     details,
   );
 
-export const parseEspIdfTargets = (value: unknown) => {
+export const parseEimTargets = (
+  value: unknown,
+  allowedTargets: readonly string[],
+) => {
   if (typeof value !== "string")
-    throw installationError(
-      "ESP-IDF installation requires at least one chip target.",
-    );
+    throw installationError("The installation requires at least one target.");
   const targets = [
     ...new Set(
       value
@@ -108,16 +120,13 @@ export const parseEspIdfTargets = (value: unknown) => {
   ];
   if (
     !targets.length ||
-    targets.some(
-      (target) =>
-        !ESP_IDF_TARGETS.includes(target as (typeof ESP_IDF_TARGETS)[number]),
-    )
+    targets.some((target) => !allowedTargets.includes(target))
   )
     throw installationError(
-      "ESP-IDF installation contains an unsupported chip target.",
+      "The installation contains an unsupported target.",
       {
         targets,
-        supported: ESP_IDF_TARGETS,
+        supported: allowedTargets,
       },
     );
   return targets;
@@ -558,14 +567,29 @@ class EimDownloadFileMonitor {
   }
 
   private async observe(tool: string, generation: number) {
-    const toolsJsonPath = path.join(
-      this.root,
-      "frameworks",
-      ESP_IDF_VERSION,
-      "esp-idf",
-      "tools",
-      "tools.json",
-    );
+    let toolsJsonPath: string;
+    try {
+      const frameworkRoot = path.join(this.root, "frameworks");
+      const candidates = await Promise.all(
+        (await fs.readdir(frameworkRoot, { withFileTypes: true }))
+          .filter((entry) => entry.isDirectory())
+          .map(async (entry) => {
+            const candidate = path.join(
+              frameworkRoot,
+              entry.name,
+              "esp-idf",
+              "tools",
+              "tools.json",
+            );
+            return { candidate, metadata: await fs.stat(candidate) };
+          }),
+      );
+      toolsJsonPath = candidates.sort(
+        (left, right) => right.metadata.mtimeMs - left.metadata.mtimeMs,
+      )[0]!.candidate;
+    } catch {
+      return;
+    }
     let metadata: EimToolDownload | undefined;
     try {
       metadata = eimToolDownloadMetadata(
@@ -648,18 +672,24 @@ export class EimInstallProgressParser {
     const events: EimProgressEvent[] = [];
     const tools = /Filtered to (\d+) tools based on user selection/i.exec(line);
     if (tools) {
-      this.toolTotal = Number(tools[1]);
-      events.push({
-        type: "adapter.install.toolchain",
-        data: {
-          state: "running",
-          reentrant: true,
-          transition: true,
-          current: 0,
-          total: this.toolTotal,
-          label: { key: "install.tools", fallback: "Installing ESP-IDF tools" },
-        },
-      });
+      // EIM includes its separately-created Python environment in this count.
+      // Keep the toolchain progress scoped to archive tools only.
+      this.toolTotal = Math.max(0, Number(tools[1]) - 1);
+      if (this.toolTotal > 0)
+        events.push({
+          type: "adapter.install.toolchain",
+          data: {
+            state: "running",
+            reentrant: true,
+            transition: true,
+            current: 0,
+            total: this.toolTotal,
+            label: {
+              key: "install.tools",
+              fallback: "Installing ESP-IDF tools",
+            },
+          },
+        });
     }
     const downloading = /Tool '([^']+)' is not installed\. Downloading/i.exec(
       line,
@@ -828,11 +858,12 @@ const readVerifiedState = async (root: string) => {
   }
   const selected =
     state.idfInstalled?.find((item) => item.id === state.idfSelectedId) ??
-    state.idfInstalled?.find((item) => item.name === ESP_IDF_VERSION);
+    state.idfInstalled?.at(0);
+  const release = string(selected?.name);
   const idfPath = string(selected?.path);
   const pythonPath = string(selected?.python);
   const activationScript = string(selected?.activationScript);
-  if (!idfPath || !pythonPath || !activationScript)
+  if (!idfPath || !pythonPath || !activationScript || !release)
     throw installationError(
       "EIM installation state is missing ESP-IDF runtime paths.",
       { statePath },
@@ -857,6 +888,7 @@ const readVerifiedState = async (root: string) => {
     idfPath,
     pythonPath,
     activationScript,
+    release,
   };
 };
 
@@ -926,6 +958,10 @@ const pathInside = (candidate: string, root: string) => {
   );
 };
 
+/** EIM itself adds this executable directory to the Windows user PATH. */
+export const isEimManagedUserPath = (entry: string, root: string) =>
+  path.resolve(entry).toLowerCase() === path.resolve(root, "eim").toLowerCase();
+
 const shortcutTarget = async (shortcut: string) => {
   const result = await runProcess({
     command: "powershell.exe",
@@ -957,7 +993,8 @@ const cleanupWindowsSideEffects = async (input: {
     );
     const managed = current.filter(
       (entry) =>
-        !before.has(entry.toLowerCase()) && pathInside(entry, input.root),
+        isEimManagedUserPath(entry, input.root) ||
+        (!before.has(entry.toLowerCase()) && pathInside(entry, input.root)),
     );
     if (managed.length) {
       const next = current
@@ -1048,31 +1085,14 @@ const verifyRuntime = async (input: {
   }
 };
 
-/** Explicit first-party EIM installer layered on the declarative ESP-IDF adapter. */
-export const espIdfInstallation = (): AdapterInstallation => ({
-  platforms: ["windows", "linux", "macos"],
-  stability: process.platform === "win32" ? "stable" : "experimental",
-  estimate: installEstimate,
-  fields: [
-    {
-      key: "target",
-      summary:
-        "Chip targets to install, separated by commas (for example esp32,esp32s3).",
-      required: true,
-      separator: ",",
-      choices: [
-        { value: "esp32", label: "ESP32" },
-        { value: "esp32s2", label: "ESP32-S2" },
-        { value: "esp32s3", label: "ESP32-S3" },
-        { value: "esp32c2", label: "ESP32-C2" },
-        { value: "esp32c3", label: "ESP32-C3" },
-        { value: "esp32c5", label: "ESP32-C5" },
-        { value: "esp32c6", label: "ESP32-C6" },
-        { value: "esp32h2", label: "ESP32-H2" },
-        { value: "esp32p4", label: "ESP32-P4" },
-      ],
-    },
-  ],
+/** Generic provider implementation. Adapter-specific fields and result keys are declarative. */
+export const createEimInstallation = (
+  definition: EimInstallationDefinition,
+): AdapterInstallation => ({
+  platforms: definition.platforms,
+  stability: definition.stability,
+  estimate: definition.estimate,
+  fields: definition.fields,
   async install(context) {
     const platform = platformFor();
     const interruption = new AbortController();
@@ -1086,7 +1106,10 @@ export const espIdfInstallation = (): AdapterInstallation => ({
         ),
       );
     process.once("SIGINT", onInterrupt);
-    const targets = parseEspIdfTargets(context.values.target);
+    const targets = parseEimTargets(
+      context.values[definition.targetField],
+      definition.allowedTargets,
+    );
     const target = targets.join(",");
     const report = (
       key: string,
@@ -1095,7 +1118,7 @@ export const espIdfInstallation = (): AdapterInstallation => ({
     ) => emitPhase(context.reporter, key, fallback, state);
     report("install.prerequisites", "Checking installation prerequisites");
     context.logger.info(
-      `Installing ESP-IDF ${ESP_IDF_VERSION} for ${target} at ${context.root}.`,
+      `Installing the latest ESP-IDF for ${target} at ${context.root}.`,
     );
     await verifyGit();
     report(
@@ -1157,8 +1180,6 @@ export const espIdfInstallation = (): AdapterInstallation => ({
           "install",
           "--path",
           path.join(context.root, "frameworks"),
-          "--idf-versions",
-          ESP_IDF_VERSION,
           "--target",
           target,
           "--non-interactive",
@@ -1229,20 +1250,27 @@ export const espIdfInstallation = (): AdapterInstallation => ({
         ? verified.activationScript
         : undefined;
     return {
-      release: ESP_IDF_VERSION,
+      release: verified.release,
       root: context.root,
       statePath: verified.statePath,
-      configuration: {
-        managed_root: context.root,
-        installation_source: "eim",
-        idf_path: verified.idfPath,
-        idf_py_path: path.join(verified.idfPath, "tools", "idf.py"),
-        python_path: verified.pythonPath,
-        export_script: exportScript,
-        ...(exportBatScript ? { export_bat_script: exportBatScript } : {}),
-        target: targets[0],
-        installed_targets: targets,
-      },
+      configuration: Object.fromEntries(
+        Object.entries(definition.configuration).flatMap(([key, source]) => {
+          const values = {
+            root: context.root,
+            eim: "eim",
+            release: verified.release,
+            idf_path: verified.idfPath,
+            idf_py_path: path.join(verified.idfPath, "tools", "idf.py"),
+            python_path: verified.pythonPath,
+            export_script: exportScript,
+            export_bat_script: exportBatScript,
+            target: targets[0],
+            installed_targets: targets,
+          } as const;
+          const value = values[source];
+          return value === undefined ? [] : [[key, value]];
+        }),
+      ),
     };
   },
 });

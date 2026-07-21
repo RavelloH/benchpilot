@@ -17,6 +17,7 @@ export interface CompiledAdapterBundleV2 {
   platforms: Record<string, JsonObject>;
   i18n: Record<string, JsonObject>;
   views: AdapterCapabilityViews;
+  installation: JsonObject;
 }
 
 export type UnsignedAdapterBundleV2 = Omit<

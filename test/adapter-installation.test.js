@@ -11,11 +11,12 @@ import {
 } from "../dist/index.js";
 import { AdapterConfigurationUseCases } from "../dist/application/adapters/configuration-use-case.js";
 import { AdapterInstallationUseCases } from "../dist/application/adapters/installation-use-case.js";
-import { resolveLatestEimAsset } from "../dist/adapters/runtime/esp-idf-installer.js";
-import { EimInstallProgressParser } from "../dist/adapters/runtime/esp-idf-installer.js";
-import { parseEspIdfTargets } from "../dist/adapters/runtime/esp-idf-installer.js";
-import { consumeEimOutputChunk } from "../dist/adapters/runtime/esp-idf-installer.js";
-import { eimToolDownloadMetadata } from "../dist/adapters/runtime/esp-idf-installer.js";
+import { resolveLatestEimAsset } from "../dist/adapters/runtime/eim-installer.js";
+import { EimInstallProgressParser } from "../dist/adapters/runtime/eim-installer.js";
+import { parseEimTargets } from "../dist/adapters/runtime/eim-installer.js";
+import { consumeEimOutputChunk } from "../dist/adapters/runtime/eim-installer.js";
+import { eimToolDownloadMetadata } from "../dist/adapters/runtime/eim-installer.js";
+import { isEimManagedUserPath } from "../dist/adapters/runtime/eim-installer.js";
 
 test("EIM resolver uses the latest GitHub release metadata and its published digest", async () => {
   const digest = "a".repeat(64);
@@ -83,7 +84,7 @@ test("EIM progress parser exposes only measured tool counts, transfer bytes, and
           reentrant: true,
           transition: true,
           current: 0,
-          total: 14,
+          total: 13,
           label: { key: "install.tools", fallback: "Installing ESP-IDF tools" },
         },
       },
@@ -116,7 +117,8 @@ test("EIM progress parser exposes only measured tool counts, transfer bytes, and
   const extracted = parser.consume("Successfully extracted xtensa-esp-elf");
   assert.equal(extracted[0].data.state, "completed");
   assert.equal(extracted[1].data.current, 1);
-  assert.equal(extracted[1].data.total, 14);
+  assert.equal(extracted[1].data.total, 13);
+  assert.deepEqual(parser.consume("Python installed successfully"), []);
   assert.deepEqual(parser.consume("Component Registry synchronization"), []);
   const registry = parser.consume("registry 80%");
   assert.equal(registry[0].data.percent, 80);
@@ -147,6 +149,23 @@ test("EIM tool metadata resolves the platform archive with its published size", 
   );
 });
 
+test("EIM user PATH cleanup recognizes a prior managed executable entry", () => {
+  assert.equal(
+    isEimManagedUserPath(
+      "D:\\chips\\sdk\\esp-idf\\eim",
+      "D:\\chips\\sdk\\esp-idf",
+    ),
+    true,
+  );
+  assert.equal(
+    isEimManagedUserPath(
+      "D:\\chips\\sdk\\esp-idf\\tools",
+      "D:\\chips\\sdk\\esp-idf",
+    ),
+    false,
+  );
+});
+
 test("EIM output splitter processes carriage-return progress frames and strips terminal escapes", () => {
   const first = consumeEimOutputChunk({
     buffered: "",
@@ -165,12 +184,12 @@ test("EIM output splitter processes carriage-return progress frames and strips t
 });
 
 test("ESP-IDF install targets use one comma-separated option and persist a unique list", () => {
-  assert.deepEqual(parseEspIdfTargets("esp32, esp32s3,esp32"), [
-    "esp32",
-    "esp32s3",
-  ]);
+  assert.deepEqual(
+    parseEimTargets("esp32, esp32s3,esp32", ["esp32", "esp32s3"]),
+    ["esp32", "esp32s3"],
+  );
   assert.throws(
-    () => parseEspIdfTargets("esp32,not-a-chip"),
+    () => parseEimTargets("esp32,not-a-chip", ["esp32"]),
     (error) =>
       error instanceof BenchPilotError &&
       error.kind === "ADAPTER_INSTALLATION_FAILED",

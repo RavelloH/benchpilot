@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "schema",
+    "schema_version",
+    "provider",
+    "platforms",
+    "stability",
+    "estimate",
+    "fields"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema": { "const": "benchpilot.adapter.installation" },
+    "schema_version": { "const": 1 },
+    "provider": { "enum": ["none", "eim"] },
+    "platforms": {
+      "type": "object",
+      "additionalProperties": {
+        "enum": ["stable", "experimental", "unsupported"]
+      }
+    },
+    "stability": { "enum": ["stable", "experimental"] },
+    "estimate": {
+      "type": "object",
+      "required": ["minimum_bytes", "maximum_bytes"],
+      "additionalProperties": false,
+      "properties": {
+        "minimum_bytes": { "type": "integer", "minimum": 0 },
+        "maximum_bytes": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "fields": { "type": "array", "items": { "$ref": "#/$defs/field" } },
+    "configuration_not_found_tool": { "type": "string" },
+    "eim": { "$ref": "#/$defs/eim" }
+  },
+  "$defs": {
+    "field": {
+      "type": "object",
+      "required": ["key", "summary", "required"],
+      "additionalProperties": false,
+      "properties": {
+        "key": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+        "summary": { "type": "string" },
+        "required": { "type": "boolean" },
+        "separator": { "const": "," },
+        "choices": { "type": "array", "items": { "$ref": "#/$defs/choice" } }
+      }
+    },
+    "choice": {
+      "type": "object",
+      "required": ["value", "label"],
+      "additionalProperties": false,
+      "properties": {
+        "value": { "type": "string" },
+        "label": { "type": "string" }
+      }
+    },
+    "eim": {
+      "type": "object",
+      "required": ["target_field", "configuration"],
+      "additionalProperties": false,
+      "properties": {
+        "target_field": { "type": "string" },
+        "configuration": {
+          "type": "object",
+          "additionalProperties": {
+            "enum": [
+              "root",
+              "release",
+              "idf_path",
+              "idf_py_path",
+              "python_path",
+              "export_script",
+              "export_bat_script",
+              "target",
+              "installed_targets",
+              "eim"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

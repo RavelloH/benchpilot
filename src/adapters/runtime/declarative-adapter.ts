@@ -33,6 +33,7 @@ import {
   redactSecrets,
 } from "./validation/data-validator.js";
 import type { AdapterCapabilityViews } from "../contract/views.js";
+import { installationFor } from "./installation.js";
 
 const validatorSchema = (
   validator: AdapterDataValidator,
@@ -501,6 +502,21 @@ export const createDeclarativeAdapter = (
     },
     configurationFields() {
       return configurationFields(runtime);
+    },
+    installation() {
+      return installationFor(runtime.bundle.installation as Json);
+    },
+    configurationNotFound(discovery) {
+      const tool = object(
+        runtime.bundle.installation,
+      ).configuration_not_found_tool;
+      return (
+        typeof tool === "string" &&
+        discovery.tools.some(
+          (candidate) =>
+            candidate.id === tool && candidate.status === "unavailable",
+        )
+      );
     },
     async doctor(context: AdapterContext) {
       const checks: Json[] = [

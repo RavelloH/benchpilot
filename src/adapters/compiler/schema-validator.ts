@@ -18,6 +18,7 @@ const schemaFor: Record<string, string> = {
   "sessions.toml": "sessions",
   "parsers.toml": "parsers",
   "artifacts.toml": "artifacts",
+  "installation.toml": "installation",
   "tests/cases.toml": "cases",
   "platforms/windows.toml": "platform",
   "platforms/linux.toml": "platform",
@@ -245,6 +246,7 @@ export const validateSchemas = async (
   const ajv = createAjv();
   const diagnostics: AdapterDiagnostic[] = [];
   for (const [file, kind] of Object.entries(schemaFor)) {
+    if (adapter.files[file] === undefined) continue;
     const schema = JSON.parse(
       await readFile(resolve(schemaRoot, `${kind}.schema.json`), "utf8"),
     ) as JsonObject;

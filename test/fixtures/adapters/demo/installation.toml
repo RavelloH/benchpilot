@@ -1,0 +1,14 @@
+schema = "benchpilot.adapter.installation"
+schema_version = 1
+provider = "none"
+stability = "experimental"
+fields = []
+
+[platforms]
+windows = "unsupported"
+linux = "unsupported"
+macos = "unsupported"
+
+[estimate]
+minimum_bytes = 0
+maximum_bytes = 0

@@ -27,6 +27,8 @@ export const fixedFiles = [
   "README.md",
 ];
 
+export const optionalFiles = ["installation.toml"] as const;
+
 const filesUnder = async (root: string): Promise<string[]> => {
   const entries = await readdir(root, { withFileTypes: true });
   const nested = await Promise.all(
@@ -76,7 +78,11 @@ export const validateAdapterLayout = async (
       );
     }
   for (const file of await filesUnder(root))
-    if (!fixedFiles.includes(file) && !allowedExtra(file))
+    if (
+      !fixedFiles.includes(file) &&
+      !optionalFiles.includes(file as "installation.toml") &&
+      !allowedExtra(file)
+    )
       diagnostics.push(
         diagnostic(
           "ADAPTER_LAYOUT_MISMATCH",

@@ -14,7 +14,8 @@
     "schemas",
     "platforms",
     "i18n",
-    "views"
+    "views",
+    "installation"
   ],
   "additionalProperties": false,
   "properties": {
@@ -40,6 +41,7 @@
     },
     "i18n": { "type": "object" },
     "views": { "type": "object" },
+    "installation": { "type": "object" },
     "platforms": {
       "type": "object",
       "required": ["windows", "linux", "macos"],

@@ -63,6 +63,19 @@ test("compiler and runtime source trees do not import each other", async () => {
     );
 });
 
+test("business layers do not branch on built-in adapter identifiers", async () => {
+  for (const layer of ["application", "cli", "core", "infrastructure"])
+    for (const file of (
+      await readdir(join(process.cwd(), "src", layer), {
+        recursive: true,
+      })
+    ).filter((item) => item.endsWith(".ts")))
+      assert.doesNotMatch(
+        await readFile(join(process.cwd(), "src", layer, file), "utf8"),
+        /\besp-idf\b|\besp32(?:[a-z0-9]+)?\b/i,
+      );
+});
+
 const temporaryAdapter = async () => {
   const root = await mkdtemp(join(tmpdir(), "benchpilot-adapter-"));
   const adapterRoot = join(root, "template");
@@ -86,6 +99,25 @@ test("the adapter template validates and compiles deterministically", async () =
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test("adapter installation metadata is compiled from the bundle declaration", async () => {
+  const result = await compileAdapter(espIdf);
+  assert.deepEqual(result.diagnostics, []);
+  assert.equal(result.bundle.installation.provider, "eim");
+  assert.equal(result.bundle.installation.configuration_not_found_tool, "idf");
+  assert.deepEqual(result.bundle.installation.eim.configuration, {
+    managed_root: "root",
+    installation_source: "eim",
+    idf_version: "release",
+    idf_path: "idf_path",
+    idf_py_path: "idf_py_path",
+    python_path: "python_path",
+    export_script: "export_script",
+    export_bat_script: "export_bat_script",
+    target: "target",
+    installed_targets: "installed_targets",
+  });
 });
 
 test("adapter sessions declare all managed session capability contracts", async () => {
