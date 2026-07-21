@@ -545,6 +545,8 @@ help:
   options: "OPTIONS"
   output: "OUTPUT"
   safety: "SAFETY"
+  terminal: "TERMINAL"
+  ttyOnly: "Requires an interactive TTY; --json, --jsonl, and --agent are unavailable."
   errorKinds: "ERROR KINDS"
   examples: "EXAMPLES"
 error:

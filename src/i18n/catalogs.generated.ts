@@ -556,6 +556,9 @@ export const catalogs = {
     "help.options": "OPTIONS",
     "help.output": "OUTPUT",
     "help.safety": "SAFETY",
+    "help.terminal": "TERMINAL",
+    "help.ttyOnly":
+      "Requires an interactive TTY; --json, --jsonl, and --agent are unavailable.",
     "help.usage": "Usage",
     "init.adapters": "Select adapters to enable",
     "init.applied": "Applied existing BenchPilot project configuration.",
@@ -1226,6 +1229,8 @@ export const catalogs = {
     "help.options": "选项",
     "help.output": "输出",
     "help.safety": "安全",
+    "help.terminal": "终端限制",
+    "help.ttyOnly": "仅支持交互式 TTY；不能使用 --json、--jsonl 或 --agent。",
     "help.usage": "用法",
     "init.adapters": "选择要启用的适配器",
     "init.applied": "已套用现有 BenchPilot 项目配置。",

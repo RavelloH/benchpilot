@@ -65,6 +65,7 @@ export interface HelpDocument {
   readonly footer: readonly MessageRef[];
   readonly output?: CommandOutputReference;
   readonly safety?: Safety;
+  readonly ttyOnly?: true;
   readonly errors: readonly string[];
 }
 
@@ -163,6 +164,7 @@ export class HelpDocumentService {
       footer: [],
       ...(definition.output ? { output: definition.output } : {}),
       ...(definition.safety ? { safety: definition.safety } : {}),
+      ...(definition.operation?.ttyOnly ? { ttyOnly: true as const } : {}),
       errors: definition.errors ?? [],
     };
   }

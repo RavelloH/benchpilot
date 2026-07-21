@@ -36,6 +36,7 @@ export type HelpGroupData = JsonObject & {
 export type HelpExampleData = JsonObject & {
   argv: string[];
   description?: LocalizedMessageData;
+  ttyOnly?: true;
 };
 
 export type HelpChildData = JsonObject & {
@@ -211,5 +212,6 @@ export const projectHelpDocument = (
   ),
   ...(document.output ? { output: jsonValue(document.output) } : {}),
   ...(document.safety ? { safety: jsonValue(document.safety) } : {}),
+  ...(document.ttyOnly ? { ttyOnly: true as const } : {}),
   errors: [...document.errors],
 });

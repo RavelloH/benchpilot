@@ -37,6 +37,25 @@ const provider = (calls) => ({
             },
           ],
         },
+        {
+          value: "console",
+          summary: { key: "command.device.execute" },
+          safety: { mode: "caution", flag: "confirm-console" },
+          operation: {
+            kind: "static",
+            timeoutMs: 86_400_000,
+            lockMode: "none",
+            safety: { mode: "caution", flag: "confirm-console" },
+            createsRun: false,
+            ttyOnly: true,
+          },
+          output: {
+            id: "fixture.console",
+            schema: "benchpilot.fixture.console",
+            version: 1,
+            view: "fixture.console",
+          },
+        },
       ];
     return [];
   },
@@ -165,6 +184,15 @@ test("dynamic Capability help uses resolved safety, fields, and output", async (
   assert.equal(document.safety.flag, "confirm-flash");
   assert.equal(document.output.schema, "benchpilot.operation");
   assert.deepEqual(calls, ["configured-devices", "device-capabilities"]);
+});
+
+test("dynamic TTY-only capabilities expose their terminal restriction in help", async () => {
+  const document = await new HelpDocumentService(
+    commandCatalogDefinition,
+    provider([]),
+  ).document(["device", "demo", "console"]);
+  assert.equal(document.ttyOnly, true);
+  assert.equal(document.output.schema, "benchpilot.fixture.console");
 });
 
 test("dynamic child values are opt-in for bounded help", async () => {

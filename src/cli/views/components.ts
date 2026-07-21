@@ -273,6 +273,16 @@ const outputComponent: HelpScreenComponent<HelpViewBlock> = {
   },
 };
 
+const terminalComponent: HelpScreenComponent<HelpViewBlock> = {
+  render(_block, context) {
+    if (context.data.ttyOnly !== true) return "";
+    const theme = terminalTheme(context.screen.color);
+    return section(theme.heading(t(context.screen.locale, "help.terminal")), [
+      theme.muted(t(context.screen.locale, "help.ttyOnly")),
+    ]);
+  },
+};
+
 export const helpScreenComponents: Readonly<
   Record<HelpViewBlock["component"], HelpScreenComponent<HelpViewBlock>>
 > = {
@@ -287,5 +297,6 @@ export const helpScreenComponents: Readonly<
   ErrorList: errorListComponent,
   MessageList: messageListComponent,
   SafetyDetail: safetyComponent,
+  TerminalDetail: terminalComponent,
   OutputDetail: outputComponent,
 };

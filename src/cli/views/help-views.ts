@@ -40,6 +40,7 @@ export const helpViewDefinitions: readonly HelpViewDefinition[] = [
         widthGroup: "help-label",
       },
       { component: "SafetyDetail" },
+      { component: "TerminalDetail" },
       { component: "OutputDetail" },
       { component: "ErrorList" },
       { component: "ExampleList" },

@@ -24,6 +24,7 @@ export type HelpViewBlock =
   | { readonly component: "ErrorList" }
   | { readonly component: "MessageList"; readonly source: "footer" }
   | { readonly component: "SafetyDetail" }
+  | { readonly component: "TerminalDetail" }
   | { readonly component: "OutputDetail" };
 
 export interface HelpViewDefinition {

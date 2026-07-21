@@ -545,6 +545,8 @@ help:
   options: "选项"
   output: "输出"
   safety: "安全"
+  terminal: "终端限制"
+  ttyOnly: "仅支持交互式 TTY；不能使用 --json、--jsonl 或 --agent。"
   errorKinds: "错误类型"
   examples: "示例"
 error:
