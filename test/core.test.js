@@ -607,6 +607,75 @@ test("detached serial session launcher reports a failed host without retaining a
   }
 });
 
+test("managed session writes project a durable terminal outcome before IPC", async () => {
+  const root = await mkdtemp(
+    path.join(os.tmpdir(), "benchpilot-session-terminal-write-"),
+  );
+  try {
+    const paths = new PathService(
+      process.env,
+      process.platform,
+      path.join(root, "home"),
+      path.join(root, "temp"),
+    );
+    const launcher = new SerialSessionLauncher(paths);
+    const identity = {
+      adapter: "fixture",
+      instance: "board-a",
+      physicalId: "COM8",
+    };
+    const failed = await launcher.sessions.create({
+      projectRoot: root,
+      capabilityId: "run",
+      identity,
+    });
+    await launcher.sessions.store.write({
+      ...failed.record,
+      state: "failed",
+      failure: {
+        kind: "MANAGED_SESSION_TRANSPORT_CLOSED",
+        message: "Managed session transport closed unexpectedly.",
+      },
+    });
+    await assert.rejects(
+      launcher.acquireWriterLease(failed.record.id),
+      (error) =>
+        error instanceof BenchPilotError &&
+        error.kind === "MANAGED_SESSION_TRANSPORT_CLOSED" &&
+        error.message === "Managed session transport closed unexpectedly.",
+    );
+    await assert.rejects(
+      launcher.writeWithLease({
+        sessionId: failed.record.id,
+        controlToken: "unused",
+        leaseId: "unused",
+        data: Buffer.from("x"),
+      }),
+      (error) =>
+        error instanceof BenchPilotError &&
+        error.kind === "MANAGED_SESSION_TRANSPORT_CLOSED",
+    );
+
+    const stopped = await launcher.sessions.create({
+      projectRoot: root,
+      capabilityId: "run",
+      identity,
+    });
+    await launcher.sessions.store.write({
+      ...stopped.record,
+      state: "stopped",
+    });
+    await assert.rejects(
+      launcher.acquireWriterLease(stopped.record.id),
+      (error) =>
+        error instanceof BenchPilotError &&
+        error.kind === "MANAGED_SESSION_TERMINAL",
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true, maxRetries: 5 });
+  }
+});
+
 test("detached serial session launcher marks a ready timeout failed before the host can acquire a lock", async () => {
   const root = await mkdtemp(
     path.join(os.tmpdir(), "benchpilot-session-launcher-timeout-"),

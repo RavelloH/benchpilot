@@ -156,6 +156,7 @@ export class SerialSessionLauncher implements ManagedSessionStarter {
 
   async acquireWriterLease(sessionId: string) {
     const record = await this.sessions.get(sessionId);
+    this.requireWritable(record, sessionId);
     if (!record?.controlEndpoint)
       throw new BenchPilotError(
         "SESSION_CONTROL_UNAVAILABLE",
@@ -175,6 +176,7 @@ export class SerialSessionLauncher implements ManagedSessionStarter {
     data: Uint8Array;
   }) {
     const record = await this.sessions.get(input.sessionId);
+    this.requireWritable(record, input.sessionId);
     if (!record?.controlEndpoint)
       throw new BenchPilotError(
         "SESSION_CONTROL_UNAVAILABLE",
@@ -209,6 +211,7 @@ export class SerialSessionLauncher implements ManagedSessionStarter {
     leaseId: string;
   }) {
     const record = await this.sessions.get(input.sessionId);
+    this.requireWritable(record, input.sessionId);
     if (!record?.controlEndpoint)
       throw new BenchPilotError(
         "SESSION_CONTROL_UNAVAILABLE",
@@ -406,5 +409,30 @@ export class SerialSessionLauncher implements ManagedSessionStarter {
     return ["creating", "starting", "running", "stopping"].includes(
       record.state,
     );
+  }
+
+  /**
+   * A terminal record is the durable source of truth once its host has gone
+   * away.  Prefer it to the incidental absence of the local IPC endpoint so
+   * callers see why the session ended and can act on that outcome.
+   */
+  private requireWritable(
+    record: ManagedSessionRecord | undefined,
+    sessionId: string,
+  ) {
+    if (record?.state === "failed") {
+      const failure = record.failure;
+      throw new BenchPilotError(
+        failure?.kind ?? "MANAGED_SESSION_TERMINAL",
+        5,
+        failure?.message ?? `Managed session has failed: ${sessionId}.`,
+      );
+    }
+    if (record?.state === "stopped")
+      throw new BenchPilotError(
+        "MANAGED_SESSION_TERMINAL",
+        4,
+        `Managed session is already stopped: ${sessionId}.`,
+      );
   }
 }
