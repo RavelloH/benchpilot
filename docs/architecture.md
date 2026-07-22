@@ -1,56 +1,103 @@
-# Architecture
+# 架构
 
-Core owns physical-resource safety. Capabilities execute through the Operation Runner, which acquires Locks, claims approvals, records cleanup, and finalizes the Run. Cleanup runs before lock-lease stop, approval finalization, Lock release or quarantine, log close, and Run finalization. Adapters are explicit registrations and receive validated configuration services rather than selecting behavior by board model in Core.
+BenchPilot 是一个以设备能力为执行单元的本地优先 CLI。它将命令解析、业务用例、物理资源安全、适配器运行时和终端呈现分开，使新增适配器或设备能力不需要在 Core 中增加板卡型号分支。
 
-The CLI boundary has five layers: CLI Interface → Application / Use Cases →
-Core Safety & Lifecycle → Adapter Runtime → Adapter Definitions / Toolchain.
-The Command Graph is the source of command paths, fields, help, dynamic child
-catalogs, and interaction metadata. CLI presentation converts resolved command
-intents into Application requests; it owns no device operation, configuration
-mutation, Run, Lock, or Approval business logic. Application owns command
-semantics and dynamic catalogs; Core owns safety and lifecycle. Built-in
-adapters are loaded only from compiled Bundle v2 files, and the declarative
-runtime exposes their capabilities.
+本页说明各层的职责、一次操作的执行路径，以及面向硬件操作的关键边界。具体命令见 [CLI 使用说明](cli.md)，配置见 [配置](config.md)。
 
-The Output Engine consumes one locale-neutral
-semantic data object and renders Screen, `benchpilot.result` v3 JSON, or
-`benchpilot.event` v3 JSONL frames. `MessageRef` keeps user-facing text typed
-and resolved in the CLI, while Application and Core return locale-neutral data.
-RLog is an infrastructure sink for business logs, captures, and Run audit; it
-is deliberately separate from public JSONL. Device and system Capability
-operations project Core lifecycle facts into the same Result v3 and Event v3
-protocol as all other commands.
-`OperationRunner` applies safety, creates the Run, configures RLog, acquires a
-physical-identity lock, executes with cancellation/timeout, persists a result,
-and releases resources in `finally`. A lock ownership loss aborts the same
-signal supplied to the Capability.
+## 分层与职责
 
-Core operations now run registered cleanup handlers before stopping the `LockLease`
-and releasing the physical-resource lock. Runs are finalized only after critical
-cleanup completes. Adapters are supplied through `createBenchPilotApplication`, so
-the CLI dynamically resolves their devices and capabilities. The bundled ESP-IDF
-Adapter is declarative and hardware-capable, while ordinary tests use fixtures
-and never access hardware.
+```text
+CLI
+  → Application
+    → Core
+      → Adapter Runtime
+        → Declarative Adapter Bundle / External tools / Device
+```
 
-`runProcess` is a shell-free future-adapter helper. It binds a child process to an
-operation AbortSignal and waits for it to exit before cleanup can release the
-physical lock.
+| 层                  | 主要位置                | 责任                                                                        | 不负责的事项                                          |
+| ------------------- | ----------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------- |
+| CLI                 | `src/cli/`              | 解析参数、交互、帮助、本地化和 Screen/JSON/JSONL 呈现。                     | 不直接执行设备操作，不直接修改 Run、Lock 或审批状态。 |
+| Application         | `src/application/`      | 组合用例、解析命令语义、管理动态命令目录、设备与系统编排。                  | 不拥有物理资源生命周期。                              |
+| Core                | `src/core/`             | 能力契约、配置、Operation Runner、Lock、审批、Run、日志、产物和会话协调。   | 不根据设备型号或厂商选择行为。                        |
+| Adapter Runtime     | `src/adapters/runtime/` | 装载已编译的声明式 Bundle，解析工具与环境，计划并执行动作或工作流。         | 不绕过 Core 的操作、锁、审批和审计边界。              |
+| Adapter Definitions | `src/adapters/`         | 用 TOML 与 JSON Schema 描述工具链、设备、能力、解析器、工作流和本地化文本。 | 不包含任意 JavaScript 插件或 shell 命令字符串。       |
 
-Declarative adapters are compiled into Bundle v2 before shipping. At runtime,
-Tool Discovery, full via-tool launch resolution, environments, actions,
-workflows, parsers, artifacts, passive discovery, Doctor checks, and extension
-capabilities run from the compiled Bundle only. Adapter TOML is a build-time
-input and no arbitrary JavaScript is loaded from an adapter.
+`src/core.ts` 是面向包使用者的 Core 导出面；`src/index.ts` 再导出 Core 契约与进程执行工具。CLI 的启动入口为 `src/cli/index.ts`。应用组合根显式注册适配器，因此适配器、设备实例和能力均可在运行时被命令目录发现。
 
-`src/core.ts` is the public Core export surface. Implementations live in
-`core/config`, `core/capabilities`, `core/operations`, `core/process`, and their
-resource-specific modules. CLI startup remains in `cli/index.ts`; project
-initialization, configuration mutation, and system workflows live under
-`application`. `benchpilot setup` is reserved for a future environment
-configuration wizard and is intentionally neither registered nor implemented.
+## 命令到能力的路径
 
-Human interaction is provided by Inquirer and starts only at legal incomplete
-command nodes. Caller identity is determined solely by the versioned fixed
-environment/file marker contract; SSH, TTY, and CI are not identity heuristics.
-TTY availability controls whether a human interaction can proceed, while JSON
-and JSONL always remain non-interactive machine protocols.
+静态命令定义是帮助、解析和交互菜单的唯一语义来源。`device <设备> <能力>` 与 `system <系统> <能力>` 的末级节点并不硬编码在 CLI 中：Application 根据项目配置和已注册适配器重新解析设备，再返回可用能力及其输入 schema。
+
+设备能力的典型路径如下：
+
+1. CLI 解析命令、全局选项和能力输入，并在需要时决定是否允许交互。
+2. Application 解析目标设备或系统，并要求命令目录再次确认目标能力仍然可用。
+3. Core 的 Operation Runner 校验设备配置、能力输入和稳定物理身份。
+4. 运行器依据能力声明创建 Run、获取 Lock、认领审批，并向适配器调用 `execute()`。
+5. 适配器运行时执行声明的动作或工作流；工具输出进入 RLog 与解析器，产物经 Core 登记。
+6. 运行器执行固定的清理与终结顺序，产出操作结果。
+7. CLI 将同一份本地化无关的结果呈现为屏幕、`benchpilot.result` v3 或 `benchpilot.event` v3。
+
+系统能力在真正执行任一成员前完成成员解析与审批前置检查。只有所有成员提供兼容的同名能力时，系统目录才会公开该能力；这避免了以一个看似统一的命令执行不一致的设备语义。
+
+## 操作生命周期与物理资源
+
+Capability 是唯一可触发设备效果的边界。其定义必须给出超时、锁模式和安全策略；适配器代码不能自行获取物理锁、创建 Run 或规避审批。
+
+Operation Runner 将操作取消、超时和信号统一为同一个 `AbortSignal`，再传给能力实现。涉及独占设备的操作基于适配器提供的稳定物理身份计算锁标识。锁续租或审批认领丢失会中止这一个信号，从而让能力和其外部进程共同收敛。
+
+资源清理顺序不可改变：
+
+```text
+能力注册的清理
+  → 停止 Lock 租约
+  → 结束审批状态
+  → 释放或隔离 Lock
+  → 关闭业务日志
+  → 终结 Run
+```
+
+关键清理失败、进程无法确认退出或其他可能保留物理访问的情况，会使 Lock 进入隔离状态，而不是直接释放。详细行为见[安全模型](safety.md)与[设备锁](locks.md)。
+
+## 适配器模型
+
+适配器以显式注册的方式提供设备运行时。Core 只依赖通用 Adapter 与 Capability 契约，不根据 `esp32`、`stm32` 等板卡型号改变分支。
+
+内置声明式适配器先由编译器校验，再在构建阶段生成确定性的 Bundle v2。生产运行时只读取随包发布的 Bundle，不会从用户项目加载任意 TOML、JavaScript 或 shell 代码。Bundle 中可声明：
+
+- 适配器与平台元数据；
+- 工具发现、环境解析和受控的安装信息；
+- 被动设备发现与稳定身份规则；
+- 结构化进程、复制动作和串行工作流；
+- 解析器、进度事件、产物规则、能力输入输出 schema；
+- 本地化文本和仅影响 Screen 的视图元数据。
+
+进程动作始终使用参数数组与共享 Process Runner，并以 `shell: false` 启动。模板仅支持受限的 `${namespace.path}` 取值；关键字段缺失会失败，而不会静默替换为空字符串。详见[声明式适配器格式](adapter-format.md)和[声明式适配器运行时](adapter-runtime.md)。
+
+## 输出、日志与本地化
+
+Application 与 Core 返回本地化无关的数据和 `MessageRef`；CLI 是解析用户可见文本的唯一边界。这样同一个能力结果可用于终端、JSON 与 JSONL，而不需要为不同输出格式执行不同的设备操作。
+
+公共协议与业务记录严格分离：
+
+| 通道      | 所有者            | 内容                                         |
+| --------- | ----------------- | -------------------------------------------- |
+| Screen    | CLI               | 面向交互终端的本地化页面、进度与错误。       |
+| `--json`  | CLI Output Engine | 一个 `benchpilot.result` v3 对象。           |
+| `--jsonl` | CLI Output Engine | `benchpilot.event` v3 事件流及唯一终止事件。 |
+| Run 日志  | `rlog-js`         | 业务日志、捕获和持久化审计事件。             |
+
+RLog 不是 JSONL stdout 的后备实现。工具 stdout/stderr、业务日志和 Run 文件不会直接写入公共机器输出；调用方应消费公开协议，而非解析日志文本。
+
+## 受管会话
+
+长时间占用串口等资源的能力可声明为受管会话。会话宿主独占设备通道并持有对应 Lock；其他命令通过控制端点读取有界日志、请求停止或申请单写入者租约，不能绕过宿主重新打开同一物理端口。
+
+这使 `run`、`logs`、`console`、`send` 和 `stop` 等能力能够沿用 Core 的锁、日志、审计和恢复机制。是否公开这些能力及其协议由适配器声明；没有声明固件协议时，不会凭空提供请求或同步功能。
+
+## 设计约束
+
+- `benchpilot setup` 预留给未来的环境配置向导，当前并未注册或实现。
+- 设备扫描默认是被动的：不打开串口、不执行适配器探测，也不扫描局域网。
+- Agent 身份仅依据固定、版本化的环境或文件标记判断；TTY、SSH 与 CI 不是身份信号。TTY 可用性只决定能否进行人类交互。
+- 测试使用适配器夹具与临时路径；普通测试不访问真实硬件。ESP-IDF 硬件验证是显式 opt-in 的独立入口。

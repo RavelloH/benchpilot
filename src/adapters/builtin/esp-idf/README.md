@@ -1,96 +1,36 @@
-# Espressif ESP-IDF Adapter
+# Espressif ESP-IDF 适配器
 
-This first-party Adapter uses the frozen declarative Adapter Format v1. It never
-opens a port while scanning: passive discovery runs fixed `pyserial`
-`list_ports` code through the configured Python Tool and scores Espressif USB
-VID `303A` highly. Third-party USB-UART bridges are returned as low-confidence
-candidates only.
+这是 BenchPilot 随包发布的 `esp-idf` 声明式适配器。它面向 ESP-IDF 项目，当前首先验证 ESP32-S3，但目标和芯片均由配置决定。该目录只包含规则、Schema、本地化、fixture 与声明测试；执行、锁、审批、Run、日志与清理由 BenchPilot Core 统一处理。
 
-`status`, `build`, `clean`, `fullclean`, `size`, `info`, `flash`, `reset`,
-`capture`, and `deploy` are available. `status`, `info`, `fullclean`, `reset`, and
-bounded `capture` retain declared safety classifications: opening a USB serial
-port may reset the target. Capture
-uses fixed Python code with independent argv values, always closes the port,
-and saves its bounded raw output as the `serial-capture.txt` run artifact.
-Its `duration_seconds`, `max_lines`, and `max_bytes` inputs bound the capture;
-`timestamp` optionally prefixes each saved line with UTC time. The structured
-result reports the line and byte counts, marker detection, truncation, and the
-stop reason.
+适配器需要 Python 和 `idf.py`，并在需要设备诊断时使用 `python -m esptool`。它会从配置、ESP-IDF 环境变量、PATH 与平台安装位置发现工具。`idf.py` 操作使用已激活的 ESP-IDF 环境或安全捕获的导出脚本环境；路径和脚本均作为独立参数处理。
 
-`run` opens a managed raw serial-read session at `monitor_baud` (or the
-per-invocation `--baud` override). `logs` reads its bounded record spool;
-`logs --follow` is available for Screen and JSONL. `stop` releases the session
-and its device lock. A human TTY can use `console` to attach bidirectionally;
-agents use bounded `send` requests with a single writer lease. These commands
-never run `idf.py monitor` in the background and do not reopen the port outside
-the session host. `request` remains unavailable until firmware declares a
-validated protocol profile. `sync`, `test`, `selftest`, and `erase` are also
-intentionally unavailable. No action uses `--force`, erase commands, eFuse
-operations, JTAG/OpenOCD, OTA, or a shell string.
-
-`idf.py` actions require an activated or resolved ESP-IDF environment.
-`esptool` actions use the resolved Python executable directly, so read-only
-`info` remains available when a compatible esptool installation is present but
-the ESP-IDF export script has not been activated.
-
-Configure paths only when automatic discovery or an already activated ESP-IDF
-environment is insufficient:
+## 配置示例
 
 ```toml
 [adapters]
 enabled = ["esp-idf"]
 
 [adapters.esp-idf]
-idf_path = "C:\\path\\to\\esp-idf"
-python_path = "C:\\path\\to\\python.exe"
+idf_path = "/opt/esp-idf"
+python_path = "/opt/esp/python_env/bin/python"
+export_script = "/opt/esp-idf/export.sh"
 target = "esp32s3"
 build_dir = "build"
 flash_baud = 460800
 monitor_baud = 115200
 
-[devices.esp32s3]
+[devices.demo]
 adapter = "esp-idf"
-port = "COMx"
+port = "/dev/ttyACM0"
 chip = "esp32s3"
 ```
 
-Linux and macOS use the same schema with POSIX paths. Prefer an active ESP-IDF
-shell, `IDF_PATH`, or an explicit `export_script = "/opt/esp-idf/export.sh"`.
-For a USB CDC/JTAG device, configure a stable `/dev/ttyACM*` or `/dev/ttyUSB*`
-port. `build_dir` is always a project-relative path and cannot escape the
-project directory.
+Windows 可改用 `export_script`（PowerShell）或 `export_bat_script`（cmd），并使用 `COM<n>` 端口。`build_dir` 只能是项目内的相对目录。
 
-On Windows the environment resolver first accepts an already active ESP-IDF
-environment, then uses an explicit PowerShell `export_script` or cmd
-`export_bat_script`, `idf_path/export.ps1`, and `idf_path/export.bat`. Linux
-and macOS use an explicit `export_script`, `idf_path/export.sh`, and
-`IDF_PATH/export.sh`. All scripts are captured through a fixed wrapper with the
-script path passed as an argv value. An explicitly configured invalid tool path
-is an error; correct it rather than relying on PATH fallback.
+## 已提供的能力
 
-Most boards automatically enter download mode through DTR/RTS. If that fails,
-hold BOOT/GPIO0, briefly press EN, then retry. Before flashing, verify that
-overwriting the board's current application firmware is intended.
+构建生命周期包括 `build`、`clean`、`fullclean`、`size`、`flash`、`deploy` 和 `reset`；设备诊断包括 `status` 与 `info`；`capture` 只进行有明确时间、行数和字节上限的串口读取，可选 `--marker` 在捕获到指定文本时提前结束。`flash` 和 `deploy` 会覆盖固件，`fullclean` 删除构建状态；它们的安全信息和设备锁均由能力声明交给 Core。
 
-Hardware verification is opt-in and never part of normal tests:
+`run`、`logs`、`stop`、`console` 和 `send` 使用受管串口会话。普通扫描不打开端口；`console` 仅允许 TTY，`send` 的载荷会脱敏。`request`、`sync`、`test`、`selftest` 与 `erase` 明确未启用。
 
-```powershell
-$env:BENCHPILOT_ESP_PORT = "COMx"
-$env:BENCHPILOT_ESP_PROJECT = "C:\path\to\project"
-pnpm run test:hardware:esp-idf
-```
-
-Set `BENCHPILOT_ESP_ALLOW_FLASH=1` only after deciding to overwrite the target.
-Set `BENCHPILOT_ESP_ALLOW_CAPTURE=1` to include the bounded boot-marker capture;
-it asserts Lock release.
-
-`size --json` returns available ESP-IDF table values as `flash_code_bytes`,
-`flash_data_bytes`, `ram_bytes`, `diram_bytes`, `iram_bytes`, and
-`image_bytes`. ESP-IDF v6 can report DIRAM rather than a separate DRAM row.
-
-Common recovery paths are deliberate and machine-readable: a missing port is
-reported as `ESP_DEVICE_NOT_FOUND` in `details.parserKind`; a busy port as
-`ESP_DEVICE_PORT_BUSY`; and a bad ESP-IDF project, target mismatch, build
-failure, or flash verification failure has its own parser category and recovery
-guidance. Close monitor applications, reconnect USB, verify the target, and
-use BOOT/GPIO0 plus EN when automatic download mode is unavailable.
+详细配置、能力表、错误恢复及选择加入的硬件测试请见 [ESP-IDF 适配器文档](../../../../docs/adapters/esp-idf.md)。

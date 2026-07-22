@@ -1,20 +1,93 @@
-# Safety and approvals
+# 安全分类与人工审批
 
-Capabilities are classified as `normal`, `caution`, `destructive`, or
-`irreversible`. The classification drives Help, audit events, and the approval
-policy; it does not add a per-command confirmation flag. Approval records bind
-command, normalized input, device identity, project and configuration digest,
-expire, and are consumed once.
+## 目的与范围
 
-The default policy requires approval only for `irreversible` operations. A
-project can opt into broader approval policy without changing command syntax.
+每个 Capability 都必须声明安全信息（Safety），包括安全级别 `mode`、可选影响说明 `effects` 和可选审批有效期 `approvalTtlMs`。安全级别是能力定义的一部分，Core 用它驱动帮助信息、审计事件和 agent 模式下的人工审批策略。
 
-Approvals are read-only checked before a Run and claimed only after the device lock. Every transition uses one per-approval guard. A claimed approval has a heartbeat lease; a local live PID remains active even if its original claim expiry elapsed. A demonstrably stale claim is atomically restored and reused by a normal Operation instead of creating an unbounded sequence of pending approvals.
+安全分类不会自动为普通 CLI 调用添加临时确认开关，也不会代替适配器实现正确的设备操作、超时、锁和清理。它定义的是统一审批边界。
 
-`markDangerousEffectStarted()` is called immediately before the irreversible
-effect, not during preflight. A successful human-approved operation always
-consumes its claim. Failed, timed-out, or aborted operations release only when
-no dangerous effect began; once marked, they consume. A successful operation
-that omitted the marker remains successful but emits the structured
-`safety.marker-missing` warning with code `DANGEROUS_EFFECT_MARKER_MISSING`
-and still consumes its approval.
+## 安全级别
+
+Capability 的 `safety.mode` 只能为以下值：
+
+| 级别           | 含义                                                 |
+| -------------- | ---------------------------------------------------- |
+| `normal`       | 预期不改变设备的危险状态。                           |
+| `caution`      | 可能需要操作者关注，但不属于破坏性或不可逆操作。     |
+| `destructive`  | 会删除、覆盖或显著改变现有状态，但通常存在恢复路径。 |
+| `irreversible` | 影响不可逆，或恢复不能由 BenchPilot 保证。           |
+
+分类由适配器作者依据实际效果声明，而不是由 Core 根据命令名称或设备型号猜测。Capability 还必须单独声明默认超时、锁模式和是否创建 Run；安全级别不会替代这些声明。
+
+## 审批策略
+
+项目配置的 `approval.level` 决定哪些非普通能力在 agent 模式下进入持久化审批流程：
+
+| 配置值            | 需要审批的级别                               |
+| ----------------- | -------------------------------------------- |
+| `default`（默认） | 仅 `irreversible`。                          |
+| `strict`          | `caution`、`destructive` 和 `irreversible`。 |
+| `bypass`          | 不请求审批。                                 |
+
+无论配置为何值，`normal` 都不需要审批。审批流程只在调用方显式以 `approvalMode: "agent"` 执行时启用；普通 CLI 操作不会因该策略创建审批记录。项目可通过配置命令将 `approval.level` 保存到本地或全局配置，配置文件中该值只能是 `strict`、`default` 或 `bypass`。
+
+系统操作会在真正执行任何成员之前进行审批前置检查，避免部分设备已经执行而其他设备仍在等待审批。
+
+## 审批记录与绑定
+
+审批记录保存在项目目录的 `.benchpilot/state/approvals/`，格式为 `benchpilot.approval` v1。请求与一个稳定的绑定摘要匹配；绑定包含命令、已校验的输入、设备身份、项目标识和完整解析配置的摘要。
+
+用于显示的记录输入会经过 Capability 的 `redactInput()` 处理；用于匹配的摘要仍基于实际已校验输入。因此，已批准的审批只可复用于相同命令、输入、设备、项目和配置摘要的操作，且必须尚未过期。
+
+审批记录的状态转换如下：
+
+```text
+pending → approved → claimed → consumed
+   │                    │
+   └────→ rejected      └────→ approved（失败或中止且未开始危险效果）
+```
+
+`pending` 只能被批准或拒绝；批准和拒绝都要求记录尚未过期。`consumed` 表示该审批已被使用，不能再次批准或认领。相同绑定的待审批记录会被复用，避免反复执行同一请求时无限创建记录。
+
+可使用以下命令检查和处理审批：
+
+```powershell
+benchpilot approval list
+benchpilot approval <approval-id> inspect
+benchpilot approval <approval-id> approve
+benchpilot approval <approval-id> reject
+```
+
+CLI 在批准或拒绝前要求交互确认。审批详情中包含设备物理标识时，应用层还可以提供该标识作为审批挑战信息，供人工复核目标设备。
+
+## 认领、租约与并发
+
+Operation Runner 先取得设备锁，再认领已批准的审批。认领以审批 ID 为粒度使用项目本地保护文件完成，因此并发操作不能同时消费同一记录。
+
+被认领的审批默认租期为 5 分钟，每 30 秒续租。对于同一主机的记录，只要记录的 PID 仍然存在，即使原租期已过也视为 active；跨主机或无法确认的记录只有在过期时间额外超过 10 秒后才可判定为 stale。已证明 stale 的同绑定认领会原子地恢复为 `approved` 并复用，而不是创建新请求。
+
+认领租约丢失会中止正在执行的操作。审批的保护文件放在项目 `.benchpilot/state/approval-guards/` 中，确保即使两个进程使用不同临时目录，仍能协调同一项目的审批状态。
+
+## 危险效果标记与审批消费
+
+对于需要审批的能力，适配器应在不可逆或不可安全重试的实际效果开始之前立即调用：
+
+```ts
+context.markDangerousEffectStarted({ phase: "effect-started" });
+```
+
+该标记不是前置检查，也不应在准备阶段提前调用。它用于决定操作失败、中止或超时时审批是否已被消耗：
+
+| 执行结果         | 是否已标记危险效果 | 认领审批的最终状态                 |
+| ---------------- | ------------------ | ---------------------------------- |
+| 成功             | 是或否             | `consumed`                         |
+| 失败、中止或超时 | 否                 | `approved`，可在有效期内再次使用。 |
+| 失败、中止或超时 | 是                 | `consumed`。                       |
+
+成功但未调用标记不会改变成功结果，也不会保留审批；系统会写入 `safety.marker-missing` 警告事件，代码为 `DANGEROUS_EFFECT_MARKER_MISSING`。该事件应视为适配器实现缺陷：维护者应补上准确的标记位置，而不是依赖警告长期存在。
+
+## 适配器实现边界
+
+适配器必须如实选择安全级别，不能因为调用方可使用 `bypass` 就将危险能力声明为 `normal`。`bypass` 是项目策略选择，不是适配器绕过审计、锁、Run 或清理责任的途径。
+
+审批只证明某个绑定曾被人工批准；它不验证设备当前接线、供电、固件内容或操作者是否仍在现场。执行前仍应依赖稳定物理身份、排他锁、输入校验和适配器自身的安全检查。

@@ -1,30 +1,37 @@
-# BenchPilot contributor rules
+# BenchPilot 贡献约束
 
-- All device operations go through a Capability and the Operation Runner.
-- Core code must not branch on board model; adapters are registered explicitly.
-- All business logs and captures use `rlog-js`.
-- Never bypass LockManager for physical-resource operations.
-- Do not add `--force`, `--yes`, or hidden human-confirmed switches.
-- JSON stdout must never contain logs.
-- Each capability declares its timeout, lock mode and safety policy.
-- Changes to configuration, locks, runs, approvals or shutdown lifecycle require regression tests.
-- Tests must use injected/temporary paths, never real user directories.
-- Runtime support is Node.js >= 22.13. pnpm 11 is a repository development and CI tool;
-  do not document it as a requirement for npm package users.
-- Preserve the operation cleanup order: capability cleanup, lock lease stop, approval
-  finalization, lock release, log close, then Run finalization.
-- Critical cleanup failures or timeouts that may retain physical access must quarantine,
-  rather than release, the Lock.
+本文件适用于在此仓库中工作的人工贡献者和自动化 Agent。实现、测试、提交说明与文档都必须以当前代码和以下约束为准；若需求与约束冲突，应先说明冲突并取得明确决定。
 
-## Commit messages
+## 设备操作与安全边界
 
-Use Conventional Commits with a required scope:
+- 所有设备操作必须通过 Capability 和 Operation Runner 执行。
+- Core 不得依据板卡型号分支；板卡或工具链差异必须通过显式注册的适配器表达。
+- 任何涉及物理资源的操作都必须经由 `LockManager`，不得直接访问或自行实现绕过锁的流程。
+- 每项 Capability 必须声明超时、锁模式和安全策略。
+- 不得添加 `--force`、`--yes`、隐藏的人工确认开关，或其他可绕过审批与安全边界的机制。
+- 关键清理失败或超时，且可能仍保有物理访问权时，必须隔离 Lock；不得直接释放该 Lock。
 
-```text
-<type>(<scope>): <imperative summary>
-```
+## 生命周期、日志与输出
 
-Allowed types are `feat`, `fix`, `docs`, `refactor`, `test`, `build`, `ci`,
-`chore`, and `perf`. Keep the summary lowercase, concise, and without a final
-period. Examples: `feat(cli): add demo deploy command` and
-`build(tooling): migrate to pnpm`.
+- 必须保持以下清理顺序：能力清理、停止锁租约、结束审批状态、释放或隔离 Lock、关闭日志、结束 Run。
+- 业务日志和捕获必须使用 `rlog-js`。
+- JSON 标准输出只能包含公共机器协议数据，绝不能混入日志。
+- 变更配置、锁、Run、审批或关闭生命周期时，必须补充相应回归测试。
+
+## 测试与运行环境
+
+- 测试必须使用注入的临时路径，不得读写真实用户目录。
+- 运行时支持 Node.js `>= 22.13`。
+- pnpm 11 仅是本仓库开发与 CI 工具；面向 npm 包使用者的文档不得将 pnpm 11 表述为运行前提。
+
+## 文档与提交
+
+- 技术文档以实现和测试为事实来源；命令、配置、能力和安全行为发生变化时同步更新相关文档。
+- 文档使用直接、可验证的技术表述，说明适用范围、前置条件、行为边界与失败处理；避免宣传性语言和未经验证的推断。
+- 提交信息遵循带 scope 的 Conventional Commits：
+
+  ```text
+  <type>(<scope>): <imperative summary>
+  ```
+
+  允许的类型为 `feat`、`fix`、`docs`、`refactor`、`test`、`build`、`ci`、`chore` 和 `perf`。摘要使用简短的小写祈使句，不以句号结束，例如 `feat(cli): add demo deploy command`。

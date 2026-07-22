@@ -1,81 +1,35 @@
-# Declarative Adapter Runtime
+# 声明式适配器运行时
 
-BenchPilot executes production adapters from compiled Bundle v2 files in
-`dist/adapters/bundles`. The runtime never reads an adapter's TOML files from a user
-project and resolves the bundle directory relative to its own module, so npm
-installs work from any current directory.
+生产运行时只执行随软件发布的 Bundle v2，不从用户项目读取 TOML 适配器规则。Bundle Loader 校验其内容后，Declarative Adapter 将规则转换为 Core Adapter、Device Runtime 和 Capability；工具与环境解析、动作或工作流规划、输出解析和产物收集都在这一受限实现中进行。
 
-The execution path is Bundle Loader, adapter registry, JSON Schema validation,
-tool/environment resolution, action or workflow planning, the Core operation
-lifecycle, parsing, artifact registration, and output validation. Locks,
-approvals, Runs, cleanup, quarantine and JSON/JSONL terminal events remain
-owned by Core.
+运行时不拥有 Lock、审批、Run、业务日志关闭、隔离或最终清理。它调用共享 Process Runner，并将能力交给 Operation Runner；因此所有适配器遵守相同的超时、取消与清理顺序。
 
-The public command protocol is rendered by the CLI Output Engine as Result v3
-or Event v3. Capability operations emit the same locale-neutral outcome for
-Screen, JSON, and JSONL. Compiled Adapter `views.toml` metadata can select a
-shared Screen component over validated output fields, but never creates a
-second result format or a custom terminal renderer.
+## 执行路径
 
-Production loading remains limited to the bundles shipped with the package;
-test fixtures are compiled and loaded only by the test harness.
+一次能力调用依次经历：输入校验与脱敏、工具和环境解析、动作或工作流规划、共享进程执行、Parser 输出解析、产物登记、输出 Schema 校验，最后返回统一的能力结果。Screen、JSON 和 JSONL 接收相同的区域无关结果；`views.toml` 仅为 Screen 选择受限投影。
 
-Templates are deliberately limited to `${namespace.path}` lookups. Execution
-critical templates fail with `ADAPTER_TEMPLATE_VALUE_MISSING` when a value is
-absent; they never become an empty executable path, working directory or
-argument. Process actions always use an argv array and the shared Process
-Runner with `shell: false`. Serial plans are accepted but report
-`ADAPTER_EXECUTOR_UNAVAILABLE` until a future runtime version supplies a
-serial executor.
+运行时上下文从 `adapter`、平台、适配器配置、设备配置、输入、项目根目录、家目录、临时目录、进程环境及当前 Run（如存在）开始。工具解析会填充 `tool` 与 `discovery`，环境解析填充环境选择，Parser 和工作流步骤将结果提供给后续模板。所有执行关键模板都要求存在值。
 
-Adapter actions use fixed declarations from their shipped Bundle. User input is
-passed as data, never inserted into executable source.
+输入、输出、全局配置和设备配置都由 Bundle 内的 JSON Schema 验证。Schema 标记的密钥字段会在日志、Run 元数据、结果和审批绑定中脱敏。设备配置中的 `adapter` 选择器不传入适配器 Schema。
 
-## Runtime Context and safety boundary
+## 工具、环境与进程
 
-Every execution starts with `adapter`, `platform`, `config`, `device`, `input`,
-`project`, `home`, `temp`, `env`, `run` (when the Core created one), and empty `tool`,
-`discovery`, `environment`, and `result` namespaces. Tool resolution and
-Parser output update that live Context. Workflow steps are rendered one at a
-time, so a following step can use `${result.previous.value}` and
-`${step.result.value}` safely.
+工具解析产生完整的 Launch：可执行文件、前缀参数、发现结果、环境 ID 及 `via-tool` 依赖链。每个依赖工具在正确的环境中先探测一次；探测缓存键含适配器、平台、可执行路径、前缀、环境和参数。探测输出只记入调试日志，不能成为公开配置或扫描输出。
 
-Process output is mirrored to RLog, while the parser receives the same stream.
-The runtime retains a bounded head/tail capture (4 MiB per stream) and records
-whether either stream was truncated. It never uses `console.log` for tool
-output. Serial execution remains deliberately unavailable.
+环境可继承当前进程、应用静态变量、验证活跃环境，或捕获脚本激活后的环境。脚本由固定包装器调用，硬性上限为十秒；缓存仅持久化相对于基础进程环境的 set/unset 差异，并以受限权限写入临时缓存。Windows 的环境变量名比较不区分大小写。
 
-Dangerous process actions mark the Core effect boundary only after `spawn`;
-dangerous copy actions mark it immediately before their first write. Core keeps
-approval consumption, cleanup, lock release and quarantine ownership.
+进程使用 argv 和 `shell: false`。输出由同一数据流进入 RLog、进度解析与最终有界解析，避免不同通道产生不一致的状态。动作中显式超时与能力剩余期限共同限制执行。
 
-## Deadlines, discovery and extensions
+## 设备发现与身份
 
-An action with an explicit timeout is bounded by that timeout and the remaining
-Capability deadline. An action without one inherits the remaining Capability
-deadline; a Workflow can additionally establish a shorter Workflow deadline.
-Core operation cancellation remains the outer boundary and retains its own
-`OPERATION_TIMEOUT` error. Runtime timeout failures are serializable
-`ADAPTER_ACTION_TIMEOUT`, `ADAPTER_WORKFLOW_TIMEOUT`, or
-`ADAPTER_TOOL_PROBE_TIMEOUT` errors with retry guidance.
+`benchpilot device scan` 是被动操作。内置 serial 源仅枚举端口名称；Windows 使用固定的非交互 PowerShell 查询，不会打开端口。USB 与网络源可由 Core 注入记录，但运行时不携带原生 USB 枚举器，也不会扫描 LAN。`command` 源引用声明的进程 Action 和 Parser，通过相同的 Tool/Environment 模型在十秒内运行；它不是任意 shell 命令。
 
-`benchpilot device scan` is passive. The bundled runtime enumerates available
-serial port names on POSIX and Windows and can consume declared static records
-or Core-injected passive USB/network providers; it neither opens a serial port
-nor changes DTR/RTS. Network sources never scan a LAN. A targeted `command`
-source reuses a declared shell-free Tool Action and Parser, with a ten-second
-ceiling, rather than accepting a command string from an adapter.
-An Adapter Probe is never part of discovery. Probe declarations are not
-executed by this Runtime; hardware-affecting identification must be exposed as
-a declared Capability so it receives the full Core Run, Lock, approval, and
-cleanup lifecycle. Doctor always performs passive discovery only.
-There is no serial executor in this release. The bundled ESP-IDF adapter uses
-declared process actions and passive discovery. Device identity uses declared
-physical fields, then an explicit port fallback; instance fallback is disabled
-by default.
+适配器 `probe` 不会由普通扫描、Doctor 或 `--probe` 执行。可能影响硬件的识别必须定义成能力，以取得 Run、Lock、审批和固定清理。扫描源的失败彼此隔离，只暴露结构化类别与可重试性。
 
-Extension capabilities are compiled separately from the standard catalog and
-are exposed through the same dynamic `benchpilot device <id> <capability>`
-route. Input-schema `x-benchpilot-cli` metadata supplies flags, aliases,
-positionals, repeatable values, secrets, and hidden help entries; no CLI command
-is hard-coded for a vendor adapter.
+设备身份依次读取声明字段，再使用显式允许的端口回退，最后才可使用显式允许的实例回退。端口在 Windows 规范化为 COM 名称，在 POSIX 上尽量解析到真实路径。设备锁不接受缺失的稳定身份。
+
+## 会话与限制
+
+受管会话由 `session:*` 能力和 `sessions.toml` 计划提供。会话宿主独占端口与会话锁；日志、停止、控制台、写入和请求操作复用该会话而不是重新打开设备。`console` 必须是 TTY 操作。会话参数包括端口、波特率、编码、DTR/RTS 开线策略、日志及写入上限；协议配置可定义受约束的请求/响应 Schema。
+
+Action 层的 serial 执行器尚未实现。适配器不能假设普通 Action 可以读写串口，也不能绕过会话宿主直接取得物理资源。
