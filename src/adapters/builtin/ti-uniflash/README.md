@@ -44,6 +44,8 @@ image_path = "build/application.out"
 [devices.target_a.build]
 system = "make"
 directory = "firmware/gcc"
+# Optional; defaults to true. Add --run after a verified deploy flash.
+run_after_deploy = true
 # Optional. Enables destructive fullclean through this project-defined target.
 fullclean_target = "distclean"
 # Optional. Its presence enables managed UART session capabilities.
@@ -82,8 +84,9 @@ When `build` is declared, the adapter exposes `build`, `clean`, and `deploy`.
 `system = "make"` runs the Make default target in `directory`; `system =
 "cmake"` runs `cmake --build .` in an already configured build directory.
 Both then check the configured `image_path` with the standard file API. Deploy
-performs that build and image check before flashing the image with verify
-enabled. These are structured argv contracts, not configurable shell commands.
+performs that build and image check before flashing the image with verify and,
+by default, run enabled; `run_after_deploy = false` retains a halted target.
+These are structured argv contracts, not configurable shell commands.
 `clean` uses the fixed `clean` target. `fullclean` is deliberately absent until
 `fullclean_target` is explicitly declared; it is destructive and executes only
 that identifier as a Make or CMake build target. The project remains

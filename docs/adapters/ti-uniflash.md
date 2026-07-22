@@ -73,7 +73,7 @@ monitor_port = "COM4"
 
 设置 `device.image_path` 后会公开 `size`。它通过标准 Python 文件 API 报告这个预构建镜像的精确字节数，不执行构建、不读取目标 Flash，也不改变 `flash` 所需的显式 `image` 输入。
 
-如果项目使用标准构建入口，可添加 `device.build`：`system` 只能是 `make` 或 `cmake`，`directory` 是包含 Makefile 或已配置 CMake 构建树的项目目录；同时必须给出产物 `device.image_path`。这会公开 `build`、`clean` 与 `deploy`。Make 只执行默认目标，CMake 只执行 `cmake --build .`；两者都会在构建后检查声明的镜像文件。`deploy` 在该检查成功后使用固定的 `DSLite flash --flash --verify` 参数烧录该镜像。全程不接受自由命令或 DSLite 参数。
+如果项目使用标准构建入口，可添加 `device.build`：`system` 只能是 `make` 或 `cmake`，`directory` 是包含 Makefile 或已配置 CMake 构建树的项目目录；同时必须给出产物 `device.image_path`。这会公开 `build`、`clean` 与 `deploy`。Make 只执行默认目标，CMake 只执行 `cmake --build .`；两者都会在构建后检查声明的镜像文件。`deploy` 在该检查成功后使用固定的 `DSLite flash --flash --verify --run` 参数烧录并运行该镜像；若项目明确要求保持暂停，可设置 `device.build.run_after_deploy = false`。全程不接受自由命令或 DSLite 参数。
 
 `clean` 只使用固定的 `clean` 目标。若项目维护安全边界已审计的完整清理目标，可添加 `device.build.fullclean_target`（受限目标标识符），才会公开破坏性的 `fullclean`；该能力需要正常的 destructive 审批。项目必须自行保证其清理目标不会触及源文件或项目目录之外的路径。
 

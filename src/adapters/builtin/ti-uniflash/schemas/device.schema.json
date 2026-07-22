@@ -100,6 +100,11 @@
           "type": "string",
           "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
           "description": "Optional project-defined target that removes all generated build state. Its presence enables the destructive fullclean capability."
+        },
+        "run_after_deploy": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run the target after a successful built-image flash. Defaults to true to match deployment semantics; set false only when the project must keep the target halted."
         }
       }
     },

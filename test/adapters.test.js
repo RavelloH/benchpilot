@@ -277,6 +277,15 @@ test("conditional capabilities expose UniFlash UART sessions only with a monitor
       .sort(),
     ["build", "clean", "deploy", "flash", "size", "status"],
   );
+  assert.equal(
+    adapter.deviceConfigSchema.parse({
+      target_config: "C:/work/target.ccxml",
+      probe_id: "lab-probe-1",
+      image_path: "C:/work/build/application.out",
+      build: { system: "make", directory: "C:/work/firmware" },
+    }).build.run_after_deploy,
+    true,
+  );
   const withFullclean = await createDevice({
     target_config: "C:/work/target.ccxml",
     probe_id: "lab-probe-1",

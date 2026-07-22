@@ -74,6 +74,7 @@ arguments = [
   { kind = "option", flag = "--config", value = "${device.target_config}" },
   { kind = "flag", flag = "--flash" },
   { kind = "flag", flag = "--verify" },
+  { kind = "flag", flag = "--run", when = { path = "device.build.run_after_deploy", operator = "equals", value = true } },
   { kind = "value", value = "${device.image_path}" }
 ]
 

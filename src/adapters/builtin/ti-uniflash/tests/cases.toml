@@ -199,12 +199,12 @@ root = "E:/firmware"
 target_config = "E:/firmware/tools/target.ccxml"
 probe_id = "lab-xds110-01"
 image_path = "E:/firmware/build/application.out"
-build = { system = "make", directory = "E:/firmware/gcc" }
+build = { system = "make", directory = "E:/firmware/gcc", run_after_deploy = true }
 [cases.context.input]
 [cases.expect]
 tool = "dslite"
 cwd = "E:/firmware"
-args = ["flash", "--config", "E:/firmware/tools/target.ccxml", "--flash", "--verify", "E:/firmware/build/application.out"]
+args = ["flash", "--config", "E:/firmware/tools/target.ccxml", "--flash", "--verify", "--run", "E:/firmware/build/application.out"]
 
 [[cases]]
 id = "parse-image-size"
