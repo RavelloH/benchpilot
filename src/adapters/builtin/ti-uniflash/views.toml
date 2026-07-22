@@ -24,9 +24,136 @@ formatter = "string"
 [capabilities.status.fields.label]
 key = "view.status.field.revision"
 fallback = "Revision"
+[[capabilities.status.fields]]
+selector = "tooling.dslite"
+formatter = "string"
+[capabilities.status.fields.label]
+key = "view.status.field.dslite"
+fallback = "DSLite"
 
 [capabilities.flash]
 kind = "completion"
 [capabilities.flash.message]
 key = "view.flash.completed"
 fallback = "Firmware flashing completed."
+
+[capabilities.capture]
+kind = "detail"
+[capabilities.capture.title]
+key = "view.capture.title"
+fallback = "Capture summary"
+[[capabilities.capture.fields]]
+selector = "lines"
+formatter = "string"
+[capabilities.capture.fields.label]
+key = "view.field.lines"
+fallback = "Lines"
+[[capabilities.capture.fields]]
+selector = "bytes"
+formatter = "string"
+[capabilities.capture.fields.label]
+key = "view.field.bytes"
+fallback = "Bytes"
+[[capabilities.capture.fields]]
+selector = "stop_reason"
+formatter = "string"
+[capabilities.capture.fields.label]
+key = "view.field.stop_reason"
+fallback = "Stop reason"
+
+[capabilities.run]
+kind = "detail"
+[capabilities.run.title]
+key = "view.session.run.title"
+fallback = "Managed serial session"
+[[capabilities.run.fields]]
+selector = "sessionId"
+formatter = "string"
+[capabilities.run.fields.label]
+key = "view.session.field.id"
+fallback = "Session"
+[[capabilities.run.fields]]
+selector = "status"
+formatter = "string"
+[capabilities.run.fields.label]
+key = "view.session.field.status"
+fallback = "Status"
+[[capabilities.run.fields]]
+selector = "runId"
+formatter = "string"
+[capabilities.run.fields.label]
+key = "view.session.field.run"
+fallback = "Run"
+
+[capabilities.stop]
+kind = "detail"
+[capabilities.stop.title]
+key = "view.session.stop.title"
+fallback = "Managed session stop"
+[[capabilities.stop.fields]]
+selector = "sessionId"
+formatter = "string"
+[capabilities.stop.fields.label]
+key = "view.session.field.id"
+fallback = "Session"
+[[capabilities.stop.fields]]
+selector = "status"
+formatter = "string"
+[capabilities.stop.fields.label]
+key = "view.session.field.status"
+fallback = "Status"
+
+[capabilities.logs]
+kind = "records"
+source = "records"
+[capabilities.logs.title]
+key = "view.session.logs.title"
+fallback = "Serial session logs"
+[[capabilities.logs.columns]]
+selector = "timestamp"
+formatter = "string"
+[capabilities.logs.columns.label]
+key = "view.session.field.timestamp"
+fallback = "Time"
+[[capabilities.logs.columns]]
+selector = "sequence"
+formatter = "string"
+[capabilities.logs.columns.label]
+key = "view.session.field.sequence"
+fallback = "#"
+[[capabilities.logs.columns]]
+selector = "text"
+formatter = "fallback-dash"
+[capabilities.logs.columns.label]
+key = "view.session.field.text"
+fallback = "Output"
+
+[capabilities.send]
+kind = "detail"
+[capabilities.send.title]
+key = "view.session.send.title"
+fallback = "Serial write"
+[[capabilities.send.fields]]
+selector = "sessionId"
+formatter = "string"
+[capabilities.send.fields.label]
+key = "view.session.field.id"
+fallback = "Session"
+[[capabilities.send.fields]]
+selector = "bytesWritten"
+formatter = "byte-size"
+[capabilities.send.fields.label]
+key = "view.session.field.bytes"
+fallback = "Written"
+[[capabilities.send.fields]]
+selector = "framing"
+formatter = "string"
+[capabilities.send.fields.label]
+key = "view.session.field.framing"
+fallback = "Framing"
+
+[capabilities.console]
+kind = "completion"
+[capabilities.console.message]
+key = "view.session.console.completed"
+fallback = "Console detached."

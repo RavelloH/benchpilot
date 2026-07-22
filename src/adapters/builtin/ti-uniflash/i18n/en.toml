@@ -7,6 +7,40 @@ title = "Target readiness"
 endpoint = "Debug probe"
 model = "Target"
 revision = "Revision"
+dslite = "DSLite"
 
 [view.flash]
 completed = "Firmware flashing completed."
+
+[view.capture]
+title = "Capture summary"
+
+[view.field]
+lines = "Lines"
+bytes = "Bytes"
+stop_reason = "Stop reason"
+
+[view.session.run]
+title = "Managed serial session"
+
+[view.session.stop]
+title = "Managed session stop"
+
+[view.session.logs]
+title = "Serial session logs"
+
+[view.session.send]
+title = "Serial write"
+
+[view.session.console]
+completed = "Console detached."
+
+[view.session.field]
+id = "Session"
+status = "Status"
+run = "Run"
+timestamp = "Time"
+sequence = "#"
+text = "Output"
+bytes = "Written"
+framing = "Framing"

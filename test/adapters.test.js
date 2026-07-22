@@ -437,6 +437,21 @@ test("ESP-IDF supplies a declarative View for every enabled capability", async (
   ]);
 });
 
+test("UniFlash supplies a declarative View for every enabled capability", async () => {
+  const result = await compileAdapter(tiUniflash);
+  assert.deepEqual(result.diagnostics, []);
+  assert.deepEqual(Object.keys(result.bundle.views).sort(), [
+    "capture",
+    "console",
+    "flash",
+    "logs",
+    "run",
+    "send",
+    "status",
+    "stop",
+  ]);
+});
+
 test("ESP-IDF prioritizes persisted activation over an inherited active SDK", async () => {
   const result = await compileAdapter(espIdf);
   assert.deepEqual(result.diagnostics, []);
