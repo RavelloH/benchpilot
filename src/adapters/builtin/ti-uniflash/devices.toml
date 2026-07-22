@@ -1,0 +1,14 @@
+schema = "benchpilot.adapter.devices"
+schema_version = 1
+
+[discovery]
+enabled = false
+
+[identity]
+fields = ["device.probe_id"]
+allow_port_fallback = false
+allow_instance_fallback = false
+
+[probe]
+enabled = false
+reason = "Passive scan does not open debug probes; use an explicitly approved flash capability for hardware access."

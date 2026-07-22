@@ -1,0 +1,118 @@
+# TI UniFlash 适配器设计
+
+> 状态：实验性实现。它不授权绕过 Capability、Operation Runner 或 LockManager 直接调用 DSLite。
+
+## 目标与边界
+
+`ti-uniflash` 是 TI UniFlash 的通用烧录适配器。首个可发布范围是通过 UniFlash DSLite 的默认 `flash` 模式，为具有有效目标配置文件（`.ccxml`）的 DebugServer 目标烧录已构建的镜像。
+
+它的目标是覆盖 UniFlash 可处理的目标配置，而不是将 MSPM0、XDS110、GCC 或某个项目目录写死在 Core 或适配器规则中。当前接入的 MSPM0G3507 与 XDS110 仅用作首个硬件验证组合。
+
+该适配器不负责构建固件。UniFlash 是烧录工具，不是统一编译系统；把项目的 PowerShell、Make、CMake 或 IDE 脚本作为自由命令交给适配器执行，会破坏声明式格式和命令安全边界。
+
+## 观察到的 UniFlash 契约
+
+本机安装位于 `D:\ti\uniflash_9.6.0`，其 `dslite.bat --version` 输出 `9.6.0.5764`。包装器列出的模式包括默认 `flash`、`memory`、`load`、设备系列专用解锁模式、SimpleLink 模式、MSPFlasher 与 Processor SDK Serial Flash。适配器不执行这个批处理包装器，而是直接启动其中的 `DSLite.exe`，因为 Operation Runner 强制 `shell: false`。
+
+因此 v1 只覆盖默认 `flash` 模式。它有一条已验证的项目级参数形态：
+
+```text
+dslite --config=<target.ccxml> --flash --verify --run -e <firmware.out>
+```
+
+这不是所有模式的通用语法。`mspflasher`、`cc31xx`、`cc32xx`、`processors` 以及各种解锁模式必须在将来以独立适配器或经单独验证的能力声明实现，不能由 `ti-uniflash` 拼接用户提供的任意参数来“兼容”。
+
+## 架构决策
+
+### 1. 通用烧录层只使用声明式 DSLite 动作
+
+适配器目录为 `src/adapters/builtin/ti-uniflash`，ID 固定为 `ti-uniflash`。它以一个 `dslite` Tool 和受限的 Process Action 运行，不引入 JavaScript、批处理片段或 shell 字符串。参数通过结构化 argv 传递，且以 `shell: false` 执行。
+
+Windows 发现顺序应为：
+
+1. 全局适配器配置中的 `dslite_path`；
+2. `UNIFLASH_ROOT` 环境变量下的 UniFlash DebugServer 路径；
+3. PATH 中的 `DSLite.exe`；
+4. 已验证的安装路径模式，例如 `D:/ti/uniflash_*/.../DebugServer/bin/DSLite.exe`、`C:/ti/uniflash_*/.../DebugServer/bin/DSLite.exe` 与 CCS DebugServer 入口。
+
+探测只执行 `DSLite.exe flash -h` 并确认其 `flash` 使用说明；它不连接调试探针。显式但无效的路径必须失败，不能回退到其他候选。
+
+Linux 和 macOS 支持要在对应平台实际验证 `dslite.sh`、安装布局和版本输出后才启用。首个 Windows Bundle 必须把其他平台的能力标为不支持并说明原因，不能基于猜测声称跨平台可用。
+
+### 2. 用 `.ccxml` 描述目标，不在 Core 中分支
+
+设备配置把项目拥有的 `.ccxml` 作为目标配置来源。该文件可描述目标、调试接口与探针连接方式；适配器不会依据芯片型号、PID 或开发板名称选择不同的 Core 逻辑。
+
+设备还必须提供 `probe_id`：实验室分配的、稳定且唯一的物理探针身份。当前连接的 XDS110 在被动 Windows 枚举中显示为 `USB\\VID_0451&PID_BEF3\\NOSERIAL`，没有可作为稳定序列号的硬件 serial。因此，不能把 COM 口、临时实例名或 `.ccxml` 路径当作 Lock 身份。
+
+`devices.toml` 应以 `device.probe_id` 作为唯一 identity 字段，关闭端口和实例回退。普通 `device scan` 首版关闭；没有已验证的纯被动 Debug Probe 枚举器时，扫描不能借 DSLite 连接硬件。
+
+预期的项目配置形态如下：
+
+```toml
+[adapters]
+enabled = ["ti-uniflash"]
+
+[devices.target_a]
+adapter = "ti-uniflash"
+target_config = "tools/target-a.ccxml"
+probe_id = "lab-xds110-01"
+```
+
+`dslite_path` 属于全局 `[adapters.ti-uniflash]` 配置；目标配置和探针身份属于项目设备配置。运行前应验证它们是非空字符串；缺失的模板值必须在规划阶段失败，不能传入空参数。
+
+### 3. v1 只启用通用且已验证的 `flash`
+
+`flash` 是唯一首发启用的硬件 Capability：
+
+| 声明项      | 值                      |
+| ----------- | ----------------------- |
+| handler     | `action:flash`          |
+| creates_run | `true`                  |
+| timeout     | `15m`（待硬件矩阵校准） |
+| lock        | `device`                |
+| safety      | `destructive`           |
+| Windows     | `true`                  |
+
+输入 Schema 至少应包含：镜像路径、`verify`（默认 `true`）和 `run_after_flash`（默认 `false`）。这些布尔量只决定预先声明的 `--verify` 与 `--run` 参数是否出现；它们不能接受自由 DSLite 参数。镜像路径作为单独 argv 值传入 `-e`，不会成为 shell 源码。
+
+通用 `erase`、`reset`、`status`、`info`、内存读写、解锁和运行控制在首发均保持禁用。它们在不同 DSLite mode、目标系列和安全影响之间没有统一的已验证语义。特别是 mass erase 与 debug unlock 不能被实现为隐藏在 `flash` 输入中的快捷选项。
+
+DSLite 成功和失败输出需要通过 Parser 映射为稳定结果与错误类别。首发应先覆盖：目标配置无效、调试探针不可用、目标连接失败、镜像不存在/不兼容、擦写或校验失败和超时。实际文案来自带版本的 fixture，不以模糊子串认定成功。
+
+### 4. 构建生态独立于 UniFlash
+
+构建适配器按确定的工具链与项目格式扩展，而不是按板卡名称扩展。候选包括：
+
+- `ti-mspm0-gcc`：MSPM0 SDK、SysConfig、Arm GNU Toolchain 与 GNU Make；
+- `tiarmclang`：TI Arm Clang 及其被验证的项目入口；
+- `ti-c2000-cgt`：C2000 编译器与构建入口；
+- `ti-msp430-gcc` 或经验证的 TI MSP430 工具链。
+
+当前格式中每个设备只选择一个 `adapter`，并没有“一个构建适配器 + 一个烧录适配器”的组合或依赖模型。因此 `ti-uniflash` v1 不声明 `build` 或 `deploy`；工具链适配器若要提供 `deploy`，必须在自身的声明中同时包含经过验证的 DSLite 烧录步骤，直到未来引入有明确生命周期规则的适配器组合机制。
+
+这项限制是显式设计结论，不应通过 Core 依据 adapter ID、芯片型号或项目目录增加分支来绕开。
+
+## 实现文件与声明测试
+
+`ti-uniflash` 必须从 `_template` 复制全部固定文件，补齐每一个标准 Capability 的启用或禁用决定，并提供：
+
+- manifest、Windows Tool Discovery、继承环境和 `dslite-version` Parser；
+- 配置、设备、输入和输出 Schema；
+- `flash` Action 和其 Screen view、本地化消息；
+- 三个平台覆盖；
+- 至少包含工具版本解析、Windows 参数规划、`verify`/`run_after_flash` 条件、成功输出、已知失败输出的声明测试。
+
+声明测试不得启动 DSLite、访问探针或写入设备。它们只使用 fixtures 验证 argv、模板、Parser 和工作流规划。
+
+## 硬件验证顺序
+
+硬件验证只能在编译 Bundle 后通过 BenchPilot 的动态 Capability 执行：
+
+1. 运行 `adapter doctor`，确认 DSLite 版本与配置路径；
+2. 用被动系统枚举确认调试探针存在，并在设备配置中填写稳定 `probe_id`；
+3. 在严格审批策略下，使用可恢复的、专用于目标板的测试镜像执行 `flash --verify`；
+4. 检查 Run 的结果、审计日志、锁生命周期和 DSLite 错误映射；
+5. 仅在明确需要且验证过目标特定语义后，扩展其他 Capability。
+
+当前 MSPM0G3507 + XDS110 组合适合执行第 1–4 步，但它不是该适配器支持范围的唯一目标，也不能替代其他系列的硬件矩阵。

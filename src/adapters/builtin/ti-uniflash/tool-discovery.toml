@@ -1,0 +1,44 @@
+schema = "benchpilot.adapter.tool-discovery"
+schema_version = 1
+
+[discoveries.dslite]
+strategy = "first-valid"
+[[discoveries.dslite.candidates]]
+id = "config"
+type = "config"
+priority = 100
+key = "dslite_path"
+[[discoveries.dslite.candidates]]
+id = "uniflash-root"
+type = "environment-path"
+priority = 90
+variable = "UNIFLASH_ROOT"
+append = ["deskdb", "content", "TICloudAgent", "win", "ccs_base", "DebugServer", "bin", "DSLite.exe"]
+[[discoveries.dslite.candidates]]
+id = "path"
+type = "path"
+priority = 50
+names = ["DSLite.exe", "DSLite"]
+[[discoveries.dslite.candidates]]
+id = "windows-uniflash"
+type = "glob"
+priority = 20
+patterns = [
+  "D:/ti/uniflash_*/deskdb/content/TICloudAgent/win/ccs_base/DebugServer/bin/DSLite.exe",
+  "C:/ti/uniflash_*/deskdb/content/TICloudAgent/win/ccs_base/DebugServer/bin/DSLite.exe",
+  "C:/ti/ccs*/ccs/ccs_base/DebugServer/bin/DSLite.exe"
+]
+[discoveries.dslite.candidates.platforms]
+windows = true
+linux = false
+macos = false
+[discoveries.dslite.validation]
+path_type = "file"
+executable = false
+[discoveries.dslite.persistence]
+key = "dslite_path"
+source = "path"
+[discoveries.dslite.probe]
+args = ["flash", "-h"]
+parser = "dslite-flash-help"
+timeout = "10s"

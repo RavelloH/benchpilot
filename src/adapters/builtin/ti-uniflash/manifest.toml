@@ -1,0 +1,12 @@
+schema = "benchpilot.adapter.manifest"
+schema_version = 1
+id = "ti-uniflash"
+display_name = "Texas Instruments UniFlash"
+adapter_version = "1.0.0"
+vendor = "Texas Instruments"
+description = "Declarative DSLite flash support for TI targets described by a project-owned CCXML file."
+capability_catalog_version = 1
+minimum_benchpilot_version = "0.2.0"
+status = "experimental"
+deprecated = false
+tags = ["ti", "uniflash", "dslite", "debug-probe", "flash"]

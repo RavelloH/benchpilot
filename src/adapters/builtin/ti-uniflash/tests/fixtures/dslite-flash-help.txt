@@ -1,0 +1,2 @@
+Usage:
+  dslite flash --config=ccxml-file [options] [flash-file1 ...]

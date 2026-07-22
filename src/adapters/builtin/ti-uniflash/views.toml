@@ -1,0 +1,8 @@
+schema = "benchpilot.adapter.views"
+schema_version = 1
+
+[capabilities.flash]
+kind = "completion"
+[capabilities.flash.message]
+key = "view.flash.completed"
+fallback = "Firmware flashing completed."

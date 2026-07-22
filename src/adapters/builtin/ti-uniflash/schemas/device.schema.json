@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "benchpilot://adapter/ti-uniflash/device",
+  "type": "object",
+  "required": ["target_config", "probe_id"],
+  "additionalProperties": false,
+  "properties": {
+    "target_config": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Project-owned CCXML target configuration supplied to DSLite."
+    },
+    "probe_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "description": "Stable, lab-assigned physical debug probe identity used for exclusive locking."
+    }
+  }
+}

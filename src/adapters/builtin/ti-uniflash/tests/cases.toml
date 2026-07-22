@@ -1,0 +1,78 @@
+schema = "benchpilot.adapter.cases"
+schema_version = 1
+
+[[cases]]
+id = "render-flash-verified-run"
+type = "render-action"
+platform = "windows"
+target = "flash"
+[cases.context.project]
+root = "E:/firmware"
+[cases.context.device]
+target_config = "E:/firmware/tools/target.ccxml"
+probe_id = "lab-xds110-01"
+[cases.context.input]
+image = "E:/firmware/build/application.out"
+verify = true
+run_after_flash = true
+[cases.expect]
+tool = "dslite"
+cwd = "E:/firmware"
+args = ["flash", "--config", "E:/firmware/tools/target.ccxml", "--flash", "--verify", "--run", "E:/firmware/build/application.out"]
+
+[[cases]]
+id = "render-flash-without-optional-effects"
+type = "render-action"
+platform = "windows"
+target = "flash"
+[cases.context.project]
+root = "E:/firmware"
+[cases.context.device]
+target_config = "E:/firmware/tools/target.ccxml"
+probe_id = "lab-xds110-01"
+[cases.context.input]
+image = "E:/firmware/build/application.hex"
+verify = false
+run_after_flash = false
+[cases.expect]
+args = ["flash", "--config", "E:/firmware/tools/target.ccxml", "--flash", "E:/firmware/build/application.hex"]
+
+[[cases]]
+id = "parse-dslite-flash-help"
+type = "parse-output"
+platform = "windows"
+target = "dslite-flash-help"
+context = {}
+stdout_fixture = "fixtures/dslite-flash-help.txt"
+exit_code = 0
+expect = { success = true, result = { usage = "Usage:" } }
+
+[[cases]]
+id = "parse-dslite-config-error"
+type = "parse-output"
+platform = "windows"
+target = "dslite-flash"
+context = {}
+stderr_fixture = "fixtures/dslite-config-error.txt"
+exit_code = 1
+expect = { success = false, error = { kind = "TI_TARGET_CONFIG_INVALID", retryable = false }, result = {} }
+
+[[cases]]
+id = "parse-dslite-target-error"
+type = "parse-output"
+platform = "windows"
+target = "dslite-flash"
+context = {}
+stderr_fixture = "fixtures/dslite-target-error.txt"
+exit_code = 1
+expect = { success = false, error = { kind = "TI_TARGET_CONNECTION_FAILED", retryable = true }, result = {} }
+
+[[cases]]
+id = "parse-dslite-success"
+type = "parse-output"
+platform = "windows"
+target = "dslite-flash"
+context = {}
+stdout_fixture = "fixtures/dslite-success.txt"
+exit_code = 0
+expect = { success = true, result = {} }

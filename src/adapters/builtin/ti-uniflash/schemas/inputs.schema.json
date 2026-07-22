@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "benchpilot://adapter/ti-uniflash/inputs",
+  "type": "object",
+  "$defs": {
+    "empty": { "type": "object", "additionalProperties": false },
+    "flash": {
+      "type": "object",
+      "required": ["image"],
+      "additionalProperties": false,
+      "properties": {
+        "image": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Path to the prebuilt firmware image accepted by the configured target.",
+          "x-benchpilot-cli": { "flag": "image" }
+        },
+        "verify": {
+          "type": "boolean",
+          "default": true,
+          "description": "Ask DSLite to verify the programmed image.",
+          "x-benchpilot-cli": { "flag": "verify" }
+        },
+        "run_after_flash": {
+          "type": "boolean",
+          "default": false,
+          "description": "Run the target after successful flashing and verification.",
+          "x-benchpilot-cli": { "flag": "run-after-flash" }
+        }
+      }
+    }
+  }
+}

@@ -62,6 +62,7 @@
     "adapter:compile": "node --import tsx src/adapters/compiler/cli.ts compile",
     "adapter:test": "node --import tsx src/adapters/compiler/cli.ts test",
     "test:hardware:esp-idf": "pnpm run build && node test/hardware-esp-idf.mjs",
+    "test:hardware:ti-uniflash": "pnpm run build && node test/hardware-ti-uniflash.mjs",
     "pack:check": "pnpm pack --dry-run",
     "format": "prettier --write . --log-level warn",
     "format:check": "prettier --check . --log-level warn",

@@ -1,0 +1,4 @@
+schema = "benchpilot.adapter.platform"
+schema_version = 1
+platform = "windows"
+[overrides]

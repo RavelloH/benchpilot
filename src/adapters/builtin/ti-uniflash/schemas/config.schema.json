@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "benchpilot://adapter/ti-uniflash/config",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "dslite_path": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Full path to the DSLite executable, not the dslite.bat wrapper."
+    }
+  }
+}

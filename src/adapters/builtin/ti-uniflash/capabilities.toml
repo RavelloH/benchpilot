@@ -1,0 +1,174 @@
+schema = "benchpilot.adapter.capabilities"
+schema_version = 1
+catalog_version = 1
+
+[capabilities.status]
+enabled = false
+reason = "DSLite flash mode has no cross-target status command with a verified non-destructive contract."
+[capabilities.status.platforms]
+windows = false
+linux = false
+macos = false
+
+[capabilities.info]
+enabled = false
+reason = "Target inventory requires target-family-specific Debug Server commands that are not yet validated."
+[capabilities.info.platforms]
+windows = false
+linux = false
+macos = false
+
+[capabilities.build]
+enabled = false
+reason = "UniFlash programs prebuilt images and is not a firmware build system."
+[capabilities.build.platforms]
+windows = false
+linux = false
+macos = false
+
+[capabilities.clean]
+enabled = false
+reason = "UniFlash does not own project build output."
+[capabilities.clean.platforms]
+windows = false
+linux = false
+macos = false
+
+[capabilities.fullclean]
+enabled = false
+reason = "UniFlash does not own project build state."
+[capabilities.fullclean.platforms]
+windows = false
+linux = false
+macos = false
+
+[capabilities.size]
+enabled = false
+reason = "Image-size reporting belongs to the selected build toolchain."
+[capabilities.size.platforms]
+windows = false
+linux = false
+macos = false
+
+[capabilities.flash]
+enabled = true
+handler = "action:flash"
+input_schema = "flash"
+output_schema = "empty"
+creates_run = true
+timeout = "15m"
+lock = "device"
+[capabilities.flash.safety]
+mode = "destructive"
+description = "Programs the supplied image through the configured TI debug probe and can overwrite target flash."
+[capabilities.flash.platforms]
+windows = true
+linux = false
+macos = false
+[capabilities.flash.platform_reasons]
+linux = "DSLite installation layout and direct executable contract are not yet verified on Linux."
+macos = "DSLite installation layout and direct executable contract are not yet verified on macOS."
+
+[capabilities.reset]
+enabled = false
+reason = "Reset operation names and effects differ by target and require target-family validation."
+[capabilities.reset.platforms]
+windows = false
+linux = false
+macos = false
+
+[capabilities.run]
+enabled = false
+reason = "Run control requires a target-family-specific Debug Server contract."
+[capabilities.run.platforms]
+windows = false
+linux = false
+macos = false
+
+[capabilities.stop]
+enabled = false
+reason = "UniFlash flash mode does not provide a managed target stop session."
+[capabilities.stop.platforms]
+windows = false
+linux = false
+macos = false
+
+[capabilities.logs]
+enabled = false
+reason = "UniFlash flash mode does not provide a managed logging session."
+[capabilities.logs.platforms]
+windows = false
+linux = false
+macos = false
+
+[capabilities.console]
+enabled = false
+reason = "A generic debug-probe serial console is not declared by this flash-only adapter."
+[capabilities.console.platforms]
+windows = false
+linux = false
+macos = false
+
+[capabilities.send]
+enabled = false
+reason = "A generic target messaging protocol is not declared by this flash-only adapter."
+[capabilities.send.platforms]
+windows = false
+linux = false
+macos = false
+
+[capabilities.request]
+enabled = false
+reason = "No target protocol profile is defined for UniFlash."
+[capabilities.request.platforms]
+windows = false
+linux = false
+macos = false
+
+[capabilities.capture]
+enabled = false
+reason = "UniFlash flash mode does not expose a bounded generic capture capability."
+[capabilities.capture.platforms]
+windows = false
+linux = false
+macos = false
+
+[capabilities.sync]
+enabled = false
+reason = "UniFlash does not synchronize project files to a target."
+[capabilities.sync.platforms]
+windows = false
+linux = false
+macos = false
+
+[capabilities.test]
+enabled = false
+reason = "Test orchestration belongs to the selected project and toolchain."
+[capabilities.test.platforms]
+windows = false
+linux = false
+macos = false
+
+[capabilities.selftest]
+enabled = false
+reason = "A safe self-test requires a board- and firmware-specific contract."
+[capabilities.selftest.platforms]
+windows = false
+linux = false
+macos = false
+
+[capabilities.deploy]
+enabled = false
+reason = "This adapter programs prebuilt images; build-and-deploy requires a dedicated toolchain adapter."
+[capabilities.deploy.platforms]
+windows = false
+linux = false
+macos = false
+
+[capabilities.erase]
+enabled = false
+reason = "Erase operation names, scope, and irreversibility vary by target and are not exposed generically."
+[capabilities.erase.platforms]
+windows = false
+linux = false
+macos = false

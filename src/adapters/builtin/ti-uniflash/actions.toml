@@ -1,0 +1,17 @@
+schema = "benchpilot.adapter.actions"
+schema_version = 1
+
+[actions.flash]
+type = "process"
+tool = "dslite"
+cwd = "${project.root}"
+timeout = "15m"
+parser = "dslite-flash"
+arguments = [
+  { kind = "literal", value = "flash" },
+  { kind = "option", flag = "--config", value = "${device.target_config}" },
+  { kind = "flag", flag = "--flash" },
+  { kind = "flag", flag = "--verify", when = { path = "input.verify", operator = "equals", value = true } },
+  { kind = "flag", flag = "--run", when = { path = "input.run_after_flash", operator = "equals", value = true } },
+  { kind = "value", value = "${input.image}" }
+]

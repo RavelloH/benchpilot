@@ -1,0 +1,63 @@
+schema = "benchpilot.adapter.parsers"
+schema_version = 1
+
+[parsers.dslite-flash-help]
+mode = "line"
+encoding = "utf8"
+strip_ansi = true
+success_exit_codes = [0]
+[[parsers.dslite-flash-help.extract]]
+id = "usage"
+source = "both"
+type = "regex"
+pattern = "(?<usage>Usage:)\\s*\\r?\\n\\s*dslite flash"
+target = "usage"
+group = "usage"
+cast = "string"
+required = true
+
+[parsers.dslite-flash]
+mode = "line"
+encoding = "utf8"
+strip_ansi = true
+success_exit_codes = [0]
+[[parsers.dslite-flash.errors]]
+id = "target-config-invalid"
+priority = 100
+source = "both"
+pattern = "(?:Failed to (?:load|parse).*target configuration|[Ii]nvalid.*(?:ccxml|CCXML)|[Uu]nable to open.*(?:ccxml|CCXML))"
+kind = "TI_TARGET_CONFIG_INVALID"
+retryable = false
+recovery = ["Check that the configured CCXML file exists and matches the connected target and debug probe."]
+[[parsers.dslite-flash.errors]]
+id = "debug-probe-unavailable"
+priority = 90
+source = "both"
+pattern = "(?:[Dd]ebug [Pp]robe.*(?:not found|not detected|unavailable)|[Uu]nable to.*(?:find|open).*debug probe)"
+kind = "TI_DEBUG_PROBE_UNAVAILABLE"
+retryable = true
+recovery = ["Connect the configured debug probe and confirm it is not in use by another process."]
+[[parsers.dslite-flash.errors]]
+id = "target-connect-failed"
+priority = 80
+source = "both"
+pattern = "(?:[Cc]ould not connect to target|[Ff]ailed to connect to target|[Tt]arget.*connection.*failed)"
+kind = "TI_TARGET_CONNECTION_FAILED"
+retryable = true
+recovery = ["Check target power, wiring, CCXML settings, and debug interface selection."]
+[[parsers.dslite-flash.errors]]
+id = "image-invalid"
+priority = 70
+source = "both"
+pattern = "(?:[Ff]ile.*not found|[Cc]annot open.*(?:out|elf|hex|bin)|[Uu]nsupported.*file format|[Ff]ailed to load.*file)"
+kind = "TI_IMAGE_INVALID"
+retryable = false
+recovery = ["Build a supported firmware image and pass its correct path to the flash command."]
+[[parsers.dslite-flash.errors]]
+id = "flash-failed"
+priority = 10
+source = "both"
+pattern = "(?:[Ff]lash.*failed|[Pp]rogram.*failed|[Vv]erify.*failed|[Oo]peration.*failed)"
+kind = "TI_FLASH_FAILED"
+retryable = false
+recovery = ["Review the Run log and confirm the image, target configuration, power, and debug connection."]

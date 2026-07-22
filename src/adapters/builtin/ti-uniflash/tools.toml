@@ -1,0 +1,12 @@
+schema = "benchpilot.adapter.tools"
+schema_version = 1
+
+[tools.dslite]
+description = "TI Debug Server Scripting executable installed with UniFlash or Code Composer Studio."
+required = true
+discovery = "dslite"
+[tools.dslite.launch]
+mode = "direct"
+command = "DSLite"
+prefix_args = []
+environment = "inherit"
