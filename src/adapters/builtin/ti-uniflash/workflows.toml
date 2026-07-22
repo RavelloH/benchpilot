@@ -19,3 +19,22 @@ model = "${device.target_name}"
 revision = "${device.target_revision}"
 [workflows.status.output_template.tooling]
 dslite = "DSLite"
+
+[workflows.info]
+timeout = "2m"
+stop_on_failure = true
+[[workflows.info.steps]]
+id = "query"
+uses = "action:status"
+label = { key = "progress.info.query", fallback = "Verify target connection" }
+with = {}
+[workflows.info.output_template.identity]
+model = "${device.inventory.model}"
+revision = "${device.inventory.revision}"
+hardware_id = "${device.inventory.hardware_id}"
+[workflows.info.output_template.hardware.flash]
+manufacturer = "${device.inventory.flash.manufacturer}"
+device = "${device.inventory.flash.device}"
+size = "${device.inventory.flash.size}"
+[workflows.info.output_template.tooling]
+dslite = "DSLite"

@@ -114,3 +114,11 @@ platform = "windows"
 target = "status"
 context = {}
 expect = { steps = ["query"] }
+
+[[cases]]
+id = "plan-info"
+type = "plan-workflow"
+platform = "windows"
+target = "info"
+context = {}
+expect = { steps = ["query"] }

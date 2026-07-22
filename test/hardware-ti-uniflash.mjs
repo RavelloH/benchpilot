@@ -46,6 +46,16 @@ const run = (args) =>
           target_config: targetConfig,
           probe_id: probeId,
           target_name: "MSPM0G3507",
+          inventory: {
+            model: "MSPM0G3507",
+            revision: "unknown",
+            hardware_id: "hardware-ti-uniflash-target",
+            flash: {
+              manufacturer: "Texas Instruments",
+              device: "MSPM0G3507 internal flash",
+              size: "128 KiB",
+            },
+          },
           ...(monitorPort ? { monitor_port: monitorPort } : {}),
         }),
       },
@@ -107,6 +117,14 @@ try {
   expect(
     status.data?.output?.target?.model === "MSPM0G3507",
     "status did not report the configured target model",
+  );
+
+  const info = await run(["device", "target", "info", "--json"]);
+  expect(info.ok === true, "info capability did not succeed");
+  expect(
+    info.data?.output?.identity?.model === "MSPM0G3507" &&
+      info.data?.output?.hardware?.flash?.size === "128 KiB",
+    "info did not project the configured target inventory",
   );
 
   if (monitorPort) {

@@ -31,6 +31,54 @@ formatter = "string"
 key = "view.status.field.dslite"
 fallback = "DSLite"
 
+[capabilities.info]
+kind = "detail"
+[capabilities.info.title]
+key = "view.info.title"
+fallback = "Target inventory"
+[[capabilities.info.fields]]
+selector = "identity.model"
+formatter = "string"
+[capabilities.info.fields.label]
+key = "view.info.field.model"
+fallback = "Model"
+[[capabilities.info.fields]]
+selector = "identity.revision"
+formatter = "string"
+[capabilities.info.fields.label]
+key = "view.info.field.revision"
+fallback = "Revision"
+[[capabilities.info.fields]]
+selector = "identity.hardware_id"
+formatter = "string"
+[capabilities.info.fields.label]
+key = "view.info.field.hardware_id"
+fallback = "Hardware ID"
+[[capabilities.info.fields]]
+selector = "hardware.flash.manufacturer"
+formatter = "string"
+[capabilities.info.fields.label]
+key = "view.info.field.flash_manufacturer"
+fallback = "Flash manufacturer"
+[[capabilities.info.fields]]
+selector = "hardware.flash.device"
+formatter = "string"
+[capabilities.info.fields.label]
+key = "view.info.field.flash_device"
+fallback = "Flash device"
+[[capabilities.info.fields]]
+selector = "hardware.flash.size"
+formatter = "string"
+[capabilities.info.fields.label]
+key = "view.info.field.flash_size"
+fallback = "Flash size"
+[[capabilities.info.fields]]
+selector = "tooling.dslite"
+formatter = "string"
+[capabilities.info.fields.label]
+key = "view.info.field.dslite"
+fallback = "DSLite"
+
 [capabilities.flash]
 kind = "completion"
 [capabilities.flash.message]

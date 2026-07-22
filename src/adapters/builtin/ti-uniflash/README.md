@@ -34,16 +34,29 @@ target_revision = "A"
 # Optional. Its presence enables managed UART session capabilities.
 monitor_port = "COM4"
 monitor_baud = 115200
+# Optional. Enables `info` and is returned only after the debug connection is verified.
+[devices.target_a.inventory]
+model = "MSPM0G3507"
+revision = "A"
+hardware_id = "lab-board-17"
+[devices.target_a.inventory.flash]
+manufacturer = "Texas Instruments"
+device = "MSPM0G3507 internal flash"
+size = "128 KiB"
 ```
 
 ## Capability
 
 `status` queries the target's configured Debug Server core list. It is a
 caution-level, locked operation because it initializes the configured debug
-connection. `flash` is destructive, creates a Run, and takes an exclusive
-device Lock. It accepts an image path plus optional verify and run-after-flash
-settings. Erase, debug unlock, reset, and all build capabilities remain
-disabled until their target-family-specific contracts are separately validated.
+connection. When an `inventory` is configured, `info` verifies that same
+connection and returns the project-declared board identity and flash inventory;
+DSLite does not provide a target-family-independent UID or flash-ID query, so
+these fields are never claimed to be automatically detected. `flash` is
+destructive, creates a Run, and takes an exclusive device Lock. It accepts an
+image path plus optional verify and run-after-flash settings. Erase, debug
+unlock, reset, and all build capabilities remain disabled until their
+target-family-specific contracts are separately validated.
 
 When `monitor_port` is configured, the adapter additionally provides the
 bounded `capture` operation and managed UART capabilities `run`, `stop`,

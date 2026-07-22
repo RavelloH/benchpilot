@@ -67,6 +67,8 @@ monitor_port = "COM4"
 
 `dslite_path` 属于全局 `[adapters.ti-uniflash]` 配置；目标配置和探针身份属于项目设备配置。`target_name` 与 `target_revision` 只用于 `status` 投影，未提供时都为 `unknown`。运行前应验证执行所需值为非空字符串；缺失的模板值必须在规划阶段失败，不能传入空参数。
 
+如果项目已维护可审计的板卡库存，可设置 `device.inventory`（型号、修订、板卡/资产 ID 与 Flash 厂商、型号、容量）。这会公开 `info`：它先通过 Debug Server 验证连接，再返回该声明的库存。UniFlash DSLite 没有已验证的跨目标 UID 或 Flash-ID 查询，因此这些值不是自动检测结果，也不会从 `probe_id` 推断。
+
 ### 3. v1 启用通用且已验证的 `status` 与 `flash`
 
 `status` 通过 `DSLite.exe flash --config <ccxml> --list-cores` 查询目标配置的核心列表。它会初始化 Debug Server，故声明为 `caution`、创建 Run 并取得设备锁；结果中的目标型号和修订来自经过 Schema 校验的设备配置，而不根据 Core 中的型号分支推断。

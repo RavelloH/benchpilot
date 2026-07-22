@@ -22,12 +22,24 @@ linux = "DSLite installation layout and direct executable contract are not yet v
 macos = "DSLite installation layout and direct executable contract are not yet verified on macOS."
 
 [capabilities.info]
-enabled = false
-reason = "Target inventory requires target-family-specific Debug Server commands that are not yet validated."
+enabled = true
+handler = "workflow:info"
+input_schema = "empty"
+output_schema = "info"
+creates_run = true
+timeout = "2m"
+lock = "device"
+availability_when = { path = "device.inventory", operator = "exists" }
+[capabilities.info.safety]
+mode = "caution"
+description = "Connects through the configured Debug Server target and returns the project-declared target inventory."
 [capabilities.info.platforms]
-windows = false
+windows = true
 linux = false
 macos = false
+[capabilities.info.platform_reasons]
+linux = "DSLite installation layout and direct executable contract are not yet verified on Linux."
+macos = "DSLite installation layout and direct executable contract are not yet verified on macOS."
 
 [capabilities.build]
 enabled = false

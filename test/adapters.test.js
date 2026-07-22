@@ -219,6 +219,27 @@ test("conditional capabilities expose UniFlash UART sessions only with a monitor
       .sort(),
     ["capture", "console", "flash", "logs", "run", "send", "status", "stop"],
   );
+  const withInventory = await createDevice({
+    target_config: "C:/work/target.ccxml",
+    probe_id: "lab-probe-1",
+    inventory: {
+      model: "Example target",
+      revision: "A",
+      hardware_id: "lab-target-1",
+      flash: {
+        manufacturer: "Example manufacturer",
+        device: "Example device",
+        size: "128 KiB",
+      },
+    },
+  });
+  assert.deepEqual(
+    withInventory
+      .capabilities()
+      .map((capability) => capability.id)
+      .sort(),
+    ["flash", "info", "status"],
+  );
   const plan = withMonitor.resolveManagedSession("run", {
     projectRoot: "C:/work/project",
   });
@@ -444,6 +465,7 @@ test("UniFlash supplies a declarative View for every enabled capability", async 
     "capture",
     "console",
     "flash",
+    "info",
     "logs",
     "run",
     "send",

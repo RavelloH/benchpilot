@@ -1,12 +1,27 @@
 [progress.status]
 query = "Query target cores"
 
+[progress.info]
+query = "Verify target connection"
+
 [view.status]
 title = "Target readiness"
 [view.status.field]
 endpoint = "Debug probe"
 model = "Target"
 revision = "Revision"
+dslite = "DSLite"
+
+[view.info]
+title = "Target inventory"
+
+[view.info.field]
+model = "Model"
+revision = "Revision"
+hardware_id = "Hardware ID"
+flash_manufacturer = "Flash manufacturer"
+flash_device = "Flash device"
+flash_size = "Flash size"
 dslite = "DSLite"
 
 [view.flash]

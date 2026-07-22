@@ -30,6 +30,44 @@
       "default": "unknown",
       "description": "Target revision reported by status when known."
     },
+    "inventory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model", "revision", "hardware_id", "flash"],
+      "description": "Project-declared target inventory returned by the conditional info capability after it verifies the configured debug connection.",
+      "properties": {
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "revision": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "hardware_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256,
+          "description": "Stable board or target asset identity maintained by the project; it is not inferred from the debug probe lock identity."
+        },
+        "flash": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["manufacturer", "device", "size"],
+          "properties": {
+            "manufacturer": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "device": { "type": "string", "minLength": 1, "maxLength": 128 },
+            "size": { "type": "string", "minLength": 1, "maxLength": 128 }
+          }
+        }
+      }
+    },
     "monitor_port": {
       "type": "string",
       "minLength": 1,
