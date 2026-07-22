@@ -76,7 +76,6 @@ description = "Build the configured ESP-IDF project and save its generated artif
 summary = "Capture device logs or diagnostic output."
 description = "Capture bounded serial output from the configured device port."
 [capability.capture.safety]
-confirm = "Confirm the serial capture safety requirement."
 effect = "Opens the serial port for a bounded capture; USB serial adapters may reset the target when the port opens."
 [capability.capture.option.duration_seconds]
 summary = "Maximum capture duration in seconds."
@@ -95,31 +94,26 @@ description = "Remove the normal build output directory for the configured proje
 summary = "Build and deploy to the device."
 description = "Build the project, then flash the generated firmware to the target."
 [capability.deploy.safety]
-confirm = "Confirm the build-and-flash safety requirement."
 effect = "This will build and overwrite the current ESP32-S3 application firmware."
 [capability.flash]
 summary = "Flash firmware to the device."
 description = "Flash the generated firmware to the configured target."
 [capability.flash.safety]
-confirm = "Confirm the firmware overwrite safety requirement."
 effect = "This will overwrite the current ESP32-S3 application firmware."
 [capability.fullclean]
 summary = "Remove all generated build state."
 description = "Remove all generated build state for the configured project."
 [capability.fullclean.safety]
-confirm = "Confirm the full build cleanup safety requirement."
 effect = "Deletes the configured project build directory but never sdkconfig or source files."
 [capability.info]
 summary = "Inspect target identity and inventory."
 description = "Read the connected target's stable identity, flash inventory, and esptool version."
 [capability.info.safety]
-confirm = "Confirm the device connection safety requirement."
 effect = "Connects to the target and may toggle DTR/RTS while esptool identifies it."
 [capability.reset]
 summary = "Reset the device."
 description = "Hard-reset the connected target through esptool."
 [capability.reset.safety]
-confirm = "Confirm the device reset safety requirement."
 effect = "Connects with esptool and hard-resets the target after the command."
 [capability.size]
 summary = "Report firmware or application size."
@@ -128,13 +122,11 @@ description = "Read the configured project's firmware size report."
 summary = "Probe current device readiness."
 description = "Verify the configured serial target is reachable and return a compact readiness summary."
 [capability.status.safety]
-confirm = "Confirm the device connection safety requirement."
 effect = "Connects to the target and may toggle DTR/RTS while esptool reads its status."
 [capability.run]
 summary = "Start a managed serial session."
 description = "Open the configured ESP serial port and retain its logs in a managed session."
 [capability.run.safety]
-confirm = "Confirm the managed serial session safety requirement."
 effect = "Opens a managed serial session; opening a USB serial port can affect DTR/RTS and reset the target."
 [capability.stop]
 summary = "Stop the managed serial session."
@@ -146,13 +138,11 @@ description = "Read bounded records retained by a managed serial session without
 summary = "Send raw bytes through a managed serial session."
 description = "Write one bounded raw message to a managed serial session and return a transport acknowledgement."
 [capability.send.safety]
-confirm = "Confirm the managed serial write safety requirement."
 effect = "Writes raw bytes to a managed serial session. The target firmware may interpret the data as a physical control command."
 [capability.console]
 summary = "Attach an interactive serial console."
 description = "Attach this human terminal to a managed serial session without stopping it."
 [capability.console.safety]
-confirm = "Confirm the interactive serial console safety requirement."
 effect = "Attaches terminal input to a managed serial session; target firmware may interpret typed bytes as control commands."
 [capability.run.option.baud]
 summary = "Override the serial baud rate for this session."

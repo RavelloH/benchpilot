@@ -72,8 +72,6 @@ export const catalogs = {
     "approval.list.none": "There are no approval requests.",
     "approval.list.status": "Status",
     "approval.list.title": "Human approval requests",
-    "approval.safetyConfirm":
-      "Execute this operation requiring safety confirmation?",
     "approval.status.approved": "Approved",
     "approval.status.claimed": "Claimed",
     "approval.status.consumed": "Consumed",
@@ -825,7 +823,6 @@ export const catalogs = {
     "approval.list.none": "当前没有审批请求。",
     "approval.list.status": "状态",
     "approval.list.title": "人工审批请求",
-    "approval.safetyConfirm": "确认执行此需要安全确认的操作？",
     "approval.status.approved": "已批准",
     "approval.status.claimed": "已认领",
     "approval.status.consumed": "已使用",

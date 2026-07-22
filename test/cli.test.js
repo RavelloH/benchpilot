@@ -920,7 +920,6 @@ test("capability metadata maps long and short aliases back to schema fields", ()
         { name: "define", aliases: ["-D"], repeatable: true },
         { name: "target", positional: 0 },
       ],
-      undefined,
       parsed.path.slice(3),
     ),
     { port: "COM7", define: ["one", "two"], target: "target" },
@@ -1392,7 +1391,6 @@ test("declarative demo executes build, deploy, and capture", async () => {
       "device",
       "demo",
       "dangerous-reset",
-      "--confirm-dangerous-reset",
       "--json",
     ).catch((error) => error);
     assert.equal(
@@ -1401,16 +1399,7 @@ test("declarative demo executes build, deploy, and capture", async () => {
     );
     await run(dir, "config", "set", "approval.level", "bypass");
     const dangerous = JSON.parse(
-      (
-        await run(
-          dir,
-          "device",
-          "demo",
-          "dangerous-reset",
-          "--confirm-dangerous-reset",
-          "--json",
-        )
-      ).stdout,
+      (await run(dir, "device", "demo", "dangerous-reset", "--json")).stdout,
     );
     assert.equal(dangerous.ok, true);
     assert.equal(dangerous.data.subject.capability, "dangerous-reset");
@@ -1443,7 +1432,6 @@ test("secret approval bindings are redacted but matched by their real digest", a
       "secret-approval",
       "--token",
       token,
-      "--approve-secret-approval",
       "--json",
     ).catch((error) => error);
     const requested = machineError(JSON.parse(pending.stdout));
@@ -1470,7 +1458,6 @@ test("secret approval bindings are redacted but matched by their real digest", a
           "secret-approval",
           "--token",
           token,
-          "--approve-secret-approval",
           "--json",
         )
       ).stdout,
@@ -1483,7 +1470,6 @@ test("secret approval bindings are redacted but matched by their real digest", a
       "secret-approval",
       "--token",
       "different-secret-value",
-      "--approve-secret-approval",
       "--json",
     ).catch((error) => error);
     assert.equal(

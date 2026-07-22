@@ -18,11 +18,7 @@ import { readGlobalLocale } from "../application/config/locale.js";
 import { parse } from "./parser.js";
 import { handleDeviceCommand } from "./commands/device.js";
 import { handleRuntimeCommand } from "./commands/runtime.js";
-import {
-  capabilityInput,
-  commandOptionFlags,
-  optionEnabled,
-} from "./option-parser.js";
+import { capabilityInput, commandOptionFlags } from "./option-parser.js";
 import { renderDataPage } from "./output/data-page-renderer.js";
 import {
   commandFailureResult,
@@ -1569,10 +1565,6 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
           ),
         ...(canConfirmOperationInteractively
           ? {
-              confirmSafety: () =>
-                interactive(locale, parts).confirm(
-                  t(locale, "approval.safetyConfirm"),
-                ),
               confirmApproval: () =>
                 interactive(locale, parts).confirm(
                   t(locale, "approval.confirm.operation"),
@@ -1796,22 +1788,8 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
       const input = capabilityInput(
         rawOptions,
         definition.options || [],
-        definition.safety.flag,
         parts.slice(3),
       );
-      let safetyConfirmed = definition.safety.mode === "normal";
-      if (definition.safety.mode !== "normal" && definition.safety.flag) {
-        if (canConfirmOperationInteractively) {
-          if (
-            !(await interactive(locale, parts).confirm(
-              t(locale, "approval.safetyConfirm"),
-            ))
-          )
-            return;
-          safetyConfirmed = true;
-        } else
-          safetyConfirmed = optionEnabled(rawOptions, definition.safety.flag);
-      }
       if (
         canConfirmOperationInteractively &&
         requiresApproval(approvalLevel(config.value), definition.safety.mode)
@@ -1833,7 +1811,6 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
         definition.safety.mode !== "normal"
           ? { executionMode: "interactive" as const }
           : {}),
-        safetyConfirmed,
       });
       const result = capabilityResultFromSystem({ command, result: outcome });
       renderCapabilityResult({

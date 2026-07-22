@@ -254,9 +254,6 @@ const safetyComponent: HelpScreenComponent<HelpViewBlock> = {
     const theme = terminalTheme(context.screen.color);
     return section(theme.heading(t(context.screen.locale, "help.safety")), [
       `${theme.muted("mode  ")}${String(safety.mode)}`,
-      ...(typeof safety.flag === "string"
-        ? [`${theme.muted("flag  ")}--${safety.flag}`]
-        : []),
     ]);
   },
 };

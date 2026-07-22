@@ -7,9 +7,9 @@ VID `303A` highly. Third-party USB-UART bridges are returned as low-confidence
 candidates only.
 
 `status`, `build`, `clean`, `fullclean`, `size`, `info`, `flash`, `reset`,
-`capture`, and `deploy` are available. `flash` and `deploy` require a human
-approval. `status`, `info`, `fullclean`, `reset`, and bounded `capture` require their
-declared danger flags: opening a USB serial port may reset the target. Capture
+`capture`, and `deploy` are available. `status`, `info`, `fullclean`, `reset`, and
+bounded `capture` retain declared safety classifications: opening a USB serial
+port may reset the target. Capture
 uses fixed Python code with independent argv values, always closes the port,
 and saves its bounded raw output as the `serial-capture.txt` run artifact.
 Its `duration_seconds`, `max_lines`, and `max_bytes` inputs bound the capture;
@@ -69,8 +69,8 @@ script path passed as an argv value. An explicitly configured invalid tool path
 is an error; correct it rather than relying on PATH fallback.
 
 Most boards automatically enter download mode through DTR/RTS. If that fails,
-hold BOOT/GPIO0, briefly press EN, then retry. Before approving a flash, verify
-that overwriting the board's current application firmware is intended.
+hold BOOT/GPIO0, briefly press EN, then retry. Before flashing, verify that
+overwriting the board's current application firmware is intended.
 
 Hardware verification is opt-in and never part of normal tests:
 
@@ -81,10 +81,8 @@ pnpm run test:hardware:esp-idf
 ```
 
 Set `BENCHPILOT_ESP_ALLOW_FLASH=1` only after deciding to overwrite the target.
-BenchPilot will still create a human-approval request; approve it interactively
-with the displayed physical device identity before rerunning the flash stage.
 Set `BENCHPILOT_ESP_ALLOW_CAPTURE=1` to include the bounded boot-marker capture;
-it explicitly supplies `--dangerously-capture` and asserts Lock release.
+it asserts Lock release.
 
 `size --json` returns available ESP-IDF table values as `flash_code_bytes`,
 `flash_data_bytes`, `ram_bytes`, `diram_bytes`, `iram_bytes`, and

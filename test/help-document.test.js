@@ -181,7 +181,6 @@ test("dynamic Capability help uses resolved safety, fields, and output", async (
   assert.equal(document.usage[0], "benchpilot device demo flash");
   assert.equal(document.options[0].name, "target");
   assert.equal(document.safety.mode, "destructive");
-  assert.equal(document.safety.flag, "confirm-flash");
   assert.equal(document.output.schema, "benchpilot.operation");
   assert.deepEqual(calls, ["configured-devices", "device-capabilities"]);
 });

@@ -78,9 +78,7 @@ export interface OperationLifecycleFactories {
 export interface OperationExecutionOptions {
   eventScope?: "root" | "child";
   eventContext?: Json;
-  /** The caller supplied the Capability's explicit safety confirmation. */
-  safetyConfirmed?: boolean;
-  /** The CLI completed human safety and approval confirmation before execution. */
+  /** The CLI completed an interactive approval flow before execution. */
   executionMode?: "interactive";
   /**
    * Terminal adapters provide this only for a declared TTY-only managed-session

@@ -32,15 +32,6 @@ export function commandOptionFlags(options: RawOption[]): Json {
   );
 }
 
-export function optionEnabled(options: RawOption[], name: string | undefined) {
-  if (!name) return false;
-  const option = [...options]
-    .reverse()
-    .find((candidate) => candidate.name === name);
-  if (!option || option.negated) return false;
-  return option.value !== "false";
-}
-
 /**
  * Converts raw values using the selected Capability's schema descriptions.
  * Unknown options deliberately remain in the input for OperationRunner to
@@ -49,7 +40,6 @@ export function optionEnabled(options: RawOption[], name: string | undefined) {
 export function capabilityInput(
   options: RawOption[],
   definitions: CapabilityOption[],
-  safetyFlag?: string,
   positional: string[] = [],
 ): Json {
   const aliases = new Map(
@@ -63,23 +53,21 @@ export function capabilityInput(
   const schemas = new Map(
     definitions.map((definition) => [definition.name, definition.schema]),
   );
-  const entries = options
-    .filter((option) => option.name !== safetyFlag)
-    .map((option) => {
-      const name = aliases.get(option.name) ?? option.name;
-      if (option.negated) return [name, false] as const;
-      if (option.value === undefined) return [name, true] as const;
-      const schema = schemas.get(name)?.describe();
-      if (schema?.type === "boolean") {
-        if (option.value === "true") return [name, true] as const;
-        if (option.value === "false") return [name, false] as const;
-      }
-      if (schema?.type === "number" && /^-?\d+(?:\.\d+)?$/.test(option.value))
-        return [name, Number(option.value)] as const;
-      if (schema?.type === "integer" && /^-?\d+$/.test(option.value))
-        return [name, Number(option.value)] as const;
-      return [name, option.value] as const;
-    });
+  const entries = options.map((option) => {
+    const name = aliases.get(option.name) ?? option.name;
+    if (option.negated) return [name, false] as const;
+    if (option.value === undefined) return [name, true] as const;
+    const schema = schemas.get(name)?.describe();
+    if (schema?.type === "boolean") {
+      if (option.value === "true") return [name, true] as const;
+      if (option.value === "false") return [name, false] as const;
+    }
+    if (schema?.type === "number" && /^-?\d+(?:\.\d+)?$/.test(option.value))
+      return [name, Number(option.value)] as const;
+    if (schema?.type === "integer" && /^-?\d+$/.test(option.value))
+      return [name, Number(option.value)] as const;
+    return [name, option.value] as const;
+  });
   for (const option of definitions)
     if (
       option.positional !== undefined &&

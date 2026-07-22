@@ -300,7 +300,6 @@ const capabilityFor = (
         safety.mode === "irreversible"
           ? safety.mode
           : "normal",
-      ...(typeof safety.flag === "string" ? { flag: safety.flag } : {}),
       ...(typeof safety.description === "string"
         ? { effects: [safety.description] }
         : {}),

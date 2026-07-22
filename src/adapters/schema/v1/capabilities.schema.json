@@ -44,7 +44,6 @@
         "mode": {
           "enum": ["normal", "caution", "destructive", "irreversible"]
         },
-        "flag": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
         "description": { "type": "string", "minLength": 1 }
       },
       "allOf": [
@@ -52,13 +51,10 @@
           "if": { "properties": { "mode": { "const": "normal" } } },
           "then": {
             "not": {
-              "anyOf": [
-                { "required": ["flag"] },
-                { "required": ["description"] }
-              ]
+              "anyOf": [{ "required": ["description"] }]
             }
           },
-          "else": { "required": ["flag", "description"] }
+          "else": { "required": ["description"] }
         }
       ]
     },

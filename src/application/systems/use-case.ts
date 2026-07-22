@@ -138,7 +138,7 @@ export class SystemUseCases {
     name: string,
     capability: string,
     capabilityInput?: Json,
-    options?: { executionMode?: "interactive"; safetyConfirmed?: boolean },
+    options?: { executionMode?: "interactive" },
   ) {
     return executeSystemCapability({
       system: name,
@@ -147,7 +147,6 @@ export class SystemUseCases {
       runner: this.dependencies.runner,
       capabilityInput,
       executionMode: options?.executionMode,
-      safetyConfirmed: options?.safetyConfirmed,
     });
   }
 }
@@ -209,7 +208,6 @@ export async function executeSystemCapability(input: {
   capabilityInput?: Json;
   policy?: SystemExecutionPolicy;
   executionMode?: "interactive";
-  safetyConfirmed?: boolean;
 }): Promise<SystemOperationResult> {
   const available = await systemCapabilityIntersection(input);
   if (!available.some((candidate) => candidate.id === input.capability))
@@ -238,7 +236,6 @@ export async function executeSystemCapability(input: {
                 device,
                 input.capability,
                 structuredClone(input.capabilityInput ?? {}),
-                { safetyConfirmed: input.safetyConfirmed },
               ),
             ),
         );
@@ -270,7 +267,6 @@ export async function executeSystemCapability(input: {
           eventScope: "child",
           eventContext: { system: input.system, device },
           executionMode: input.executionMode,
-          safetyConfirmed: input.safetyConfirmed,
           onOutcome: (value) => {
             outcome = value;
           },

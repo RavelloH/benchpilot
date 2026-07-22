@@ -55,18 +55,6 @@ const capabilityValue = (
     ...(option.schema ? { schema: option.schema } : {}),
     value: fieldValue(option.schema),
   }));
-  const safetyOption = capability.safety.flag
-    ? ({
-        name: capability.safety.flag,
-        kind: "option",
-        summary: messageRef(
-          `${namespace}.capability.${capability.id}.safety.confirm`,
-          undefined,
-          "Confirm the capability safety requirement.",
-        ),
-        value: "boolean",
-      } satisfies CommandFieldDefinition)
-    : undefined;
   return {
     value: capability.id,
     summary: messageRef(
@@ -75,10 +63,7 @@ const capabilityValue = (
       capability.summary,
     ),
     arguments: fields.filter((field) => field.kind === "argument"),
-    options: [
-      ...fields.filter((field) => field.kind === "option"),
-      ...(safetyOption ? [safetyOption] : []),
-    ],
+    options: fields.filter((field) => field.kind === "option"),
     safety: capability.safety,
     operation: {
       kind: "static",

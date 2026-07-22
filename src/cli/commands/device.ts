@@ -1,11 +1,7 @@
 import { BenchPilotError, type Capability } from "../../core.js";
 import type { DeviceUseCases } from "../../application/devices/use-case.js";
 import type { CommandCatalog } from "../../application/commands/catalog.js";
-import {
-  capabilityInput,
-  optionEnabled,
-  type RawOption,
-} from "../option-parser.js";
+import { capabilityInput, type RawOption } from "../option-parser.js";
 import type { Flags } from "../parser.js";
 import { capabilityResultFromOperation } from "../output/capability-result.js";
 import { renderCapabilityResult } from "../output/capability-renderer.js";
@@ -35,7 +31,6 @@ interface DeviceCommandContext {
     capabilities: readonly Capability[],
   ) => Capability[];
   renderHelp: (path: readonly string[], includeAll?: boolean) => Promise<void>;
-  confirmSafety?: () => Promise<boolean>;
   confirmApproval?: () => Promise<boolean>;
   requiresApproval?: (
     mode: "normal" | "caution" | "destructive" | "irreversible",
@@ -68,7 +63,6 @@ export async function handleDeviceCommand({
   catalog,
   localizeCapabilities,
   renderHelp,
-  confirmSafety,
   confirmApproval,
   requiresApproval,
   reporter,
@@ -97,23 +91,14 @@ export async function handleDeviceCommand({
     const input = capabilityInput(
       rawOptions,
       definition.options || [],
-      definition.safety.flag,
       parts.slice(3),
     );
-    const interactiveExecution =
-      definition.safety.mode !== "normal" && confirmSafety !== undefined;
-    let safetyConfirmed = definition.safety.mode === "normal";
-    if (definition.safety.mode !== "normal" && definition.safety.flag) {
-      if (confirmSafety) {
-        if (!(await confirmSafety())) return true;
-        safetyConfirmed = true;
-      } else
-        safetyConfirmed = optionEnabled(rawOptions, definition.safety.flag);
-    }
     const approvalRequired =
       requiresApproval?.(definition.safety.mode) === true;
     if (approvalRequired && confirmApproval && !(await confirmApproval()))
       return true;
+    const interactiveExecution =
+      approvalRequired && confirmApproval !== undefined;
     if (input.follow === true) {
       if (flags.json)
         throw new BenchPilotError(
@@ -202,7 +187,6 @@ export async function handleDeviceCommand({
       device: parts[1],
       capability,
       capabilityInput: input,
-      safetyConfirmed,
       ...(interactiveExecution
         ? { executionMode: "interactive" as const }
         : {}),

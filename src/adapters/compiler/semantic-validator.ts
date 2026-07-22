@@ -179,7 +179,6 @@ export const validateSemantics = async (
     views = obj(file("views.toml").capabilities);
   const catalog = obj(parseToml(await readFile(catalogPath, "utf8")))
     .capabilities as JsonObject;
-  const declaredSafetyFlags = new Map<string, string>();
   if (manifest.id !== adapter.id)
     errors.push(
       diagnostic(
@@ -576,51 +575,27 @@ export const validateSemantics = async (
       ["caution", "destructive", "irreversible"].includes(
         String(safety.mode),
       ) &&
-      (typeof safety.flag !== "string" ||
-        typeof safety.description !== "string")
+      typeof safety.description !== "string"
     )
       errors.push(
         diagnostic(
           "ADAPTER_CAPABILITY_INVALID",
           "capabilities.toml",
-          "Dangerous capability requires a flag",
+          "Dangerous capability requires a description",
           undefined,
           adapter.id,
         ),
       );
-    if (
-      safety.mode === "normal" &&
-      (safety.flag !== undefined || safety.description !== undefined)
-    )
+    if (safety.mode === "normal" && safety.description !== undefined)
       errors.push(
         diagnostic(
           "ADAPTER_CAPABILITY_INVALID",
           "capabilities.toml",
-          "Normal safety may not declare a danger flag",
+          "Normal safety may not declare a danger description",
           undefined,
           adapter.id,
         ),
       );
-    if (
-      enabled &&
-      ["caution", "destructive", "irreversible"].includes(
-        String(safety.mode),
-      ) &&
-      typeof safety.flag === "string"
-    ) {
-      const existing = declaredSafetyFlags.get(safety.flag);
-      if (existing)
-        errors.push(
-          diagnostic(
-            "ADAPTER_CAPABILITY_INVALID",
-            "capabilities.toml",
-            `Safety flag ${safety.flag} conflicts with ${existing}`,
-            undefined,
-            adapter.id,
-          ),
-        );
-      else declaredSafetyFlags.set(safety.flag, key);
-    }
   }
   const inputDefinitions = obj(adapter.schemas.inputs.$defs);
   const outputDefinitions = obj(adapter.schemas.outputs.$defs);

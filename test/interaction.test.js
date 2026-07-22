@@ -234,7 +234,7 @@ test("incomplete device resources delegate to definition-driven help", async () 
   assert.deepEqual(rendered, [{ path: ["device", "board"], includeAll: true }]);
 });
 
-test("interactive device execution confirms safety and approval before running", async () => {
+test("interactive device execution confirms approval before running", async () => {
   const originalWrite = process.stdout.write;
   const flags = {};
   const calls = [];
@@ -255,7 +255,7 @@ test("interactive device execution confirms safety and approval before running",
             id: "flash",
             summary: "Flash firmware",
             options: [],
-            safety: { mode: "destructive", flag: "approve-flash" },
+            safety: { mode: "destructive" },
           },
         }),
         executeDetailed: async (input) => {
@@ -282,10 +282,6 @@ test("interactive device execution confirms safety and approval before running",
         },
       },
       output: { write: () => true },
-      confirmSafety: async () => {
-        calls.push({ type: "safety" });
-        return true;
-      },
       confirmApproval: async () => {
         calls.push({ type: "approval" });
         return true;
@@ -296,9 +292,7 @@ test("interactive device execution confirms safety and approval before running",
   } finally {
     process.stdout.write = originalWrite;
   }
-  assert.equal(flags["approve-flash"], undefined);
   assert.deepEqual(calls, [
-    { type: "safety" },
     { type: "approval" },
     {
       type: "execute",
@@ -307,7 +301,6 @@ test("interactive device execution confirms safety and approval before running",
         capability: "flash",
         capabilityInput: {},
         executionMode: "interactive",
-        safetyConfirmed: true,
       },
     },
   ]);

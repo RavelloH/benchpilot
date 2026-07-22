@@ -1484,7 +1484,6 @@ test("a normal operation recovers and reuses a stale approval claim", async () =
       "burn",
       {},
       {
-        safetyConfirmed: true,
         onOutcome: (outcome) => {
           observedOutcome = outcome;
         },
@@ -1927,7 +1926,6 @@ test("managed session console stays inside the capability runner", async () => {
       "console",
       { session_id: "session-existing" },
       {
-        safetyConfirmed: true,
         executionMode: "interactive",
         attachManagedSessionConsole: async (value) => {
           attachment = value;
@@ -2828,9 +2826,7 @@ async function runDangerousFailure(root, markEffect) {
     project: { root, config: path.join(root, "benchpilot.toml") },
     config,
   });
-  await runner
-    .execute("device", "effect", {}, { safetyConfirmed: true })
-    .catch(() => {});
+  await runner.execute("device", "effect", {}).catch(() => {});
   return approvals.get(approval.id);
 }
 
@@ -2888,7 +2884,7 @@ test("successful dangerous operation without a marker consumes approval and warn
             defaultTimeoutMs: 1000,
             lockMode: "exclusive",
             createsRun: true,
-            safety: { mode: "human-approval", flag: "danger" },
+            safety: { mode: "destructive" },
             execute: async () => ({ ok: true }),
           },
         ],
@@ -2927,7 +2923,7 @@ test("successful dangerous operation without a marker consumes approval and warn
         },
       },
     });
-    await runner.execute("device", "effect", {}, { safetyConfirmed: true });
+    await runner.execute("device", "effect", {});
     assert.equal((await approvals.get(approval.id)).status, "consumed");
     assert.deepEqual(
       events.find((event) => event.type === "safety.marker-missing"),

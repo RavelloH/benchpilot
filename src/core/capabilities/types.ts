@@ -4,7 +4,6 @@ import type { OperationContext } from "../operations/types.js";
 
 export interface Safety {
   mode: "normal" | "caution" | "destructive" | "irreversible";
-  flag?: string;
   effects?: string[];
   approvalTtlMs?: number;
 }

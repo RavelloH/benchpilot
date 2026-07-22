@@ -234,7 +234,6 @@ timeout = "10s"
 lock = "none"
 [extensions.secret-approval.safety]
 mode = "destructive"
-flag = "approve-secret-approval"
 description = "Simulates an approval-bound secret operation."
 [extensions.secret-approval.platforms]
 windows = true
@@ -253,7 +252,6 @@ timeout = "30s"
 lock = "device"
 [extensions.dangerous-reset.safety]
 mode = "destructive"
-flag = "confirm-dangerous-reset"
 description = "Simulates a reset that may change device state."
 [extensions.dangerous-reset.platforms]
 windows = true

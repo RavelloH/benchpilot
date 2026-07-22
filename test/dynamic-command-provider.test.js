@@ -31,7 +31,7 @@ test("Application dynamic providers use only read-only query methods", async () 
               defaultTimeoutMs: 1000,
               lockMode: "exclusive",
               createsRun: true,
-              safety: { mode: "destructive", flag: "confirm-flash" },
+              safety: { mode: "destructive" },
               availability: "available",
             },
           ],
@@ -78,15 +78,15 @@ test("Application dynamic providers use only read-only query methods", async () 
     )[0].value,
     "demo",
   );
-  assert.equal(
+  assert.deepEqual(
     (
       await provider.values({
         provider: "device-capabilities",
         captures: { device: "board" },
         definition: {},
       })
-    )[0].options.at(-1).name,
-    "confirm-flash",
+    )[0].options,
+    [],
   );
   for (const family of ["runs", "locks", "approvals"])
     assert.equal(

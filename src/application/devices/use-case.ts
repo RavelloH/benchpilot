@@ -97,7 +97,6 @@ export class DeviceUseCases {
     device: string;
     capability: string;
     capabilityInput: Json;
-    safetyConfirmed?: boolean;
     executionMode?: "interactive";
     attachManagedSessionConsole?: OperationExecutionOptions["attachManagedSessionConsole"];
   }) {
@@ -107,7 +106,6 @@ export class DeviceUseCases {
       input.capability,
       input.capabilityInput,
       {
-        safetyConfirmed: input.safetyConfirmed,
         executionMode: input.executionMode,
         attachManagedSessionConsole: input.attachManagedSessionConsole,
       },
@@ -119,7 +117,6 @@ export class DeviceUseCases {
     device: string;
     capability: string;
     capabilityInput: Json;
-    safetyConfirmed?: boolean;
     executionMode?: "interactive";
     attachManagedSessionConsole?: OperationExecutionOptions["attachManagedSessionConsole"];
   }) {
@@ -131,7 +128,6 @@ export class DeviceUseCases {
         input.capability,
         input.capabilityInput,
         {
-          safetyConfirmed: input.safetyConfirmed,
           executionMode: input.executionMode,
           attachManagedSessionConsole: input.attachManagedSessionConsole,
           onOutcome: (value) => {

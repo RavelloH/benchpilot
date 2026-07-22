@@ -399,7 +399,6 @@ approval:
     approve: "确认批准此审批请求？"
     reject: "确认拒绝此审批请求？"
     operation: "此操作需要审批。批准并继续执行？"
-  safetyConfirm: "确认执行此需要安全确认的操作？"
   list:
     title: "人工审批请求"
     none: "当前没有审批请求。"

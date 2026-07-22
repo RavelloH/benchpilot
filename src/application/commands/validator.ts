@@ -107,12 +107,6 @@ export function validateCommandGraph(
         optionNames.add(name);
       }
     }
-    if (definition.safety?.flag && optionNames.has(definition.safety.flag))
-      report(
-        "SAFETY_OPTION_CONFLICT",
-        `Safety flag ${definition.safety.flag} conflicts with an option.`,
-        definition.id,
-      );
     if (definition.handler && !definition.output)
       report(
         "OUTPUT_REQUIRED",

@@ -128,25 +128,13 @@ try {
     `Passive scan did not find configured port ${port}`,
   );
 
-  const status = await run([
-    "device",
-    "esp32s3",
-    "status",
-    "--dangerously-status",
-    "--json",
-  ]);
+  const status = await run(["device", "esp32s3", "status", "--json"]);
   expect(
     JSON.stringify(capabilityOutput(status)).includes("ESP32"),
     "status did not identify an ESP target",
   );
 
-  const info = await run([
-    "device",
-    "esp32s3",
-    "info",
-    "--dangerously-info",
-    "--json",
-  ]);
+  const info = await run(["device", "esp32s3", "info", "--json"]);
   expect(
     JSON.stringify(capabilityOutput(info)).includes("ESP32"),
     "info did not identify an ESP target",
@@ -185,7 +173,6 @@ try {
       "device",
       "esp32s3",
       "capture",
-      "--dangerously-capture",
       "--duration_seconds",
       "10",
       "--json",
@@ -198,13 +185,7 @@ try {
   if (allowSession) {
     let sessionId;
     try {
-      const started = await run([
-        "device",
-        "esp32s3",
-        "run",
-        "--dangerously-run",
-        "--json",
-      ]);
+      const started = await run(["device", "esp32s3", "run", "--json"]);
       sessionId = capabilityOutput(started)?.sessionId;
       expect(
         typeof sessionId === "string" && sessionId.startsWith("session-"),
@@ -233,7 +214,6 @@ try {
           "device",
           "esp32s3",
           "send",
-          "--dangerously-send",
           "--session-id",
           sessionId,
           "--text",
@@ -267,9 +247,9 @@ try {
   }
   if (allowFlash) {
     console.log(
-      "Flash is explicitly enabled. The next command supplies the Agent-only safety confirmation option.",
+      "Flash is explicitly enabled by the hardware-test environment.",
     );
-    await run(["device", "esp32s3", "flash", "--approve-flash", "--json"]);
+    await run(["device", "esp32s3", "flash", "--json"]);
   }
 } finally {
   await rm(stateRoot, { recursive: true, force: true });

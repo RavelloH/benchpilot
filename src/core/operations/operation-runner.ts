@@ -79,12 +79,7 @@ export class OperationRunner {
    * preflight so a system never partially executes while approvals are being
    * requested.
    */
-  async preflightApproval(
-    instance: string,
-    capabilityId: string,
-    input: Json,
-    executionOptions: Pick<OperationExecutionOptions, "safetyConfirmed"> = {},
-  ) {
+  async preflightApproval(instance: string, capabilityId: string, input: Json) {
     const project = this.requireProject();
     const raw = (this.s.config.value.devices as Json | undefined)?.[instance];
     if (!object(raw))
@@ -113,12 +108,6 @@ export class OperationRunner {
       approvalLevel(this.s.config.value),
       safety.mode,
     );
-    if (safety.mode !== "normal" && !executionOptions.safetyConfirmed)
-      fail(
-        "DANGEROUS_CONFIRMATION_REQUIRED",
-        7,
-        `This operation requires --${safety.flag}.`,
-      );
     if (!approvalRequired) return { required: false };
     let validated = structuredClone(input);
     const options = definition.options || [];
@@ -295,16 +284,6 @@ export class OperationRunner {
       !interactiveExecution &&
       requiresApproval(approvalLevel(this.s.config.value), safety.mode);
     const approvals = this.lifecycle.approvals(project.root);
-    if (
-      !interactiveExecution &&
-      safety.mode !== "normal" &&
-      !options.safetyConfirmed
-    )
-      fail(
-        "DANGEROUS_CONFIRMATION_REQUIRED",
-        7,
-        `This operation requires --${safety.flag}.`,
-      );
     const binding = {
       command,
       device: runtime.identity,

@@ -55,10 +55,10 @@ chip = "esp32s3"
 
 Default scanning is passive and does not run esptool or open a serial device.
 An Espressif USB VID/PID identity and serial number are preferred for locking;
-port identity is a final fallback. `info` deliberately requires
-`--dangerously-info`, because connecting with esptool may reset the target.
+port identity is a final fallback. `info` is classified as `caution`, because
+connecting with esptool may reset the target.
 
-`flash` and `deploy` hold the Device Lock and require human approval. They use
+`flash` and `deploy` hold the Device Lock. They use
 `idf.py -B <build_dir> -p <port> -b <baud> flash` and never pass `--force` or
 an erase option. If automatic download mode does not work, hold BOOT/GPIO0 and
 briefly press EN before retrying.
@@ -77,14 +77,12 @@ returned in that case.
 
 `build`, `clean`, and `size` are normal operations. `status` reads the current
 device state with a compact probe, while `info` performs the fuller diagnostic
-sequence. Both require their declared caution confirmation because connecting
-with esptool can toggle reset lines. `fullclean` requires
-`--dangerously-fullclean`; it deletes only the configured build directory.
-`reset` and bounded `capture` also require their declared danger flags.
+sequence. Both are classified as `caution` because connecting with esptool can
+toggle reset lines. `fullclean` deletes only the configured build directory.
+`reset` and bounded `capture` retain their declared safety classification.
 Capture receives port, baud, duration, and line limits as argv; it always
-closes the port and returns `lines` and `marker`. `flash` and `deploy` require
-a human approval and never use force, erase, eFuse, JTAG, OpenOCD, or OTA
-commands.
+closes the port and returns `lines` and `marker`. `flash` and `deploy` never
+use force, erase, eFuse, JTAG, OpenOCD, or OTA commands.
 
 `run` opens a managed raw serial-read session at the configured `monitor_baud`
 (or a per-command `--baud` override). The session host alone owns the physical
@@ -112,11 +110,11 @@ pnpm run test:hardware:esp-idf
 
 It runs Doctor, passive scan, status, info, build, and size. Set
 `BENCHPILOT_ESP_ALLOW_FLASH=1` only after deciding to overwrite the existing
-application; BenchPilot still creates a human approval request.
+application.
 
 Set `BENCHPILOT_ESP_ALLOW_CAPTURE=1` to include the bounded boot-marker
-capture. It passes `--dangerously-capture`, because opening USB serial can
-reset the board; it asserts `BENCHPILOT_ESP32S3_OK` and Lock release.
+capture. Opening USB serial can reset the board; the test asserts
+`BENCHPILOT_ESP32S3_OK` and Lock release.
 
 Set `BENCHPILOT_ESP_ALLOW_SESSION=1` to exercise the managed serial lifecycle:
 `run`, bounded `logs`, and `stop`. This opens the configured serial port and
