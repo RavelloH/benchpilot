@@ -310,6 +310,66 @@ test("conditional capabilities expose UniFlash UART sessions only with a monitor
   );
 });
 
+test("fully configured UniFlash exposes the ESP-IDF standard capability set", async () => {
+  const [tiResult, espResult] = await Promise.all([
+    compileAdapter(tiUniflash),
+    compileAdapter(espIdf),
+  ]);
+  assert.deepEqual(tiResult.diagnostics, []);
+  assert.deepEqual(espResult.diagnostics, []);
+  const tiAdapter = createDeclarativeAdapter({
+    bundle: tiResult.bundle,
+    platform: "windows",
+    rules: tiResult.bundle.platforms.windows,
+  });
+  const espAdapter = createDeclarativeAdapter({
+    bundle: espResult.bundle,
+    platform: "windows",
+    rules: espResult.bundle.platforms.windows,
+  });
+  const tiDevice = await tiAdapter.createDevice(
+    "target",
+    {
+      target_config: "C:/work/target.ccxml",
+      probe_id: "lab-probe-1",
+      image_path: "C:/work/build/application.out",
+      reset_index: 1,
+      monitor_port: "COM4",
+      inventory: {
+        model: "Example target",
+        revision: "A",
+        hardware_id: "lab-target-1",
+        flash: {
+          manufacturer: "Example manufacturer",
+          device: "Example device",
+          size: "128 KiB",
+        },
+      },
+      build: {
+        system: "make",
+        directory: "C:/work/firmware",
+        fullclean_target: "distclean",
+      },
+    },
+    { adapterConfig: {}, paths: {} },
+  );
+  const espDevice = await espAdapter.createDevice(
+    "target",
+    { port: "COM8", chip: "esp32s3" },
+    { adapterConfig: {}, paths: {} },
+  );
+  assert.deepEqual(
+    tiDevice
+      .capabilities()
+      .map((capability) => capability.id)
+      .sort(),
+    espDevice
+      .capabilities()
+      .map((capability) => capability.id)
+      .sort(),
+  );
+});
+
 test("ESP-IDF uses the shared passive serial discovery source", async () => {
   const result = await compileAdapter(espIdf);
   assert.deepEqual(result.diagnostics, []);
