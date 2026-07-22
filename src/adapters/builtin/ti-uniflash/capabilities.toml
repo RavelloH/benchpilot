@@ -201,12 +201,24 @@ linux = false
 macos = false
 
 [capabilities.capture]
-enabled = false
-reason = "UniFlash flash mode does not expose a bounded generic capture capability."
+enabled = true
+handler = "action:capture"
+input_schema = "capture"
+output_schema = "capture"
+creates_run = true
+timeout = "30s"
+lock = "device"
+availability_when = { path = "device.monitor_port", operator = "exists" }
+[capabilities.capture.safety]
+mode = "caution"
+description = "Opens the configured target UART for a bounded capture; USB serial adapters may reset the target when the port opens."
 [capabilities.capture.platforms]
-windows = false
+windows = true
 linux = false
 macos = false
+[capabilities.capture.platform_reasons]
+linux = "DSLite installation layout and direct executable contract are not yet verified on Linux."
+macos = "DSLite installation layout and direct executable contract are not yet verified on macOS."
 
 [capabilities.sync]
 enabled = false

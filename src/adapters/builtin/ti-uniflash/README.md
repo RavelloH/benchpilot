@@ -14,6 +14,8 @@ not `dslite.bat`.
 ```toml
 [adapters.ti-uniflash]
 dslite_path = "D:/ti/uniflash_9.6.0/deskdb/content/TICloudAgent/win/ccs_base/DebugServer/bin/DSLite.exe"
+# Required only when using `capture`; it must be able to import `pyserial`.
+python_path = "C:/Python310/python.exe"
 ```
 
 Each target supplies its own CCXML and a stable lab identity for the physical
@@ -44,10 +46,11 @@ settings. Erase, debug unlock, reset, and all build capabilities remain
 disabled until their target-family-specific contracts are separately validated.
 
 When `monitor_port` is configured, the adapter additionally provides the
-managed UART capabilities `run`, `stop`, `logs`, `console`, and `send`. They
-use the same session lifecycle as other BenchPilot adapters and preserve DTR
-and RTS when opening the port. These commands are not exposed for devices
-without `monitor_port`.
+bounded `capture` operation and managed UART capabilities `run`, `stop`,
+`logs`, `console`, and `send`. They use the same serial safety and session
+lifecycle as other BenchPilot adapters. Capture disables DTR and RTS after
+opening the port, while managed sessions preserve their existing line states.
+These commands are not exposed for devices without `monitor_port`.
 
 Run `benchpilot adapter ti-uniflash discover` or `doctor` before operating
 hardware. Hardware validation must go through the dynamic `flash` capability;

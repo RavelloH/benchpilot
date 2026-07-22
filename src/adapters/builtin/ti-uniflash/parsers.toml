@@ -1,6 +1,21 @@
 schema = "benchpilot.adapter.parsers"
 schema_version = 1
 
+[parsers.python-serial]
+mode = "line"
+encoding = "utf8"
+strip_ansi = true
+success_exit_codes = [0]
+[[parsers.python-serial.extract]]
+id = "module"
+source = "stdout"
+type = "regex"
+pattern = "(?<module>pyserial)"
+target = "module"
+group = "module"
+cast = "string"
+required = true
+
 [parsers.dslite-flash-help]
 mode = "line"
 encoding = "utf8"
@@ -61,3 +76,78 @@ pattern = "(?:[Ff]lash.*failed|[Pp]rogram.*failed|[Vv]erify.*failed|[Oo]peration
 kind = "TI_FLASH_FAILED"
 retryable = false
 recovery = ["Review the Run log and confirm the image, target configuration, power, and debug connection."]
+
+[parsers.serial-capture]
+mode = "line"
+encoding = "utf8"
+strip_ansi = true
+success_exit_codes = [0]
+[[parsers.serial-capture.errors]]
+id = "port-busy"
+priority = 120
+source = "both"
+pattern = "(port is busy|Access is denied|access is denied|Resource busy|resource busy)"
+kind = "TI_MONITOR_PORT_BUSY"
+retryable = true
+recovery = ["Close serial monitors or other programs using the port, then retry."]
+[[parsers.serial-capture.errors]]
+id = "permission"
+priority = 110
+source = "both"
+pattern = "(?:(?:[Cc]ould not open port|[Ss]erial port).*?(?:[Pp]ermission denied|[Aa]ccess(?: is)? denied)|(?:[Pp]ermission denied|[Aa]ccess(?: is)? denied).*?(?:COM[0-9]+|/dev/tty))"
+kind = "TI_MONITOR_PERMISSION_DENIED"
+retryable = true
+recovery = ["Check USB/serial permissions and close applications using the port."]
+[[parsers.serial-capture.errors]]
+id = "device-not-found"
+priority = 100
+source = "both"
+pattern = "(doesn't exist|does not exist|FileNotFoundError|No such file|could not open port)"
+kind = "TI_MONITOR_PORT_NOT_FOUND"
+retryable = true
+recovery = ["Check the configured monitor port and reconnect the target."]
+[[parsers.serial-capture.extract]]
+id = "lines"
+source = "stdout"
+type = "regex"
+pattern = "capture\\.lines=(?<lines>\\d+)"
+target = "lines"
+group = "lines"
+cast = "integer"
+required = true
+[[parsers.serial-capture.extract]]
+id = "marker"
+source = "stdout"
+type = "regex"
+pattern = "capture\\.marker=(?<marker>true|false)"
+target = "marker"
+group = "marker"
+cast = "boolean"
+required = true
+[[parsers.serial-capture.extract]]
+id = "bytes"
+source = "stdout"
+type = "regex"
+pattern = "capture\\.bytes=(?<bytes>\\d+)"
+target = "bytes"
+group = "bytes"
+cast = "integer"
+required = true
+[[parsers.serial-capture.extract]]
+id = "truncated"
+source = "stdout"
+type = "regex"
+pattern = "capture\\.truncated=(?<truncated>true|false)"
+target = "truncated"
+group = "truncated"
+cast = "boolean"
+required = true
+[[parsers.serial-capture.extract]]
+id = "stop-reason"
+source = "stdout"
+type = "regex"
+pattern = "capture\\.stop_reason=(?<stop_reason>timeout|marker|max_lines|max_bytes)"
+target = "stop_reason"
+group = "stop_reason"
+cast = "string"
+required = true

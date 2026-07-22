@@ -110,6 +110,23 @@ try {
   );
 
   if (monitorPort) {
+    const captured = await run([
+      "device",
+      "target",
+      "capture",
+      "--duration_seconds",
+      "1",
+      "--baud",
+      "115200",
+      "--json",
+    ]);
+    expect(captured.ok === true, "capture capability did not succeed");
+    expect(
+      typeof captured.data?.output?.lines === "number" &&
+        typeof captured.data?.output?.bytes === "number",
+      "capture did not return bounded serial metadata",
+    );
+
     let sessionId;
     try {
       const started = await run(["device", "target", "run", "--json"]);

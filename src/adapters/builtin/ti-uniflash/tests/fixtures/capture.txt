@@ -1,0 +1,5 @@
+capture.lines=3
+capture.bytes=65
+capture.marker=true
+capture.truncated=false
+capture.stop_reason=marker

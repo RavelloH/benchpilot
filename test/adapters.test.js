@@ -217,7 +217,7 @@ test("conditional capabilities expose UniFlash UART sessions only with a monitor
       .capabilities()
       .map((capability) => capability.id)
       .sort(),
-    ["console", "flash", "logs", "run", "send", "status", "stop"],
+    ["capture", "console", "flash", "logs", "run", "send", "status", "stop"],
   );
   const plan = withMonitor.resolveManagedSession("run", {
     projectRoot: "C:/work/project",

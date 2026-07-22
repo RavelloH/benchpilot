@@ -80,6 +80,16 @@ exit_code = 0
 expect = { success = true, result = {} }
 
 [[cases]]
+id = "parse-capture-output"
+type = "parse-output"
+platform = "windows"
+target = "serial-capture"
+context = {}
+stdout_fixture = "fixtures/capture.txt"
+exit_code = 0
+expect = { success = true, result = { lines = 3, marker = true, bytes = 65, truncated = false, stop_reason = "marker" } }
+
+[[cases]]
 id = "render-status"
 type = "render-action"
 platform = "windows"

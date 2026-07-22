@@ -1,3 +1,11 @@
 schema = "benchpilot.adapter.artifacts"
 schema_version = 1
-[sets]
+
+[sets.capture]
+base = "."
+[[sets.capture.entries]]
+id = "serial-capture"
+kind = "log"
+path = "serial-capture.txt"
+required = true
+multiple = false

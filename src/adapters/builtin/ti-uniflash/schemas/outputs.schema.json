@@ -38,6 +38,20 @@
         }
       }
     },
+    "capture": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["lines", "bytes", "marker", "truncated", "stop_reason"],
+      "properties": {
+        "lines": { "type": "integer", "minimum": 0 },
+        "bytes": { "type": "integer", "minimum": 0 },
+        "marker": { "type": "boolean" },
+        "truncated": { "type": "boolean" },
+        "stop_reason": {
+          "enum": ["timeout", "marker", "max_lines", "max_bytes"]
+        }
+      }
+    },
     "session-run": {
       "type": "object",
       "additionalProperties": false,

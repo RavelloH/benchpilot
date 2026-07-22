@@ -29,6 +29,47 @@
         }
       }
     },
+    "capture": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "duration_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20,
+          "default": 10
+        },
+        "baud": {
+          "type": "integer",
+          "minimum": 1200,
+          "maximum": 2000000,
+          "default": 115200
+        },
+        "max_lines": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2000,
+          "default": 2000
+        },
+        "max_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1048576,
+          "default": 262144
+        },
+        "timestamp": {
+          "type": "boolean",
+          "default": false
+        },
+        "marker": {
+          "type": "string",
+          "maxLength": 256,
+          "default": "",
+          "description": "Optional serial text that ends the capture when observed.",
+          "x-benchpilot-cli": { "flag": "marker" }
+        }
+      }
+    },
     "session-run": {
       "type": "object",
       "additionalProperties": false

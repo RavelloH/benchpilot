@@ -4,6 +4,11 @@
   "type": "object",
   "additionalProperties": false,
   "properties": {
+    "python_path": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Optional Python executable with the pyserial module used by bounded UART capture."
+    },
     "dslite_path": {
       "type": "string",
       "minLength": 1,
