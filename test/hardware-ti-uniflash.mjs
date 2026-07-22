@@ -269,23 +269,13 @@ try {
     );
     process.exitCode = 0;
   } else {
-    const flashed = await run([
-      "device",
-      "target",
-      "flash",
-      "--image",
-      image,
-      "--verify",
-      "true",
-      "--run-after-flash",
-      "false",
-      "--json",
-    ]);
-    expect(flashed.ok === true, "flash capability did not succeed");
+    const deployed = await run(["device", "target", "deploy", "--json"]);
+    expect(deployed.ok === true, "deploy capability did not succeed");
     expect(
-      typeof flashed.data?.execution?.runId === "string" &&
-        flashed.data.execution.runId.length > 0,
-      "flash did not record a Capability Run",
+      typeof deployed.data?.execution?.runId === "string" &&
+        deployed.data.execution.runId.length > 0 &&
+        deployed.data?.output?.image_bytes === Number((await stat(image)).size),
+      "deploy did not record the built image Capability Run",
     );
   }
 } finally {
