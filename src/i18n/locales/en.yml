@@ -398,7 +398,6 @@ approval:
   confirm:
     approve: "Approve this approval request?"
     reject: "Reject this approval request?"
-    operation: "This operation requires approval. Approve and continue?"
   list:
     title: "Human approval requests"
     none: "There are no approval requests."

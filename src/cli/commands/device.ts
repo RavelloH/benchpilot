@@ -31,10 +31,7 @@ interface DeviceCommandContext {
     capabilities: readonly Capability[],
   ) => Capability[];
   renderHelp: (path: readonly string[], includeAll?: boolean) => Promise<void>;
-  confirmApproval?: () => Promise<boolean>;
-  requiresApproval?: (
-    mode: "normal" | "caution" | "destructive" | "irreversible",
-  ) => boolean;
+  approvalMode?: "agent";
   reporter?: DeferredOperationReporter;
   output: { write(value: string): unknown };
   locale: Locale;
@@ -63,8 +60,7 @@ export async function handleDeviceCommand({
   catalog,
   localizeCapabilities,
   renderHelp,
-  confirmApproval,
-  requiresApproval,
+  approvalMode,
   reporter,
   output,
   locale,
@@ -93,12 +89,6 @@ export async function handleDeviceCommand({
       definition.options || [],
       parts.slice(3),
     );
-    const approvalRequired =
-      requiresApproval?.(definition.safety.mode) === true;
-    if (approvalRequired && confirmApproval && !(await confirmApproval()))
-      return true;
-    const interactiveExecution =
-      approvalRequired && confirmApproval !== undefined;
     if (input.follow === true) {
       if (flags.json)
         throw new BenchPilotError(
@@ -187,9 +177,7 @@ export async function handleDeviceCommand({
       device: parts[1],
       capability,
       capabilityInput: input,
-      ...(interactiveExecution
-        ? { executionMode: "interactive" as const }
-        : {}),
+      ...(approvalMode ? { approvalMode } : {}),
       ...(definition.ttyOnly && consoleHandler
         ? { attachManagedSessionConsole: consoleHandler }
         : {}),

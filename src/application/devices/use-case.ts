@@ -97,7 +97,7 @@ export class DeviceUseCases {
     device: string;
     capability: string;
     capabilityInput: Json;
-    executionMode?: "interactive";
+    approvalMode?: "agent";
     attachManagedSessionConsole?: OperationExecutionOptions["attachManagedSessionConsole"];
   }) {
     await this.capability(input.device, input.capability);
@@ -106,7 +106,7 @@ export class DeviceUseCases {
       input.capability,
       input.capabilityInput,
       {
-        executionMode: input.executionMode,
+        approvalMode: input.approvalMode,
         attachManagedSessionConsole: input.attachManagedSessionConsole,
       },
     );
@@ -117,7 +117,7 @@ export class DeviceUseCases {
     device: string;
     capability: string;
     capabilityInput: Json;
-    executionMode?: "interactive";
+    approvalMode?: "agent";
     attachManagedSessionConsole?: OperationExecutionOptions["attachManagedSessionConsole"];
   }) {
     await this.capability(input.device, input.capability);
@@ -128,7 +128,7 @@ export class DeviceUseCases {
         input.capability,
         input.capabilityInput,
         {
-          executionMode: input.executionMode,
+          approvalMode: input.approvalMode,
           attachManagedSessionConsole: input.attachManagedSessionConsole,
           onOutcome: (value) => {
             outcome = value;

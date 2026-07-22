@@ -1,13 +1,6 @@
 #!/usr/bin/env node
 import { stdin, stdout } from "node:process";
-import {
-  Adapter,
-  approvalLevel,
-  BenchPilotError,
-  fail,
-  Json,
-  requiresApproval,
-} from "../core.js";
+import { Adapter, BenchPilotError, fail, Json } from "../core.js";
 import { DeferredOperationReporter } from "./output/deferred-operation-reporter.js";
 import { ScreenOperationReporter } from "./output/screen-operation-reporter.js";
 import { capabilityResultFromSystem } from "./output/capability-result.js";
@@ -204,6 +197,7 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
     );
     terminal = terminalSurface;
     const agent = detectAgent();
+    const approvalMode = flags.agent === true || agent ? "agent" : undefined;
     const screenOperationReporter =
       !flags.json && !flags.jsonl && !flags.agent && !agent && stdout.isTTY
         ? new ScreenOperationReporter(
@@ -1563,16 +1557,7 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
             locale,
             capabilities,
           ),
-        ...(canConfirmOperationInteractively
-          ? {
-              confirmApproval: () =>
-                interactive(locale, parts).confirm(
-                  t(locale, "approval.confirm.operation"),
-                ),
-              requiresApproval: (mode) =>
-                requiresApproval(approvalLevel(config.value), mode),
-            }
-          : {}),
+        ...(approvalMode ? { approvalMode } : {}),
         ...(operationReporter ? { reporter: operationReporter } : {}),
         output: stdout,
         locale,
@@ -1790,27 +1775,13 @@ export async function main(adapters?: Adapter[], resume?: MainResume) {
         definition.options || [],
         parts.slice(3),
       );
-      if (
-        canConfirmOperationInteractively &&
-        requiresApproval(approvalLevel(config.value), definition.safety.mode)
-      ) {
-        if (
-          !(await interactive(locale, parts).confirm(
-            t(locale, "approval.confirm.operation"),
-          ))
-        )
-          return;
-      }
       const command = {
         id: "system.execute",
         path: parts.slice(0, 3),
       };
       operationReporter?.configure(command);
       const outcome = await systems.executeDetailed(parts[1], parts[2], input, {
-        ...(canConfirmOperationInteractively &&
-        definition.safety.mode !== "normal"
-          ? { executionMode: "interactive" as const }
-          : {}),
+        ...(approvalMode ? { approvalMode } : {}),
       });
       const result = capabilityResultFromSystem({ command, result: outcome });
       renderCapabilityResult({

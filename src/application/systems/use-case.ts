@@ -138,7 +138,7 @@ export class SystemUseCases {
     name: string,
     capability: string,
     capabilityInput?: Json,
-    options?: { executionMode?: "interactive" },
+    options?: { approvalMode?: "agent" },
   ) {
     return executeSystemCapability({
       system: name,
@@ -146,7 +146,7 @@ export class SystemUseCases {
       devices: this.members(name),
       runner: this.dependencies.runner,
       capabilityInput,
-      executionMode: options?.executionMode,
+      approvalMode: options?.approvalMode,
     });
   }
 }
@@ -207,7 +207,7 @@ export async function executeSystemCapability(input: {
   runner: OperationRunner;
   capabilityInput?: Json;
   policy?: SystemExecutionPolicy;
-  executionMode?: "interactive";
+  approvalMode?: "agent";
 }): Promise<SystemOperationResult> {
   const available = await systemCapabilityIntersection(input);
   if (!available.some((candidate) => candidate.id === input.capability))
@@ -226,7 +226,7 @@ export async function executeSystemCapability(input: {
       },
     );
   const approvals =
-    input.executionMode === "interactive"
+    input.approvalMode !== "agent"
       ? []
       : await Promise.all(
           [...input.devices]
@@ -236,6 +236,7 @@ export async function executeSystemCapability(input: {
                 device,
                 input.capability,
                 structuredClone(input.capabilityInput ?? {}),
+                { approvalMode: input.approvalMode },
               ),
             ),
         );
@@ -266,7 +267,7 @@ export async function executeSystemCapability(input: {
         {
           eventScope: "child",
           eventContext: { system: input.system, device },
-          executionMode: input.executionMode,
+          approvalMode: input.approvalMode,
           onOutcome: (value) => {
             outcome = value;
           },

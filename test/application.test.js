@@ -592,7 +592,7 @@ test("system approval preflight requests every member before execution", async (
           id: "erase",
           summary: "erase",
           lockMode: "exclusive",
-          safety: { mode: "human-approval", flag: "approve-erase" },
+          safety: { mode: "irreversible" },
         },
       ];
     },
@@ -615,6 +615,7 @@ test("system approval preflight requests every member before execution", async (
       capability: "erase",
       devices: ["second", "first"],
       runner,
+      approvalMode: "agent",
     }),
     (error) =>
       error instanceof BenchPilotError &&
@@ -625,7 +626,7 @@ test("system approval preflight requests every member before execution", async (
   assert.deepEqual(executed, []);
 });
 
-test("interactive system execution does not create agent approval preflights", async () => {
+test("human system execution does not create Agent approval preflights", async () => {
   const executed = [];
   const runner = {
     async listCapabilities() {
@@ -651,7 +652,6 @@ test("interactive system execution does not create agent approval preflights", a
     capability: "reset",
     devices: ["second", "first"],
     runner,
-    executionMode: "interactive",
   });
   assert.equal(
     result.results.every((member) => member.ok),

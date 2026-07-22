@@ -42,8 +42,6 @@ export const catalogs = {
     "approval.command.other": "Operation: {command}",
     "approval.command.system": "Multi-device system operation: {capability}",
     "approval.confirm.approve": "Approve this approval request?",
-    "approval.confirm.operation":
-      "This operation requires approval. Approve and continue?",
     "approval.confirm.reject": "Reject this approval request?",
     "approval.detail.adapter": "Adapter",
     "approval.detail.binding": "Operation binding",
@@ -794,7 +792,6 @@ export const catalogs = {
     "approval.command.other": "操作：{command}",
     "approval.command.system": "多设备系统操作：{capability}",
     "approval.confirm.approve": "确认批准此审批请求？",
-    "approval.confirm.operation": "此操作需要审批。批准并继续执行？",
     "approval.confirm.reject": "确认拒绝此审批请求？",
     "approval.detail.adapter": "适配器",
     "approval.detail.binding": "操作绑定",

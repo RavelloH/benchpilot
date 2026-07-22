@@ -78,8 +78,8 @@ export interface OperationLifecycleFactories {
 export interface OperationExecutionOptions {
   eventScope?: "root" | "child";
   eventContext?: Json;
-  /** The CLI completed an interactive approval flow before execution. */
-  executionMode?: "interactive";
+  /** Only Agent-originated invocations enter the durable approval lifecycle. */
+  approvalMode?: "agent";
   /**
    * Terminal adapters provide this only for a declared TTY-only managed-session
    * capability. The Core still owns capability validation and safety policy.

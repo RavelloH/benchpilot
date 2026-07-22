@@ -79,7 +79,12 @@ export class OperationRunner {
    * preflight so a system never partially executes while approvals are being
    * requested.
    */
-  async preflightApproval(instance: string, capabilityId: string, input: Json) {
+  async preflightApproval(
+    instance: string,
+    capabilityId: string,
+    input: Json,
+    approvalOptions: Pick<OperationExecutionOptions, "approvalMode"> = {},
+  ) {
     const project = this.requireProject();
     const raw = (this.s.config.value.devices as Json | undefined)?.[instance];
     if (!object(raw))
@@ -104,10 +109,9 @@ export class OperationRunner {
       );
     const definition = capability!;
     const safety = definition.safety;
-    const approvalRequired = requiresApproval(
-      approvalLevel(this.s.config.value),
-      safety.mode,
-    );
+    const approvalRequired =
+      approvalOptions.approvalMode === "agent" &&
+      requiresApproval(approvalLevel(this.s.config.value), safety.mode);
     if (!approvalRequired) return { required: false };
     let validated = structuredClone(input);
     const options = definition.options || [];
@@ -279,9 +283,8 @@ export class OperationRunner {
         physicalId: runtime.identity.physicalId,
       });
     const safety = capability.safety;
-    const interactiveExecution = options.executionMode === "interactive";
     const approvalRequired =
-      !interactiveExecution &&
+      options.approvalMode === "agent" &&
       requiresApproval(approvalLevel(this.s.config.value), safety.mode);
     const approvals = this.lifecycle.approvals(project.root);
     const binding = {

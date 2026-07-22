@@ -234,7 +234,7 @@ test("incomplete device resources delegate to definition-driven help", async () 
   assert.deepEqual(rendered, [{ path: ["device", "board"], includeAll: true }]);
 });
 
-test("interactive device execution confirms approval before running", async () => {
+test("human device execution bypasses Agent approval prompts", async () => {
   const originalWrite = process.stdout.write;
   const flags = {};
   const calls = [];
@@ -282,25 +282,18 @@ test("interactive device execution confirms approval before running", async () =
         },
       },
       output: { write: () => true },
-      confirmApproval: async () => {
-        calls.push({ type: "approval" });
-        return true;
-      },
-      requiresApproval: () => true,
     });
     assert.equal(handled, true);
   } finally {
     process.stdout.write = originalWrite;
   }
   assert.deepEqual(calls, [
-    { type: "approval" },
     {
       type: "execute",
       input: {
         device: "fixture",
         capability: "flash",
         capabilityInput: {},
-        executionMode: "interactive",
       },
     },
   ]);

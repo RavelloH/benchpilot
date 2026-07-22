@@ -1391,6 +1391,7 @@ test("declarative demo executes build, deploy, and capture", async () => {
       "device",
       "demo",
       "dangerous-reset",
+      "--agent",
       "--json",
     ).catch((error) => error);
     assert.equal(
@@ -1399,7 +1400,8 @@ test("declarative demo executes build, deploy, and capture", async () => {
     );
     await run(dir, "config", "set", "approval.level", "bypass");
     const dangerous = JSON.parse(
-      (await run(dir, "device", "demo", "dangerous-reset", "--json")).stdout,
+      (await run(dir, "device", "demo", "dangerous-reset", "--agent", "--json"))
+        .stdout,
     );
     assert.equal(dangerous.ok, true);
     assert.equal(dangerous.data.subject.capability, "dangerous-reset");
@@ -1432,6 +1434,7 @@ test("secret approval bindings are redacted but matched by their real digest", a
       "secret-approval",
       "--token",
       token,
+      "--agent",
       "--json",
     ).catch((error) => error);
     const requested = machineError(JSON.parse(pending.stdout));
@@ -1458,6 +1461,7 @@ test("secret approval bindings are redacted but matched by their real digest", a
           "secret-approval",
           "--token",
           token,
+          "--agent",
           "--json",
         )
       ).stdout,
@@ -1470,6 +1474,7 @@ test("secret approval bindings are redacted but matched by their real digest", a
       "secret-approval",
       "--token",
       "different-secret-value",
+      "--agent",
       "--json",
     ).catch((error) => error);
     assert.equal(
