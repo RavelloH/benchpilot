@@ -121,6 +121,25 @@ test("adapter installation metadata is compiled from the bundle declaration", as
   });
 });
 
+test("ESP-IDF managed sessions inherit the configured monitor baud", async () => {
+  const result = await compileAdapter(espIdf);
+  assert.deepEqual(result.diagnostics, []);
+  const adapter = createDeclarativeAdapter({
+    bundle: result.bundle,
+    platform: "windows",
+    rules: result.bundle.platforms.windows,
+  });
+  const device = await adapter.createDevice(
+    "esp32s3",
+    { port: "COM8", chip: "esp32s3" },
+    { adapterConfig: { monitor_baud: 921600 }, paths: {} },
+  );
+  const plan = device.resolveManagedSession("run", {
+    projectRoot: "C:/work/project",
+  });
+  assert.equal(plan?.baud, 921600);
+});
+
 test("adapter sessions declare all managed session capability contracts", async () => {
   const root = await mkdtemp(join(tmpdir(), "benchpilot-adapter-"));
   const adapterRoot = join(root, "complete");

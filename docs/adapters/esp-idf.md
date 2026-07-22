@@ -86,6 +86,16 @@ closes the port and returns `lines` and `marker`. `flash` and `deploy` require
 a human approval and never use force, erase, eFuse, JTAG, OpenOCD, or OTA
 commands.
 
+`run` opens a managed raw serial-read session at the configured `monitor_baud`
+(or a per-command `--baud` override). The session host alone owns the physical
+port, Device Lock, RLog, and retained log spool. `logs` returns bounded records
+without reopening the port; `logs --follow` supports Screen and JSONL. `stop`
+closes the host and releases the lock. `console` is human-TTY-only and detaches
+on Ctrl-C; Agent callers use bounded raw `send` requests, which are serialized
+by a writer lease. `request` remains disabled until a firmware protocol profile
+is declared, and `sync`, `test`, `selftest`, and `erase` are intentionally not
+provided by this adapter.
+
 For a missing or busy port, close serial monitors, verify the configured port,
 reconnect the board, then hold BOOT/GPIO0 and briefly press EN before retrying.
 The error result preserves the parser category in `details.parserKind`.
@@ -126,6 +136,8 @@ localized help, and schema-bound Screen Views to the dynamic Command Graph.
 `status` presents a compact live readiness probe, while `info` presents a
 stable identity and hardware inventory rather than workflow step names. `size` and
 `capture` use compact structured summaries; `build`, `clean`, `fullclean`,
-`flash`, `reset`, and `deploy` use the shared ObjectTree component. JSON Result
-v3 and JSONL Event v3 remain the same locale-neutral capability outcome for
-every ESP-IDF operation.
+`flash`, `reset`, and `deploy` use the shared ObjectTree component. Session
+output uses the same declarative views: `run`, `stop`, and `send` are detail
+views; `logs` is a records table; and `console` is the TTY-only terminal
+surface. JSON Result v3 and JSONL Event v3 remain the same locale-neutral
+capability outcome for every ESP-IDF operation.

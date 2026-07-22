@@ -16,8 +16,17 @@ Its `duration_seconds`, `max_lines`, and `max_bytes` inputs bound the capture;
 `timestamp` optionally prefixes each saved line with UTC time. The structured
 result reports the line and byte counts, marker detection, truncation, and the
 stop reason.
-Interactive logs, run, and stop remain disabled. No action uses `--force`,
-erase commands, eFuse operations, JTAG/OpenOCD, OTA, or a shell string.
+
+`run` opens a managed raw serial-read session at `monitor_baud` (or the
+per-invocation `--baud` override). `logs` reads its bounded record spool;
+`logs --follow` is available for Screen and JSONL. `stop` releases the session
+and its device lock. A human TTY can use `console` to attach bidirectionally;
+agents use bounded `send` requests with a single writer lease. These commands
+never run `idf.py monitor` in the background and do not reopen the port outside
+the session host. `request` remains unavailable until firmware declares a
+validated protocol profile. `sync`, `test`, `selftest`, and `erase` are also
+intentionally unavailable. No action uses `--force`, erase commands, eFuse
+operations, JTAG/OpenOCD, OTA, or a shell string.
 
 `idf.py` actions require an activated or resolved ESP-IDF environment.
 `esptool` actions use the resolved Python executable directly, so read-only
