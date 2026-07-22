@@ -1,3 +1,14 @@
 schema = "benchpilot.adapter.sessions"
 schema_version = 1
-[sessions]
+
+[sessions.monitor]
+stream_source = "serial-read"
+port = "${device.monitor_port}"
+baud = "${device.monitor_baud}"
+encoding = "utf8"
+line_framing = "line"
+open_line_policy = { dtr = "preserve", rts = "preserve" }
+log_record_limit = 10000
+spool_limit_bytes = 16777216
+raw_capture_limit_bytes = 16777216
+write_limit_bytes = 4096

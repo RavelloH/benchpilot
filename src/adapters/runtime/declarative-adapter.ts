@@ -27,6 +27,7 @@ import {
 } from "./environments/resolver.js";
 import { AdapterRuntimeError } from "./errors.js";
 import {
+  evaluateCondition,
   lookup,
   object,
   renderRequiredTemplate,
@@ -389,6 +390,15 @@ class DeclarativeDevice implements DeviceRuntime {
       ([id, raw]) => {
         const value = object(raw);
         if (value.enabled !== true || object(value.platforms)[current] !== true)
+          return [];
+        if (
+          !evaluateCondition(value.availability_when, {
+            adapter: { id: this.adapter.bundle.id },
+            platform: current,
+            config: this.adapterConfig,
+            device: this.device,
+          })
+        )
           return [];
         return [
           capabilityFor(

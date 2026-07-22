@@ -15,6 +15,33 @@
       "minLength": 1,
       "maxLength": 128,
       "description": "Stable, lab-assigned physical debug probe identity used for exclusive locking."
+    },
+    "target_name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "default": "unknown",
+      "description": "Human-readable target model reported by status."
+    },
+    "target_revision": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "default": "unknown",
+      "description": "Target revision reported by status when known."
+    },
+    "monitor_port": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "description": "Optional target UART port used to expose managed serial-session capabilities."
+    },
+    "monitor_baud": {
+      "type": "integer",
+      "minimum": 1200,
+      "maximum": 2000000,
+      "default": 115200,
+      "description": "UART baud rate used by managed serial-session capabilities."
     }
   }
 }

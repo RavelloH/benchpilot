@@ -1,2 +1,12 @@
+[progress.status]
+query = "Query target cores"
+
+[view.status]
+title = "Target readiness"
+[view.status.field]
+endpoint = "Debug probe"
+model = "Target"
+revision = "Revision"
+
 [view.flash]
 completed = "Firmware flashing completed."

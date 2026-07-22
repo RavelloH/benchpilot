@@ -1,3 +1,21 @@
 schema = "benchpilot.adapter.workflows"
 schema_version = 1
-[workflows]
+
+[workflows.status]
+timeout = "2m"
+stop_on_failure = true
+[[workflows.status.steps]]
+id = "query"
+uses = "action:status"
+label = { key = "progress.status.query", fallback = "Query target cores" }
+with = {}
+[workflows.status.output_template]
+availability = "ready"
+[workflows.status.output_template.connection]
+transport = "debug-server"
+endpoint = "${device.probe_id}"
+[workflows.status.output_template.target]
+model = "${device.target_name}"
+revision = "${device.target_revision}"
+[workflows.status.output_template.tooling]
+dslite = "DSLite"

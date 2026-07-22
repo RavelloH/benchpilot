@@ -36,6 +36,55 @@
         "macos": { "type": "string", "minLength": 1 }
       }
     },
+    "condition": {
+      "type": "object",
+      "required": ["path", "operator"],
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^(?!.*(__proto__|prototype|constructor|\\$\\{))[a-z][a-z0-9_]*(\\.[a-zA-Z][a-zA-Z0-9_]*)*$"
+        },
+        "operator": {
+          "enum": [
+            "exists",
+            "not-exists",
+            "equals",
+            "not-equals",
+            "in",
+            "not-in",
+            "truthy",
+            "falsy"
+          ]
+        },
+        "value": {}
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "operator": { "enum": ["equals", "not-equals"] } }
+          },
+          "then": { "required": ["value"] }
+        },
+        {
+          "if": { "properties": { "operator": { "enum": ["in", "not-in"] } } },
+          "then": {
+            "required": ["value"],
+            "properties": { "value": { "type": "array" } }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "operator": {
+                "enum": ["exists", "not-exists", "truthy", "falsy"]
+              }
+            }
+          },
+          "then": { "not": { "required": ["value"] } }
+        }
+      ]
+    },
     "safety": {
       "type": "object",
       "required": ["mode"],
@@ -76,6 +125,7 @@
         "timeout": { "type": "string", "pattern": "^[1-9][0-9]*(ms|s|m|h)$" },
         "lock": { "enum": ["none", "device", "session-owned"] },
         "tty_only": { "type": "boolean" },
+        "availability_when": { "$ref": "#/$defs/condition" },
         "safety": { "$ref": "#/$defs/safety" },
         "platforms": { "$ref": "#/$defs/platforms" },
         "platform_reasons": { "$ref": "#/$defs/platformReasons" },

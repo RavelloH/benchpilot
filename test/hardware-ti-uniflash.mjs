@@ -14,6 +14,7 @@ const dslitePath = process.env.BENCHPILOT_TI_UNIFLASH_DSLITE;
 const targetConfig = process.env.BENCHPILOT_TI_UNIFLASH_TARGET_CONFIG;
 const image = process.env.BENCHPILOT_TI_UNIFLASH_IMAGE;
 const probeId = process.env.BENCHPILOT_TI_UNIFLASH_PROBE_ID;
+const monitorPort = process.env.BENCHPILOT_TI_UNIFLASH_MONITOR_PORT;
 const allowFlash = process.env.BENCHPILOT_TI_UNIFLASH_ALLOW_FLASH === "1";
 
 if (!dslitePath || !targetConfig || !image || !probeId) {
@@ -44,6 +45,8 @@ const run = (args) =>
           adapter: "ti-uniflash",
           target_config: targetConfig,
           probe_id: probeId,
+          target_name: "MSPM0G3507",
+          ...(monitorPort ? { monitor_port: monitorPort } : {}),
         }),
       },
       stdio: ["ignore", "pipe", "inherit"],
@@ -98,6 +101,54 @@ try {
     ),
     "doctor did not validate DSLite.exe",
   );
+
+  const status = await run(["device", "target", "status", "--json"]);
+  expect(status.ok === true, "status capability did not succeed");
+  expect(
+    status.data?.output?.target?.model === "MSPM0G3507",
+    "status did not report the configured target model",
+  );
+
+  if (monitorPort) {
+    let sessionId;
+    try {
+      const started = await run(["device", "target", "run", "--json"]);
+      sessionId = started.data?.output?.sessionId;
+      expect(
+        typeof sessionId === "string" && sessionId.startsWith("session-"),
+        "run did not return a managed session identifier",
+      );
+      const logs = await run([
+        "device",
+        "target",
+        "logs",
+        "--session-id",
+        sessionId,
+        "--tail",
+        "16",
+        "--json",
+      ]);
+      expect(
+        Array.isArray(logs.data?.output?.records),
+        "logs did not return records",
+      );
+    } finally {
+      if (sessionId) {
+        const stopped = await run([
+          "device",
+          "target",
+          "stop",
+          "--session-id",
+          sessionId,
+          "--json",
+        ]);
+        expect(
+          stopped.data?.output?.status === "stopped",
+          "stop did not close the session",
+        );
+      }
+    }
+  }
 
   const planned = await run([
     "device",

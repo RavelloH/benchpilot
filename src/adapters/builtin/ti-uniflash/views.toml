@@ -1,6 +1,30 @@
 schema = "benchpilot.adapter.views"
 schema_version = 1
 
+[capabilities.status]
+kind = "detail"
+[capabilities.status.title]
+key = "view.status.title"
+fallback = "Target readiness"
+[[capabilities.status.fields]]
+selector = "connection.endpoint"
+formatter = "string"
+[capabilities.status.fields.label]
+key = "view.status.field.endpoint"
+fallback = "Debug probe"
+[[capabilities.status.fields]]
+selector = "target.model"
+formatter = "string"
+[capabilities.status.fields.label]
+key = "view.status.field.model"
+fallback = "Target"
+[[capabilities.status.fields]]
+selector = "target.revision"
+formatter = "string"
+[capabilities.status.fields.label]
+key = "view.status.field.revision"
+fallback = "Revision"
+
 [capabilities.flash]
 kind = "completion"
 [capabilities.flash.message]

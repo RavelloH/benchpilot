@@ -25,15 +25,29 @@ temporary COM port or project path.
 adapter = "ti-uniflash"
 target_config = "tools/target-a.ccxml"
 probe_id = "lab-xds110-01"
+# Optional; defaults to "unknown".
+target_name = "MSPM0G3507"
+# Optional; defaults to "unknown".
+target_revision = "A"
+# Optional. Its presence enables managed UART session capabilities.
+monitor_port = "COM4"
+monitor_baud = 115200
 ```
 
 ## Capability
 
-`flash` is destructive, creates a Run, and takes an exclusive device Lock. It
-accepts an image path plus optional verify and run-after-flash settings. The
-adapter only exposes the cross-target DSLite `flash` mode; erase, debug unlock,
-target inspection, reset, and all build capabilities remain disabled until
-their target-family-specific contracts are separately validated.
+`status` queries the target's configured Debug Server core list. It is a
+caution-level, locked operation because it initializes the configured debug
+connection. `flash` is destructive, creates a Run, and takes an exclusive
+device Lock. It accepts an image path plus optional verify and run-after-flash
+settings. Erase, debug unlock, reset, and all build capabilities remain
+disabled until their target-family-specific contracts are separately validated.
+
+When `monitor_port` is configured, the adapter additionally provides the
+managed UART capabilities `run`, `stop`, `logs`, `console`, and `send`. They
+use the same session lifecycle as other BenchPilot adapters and preserve DTR
+and RTS when opening the port. These commands are not exposed for devices
+without `monitor_port`.
 
 Run `benchpilot adapter ti-uniflash discover` or `doctor` before operating
 hardware. Hardware validation must go through the dynamic `flash` capability;

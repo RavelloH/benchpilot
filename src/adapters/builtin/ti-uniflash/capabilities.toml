@@ -3,12 +3,23 @@ schema_version = 1
 catalog_version = 1
 
 [capabilities.status]
-enabled = false
-reason = "DSLite flash mode has no cross-target status command with a verified non-destructive contract."
+enabled = true
+handler = "workflow:status"
+input_schema = "empty"
+output_schema = "status"
+creates_run = true
+timeout = "2m"
+lock = "device"
+[capabilities.status.safety]
+mode = "caution"
+description = "Loads the configured TI debug-server target configuration to query its available cores."
 [capabilities.status.platforms]
-windows = false
+windows = true
 linux = false
 macos = false
+[capabilities.status.platform_reasons]
+linux = "DSLite installation layout and direct executable contract are not yet verified on Linux."
+macos = "DSLite installation layout and direct executable contract are not yet verified on macOS."
 
 [capabilities.info]
 enabled = false
@@ -78,44 +89,108 @@ linux = false
 macos = false
 
 [capabilities.run]
-enabled = false
-reason = "Run control requires a target-family-specific Debug Server contract."
+enabled = true
+handler = "session:start"
+session = "monitor"
+input_schema = "session-run"
+output_schema = "session-run"
+creates_run = true
+timeout = "30s"
+lock = "session-owned"
+availability_when = { path = "device.monitor_port", operator = "exists" }
+[capabilities.run.safety]
+mode = "caution"
+description = "Opens a managed target UART session; opening a USB serial port can affect DTR or RTS."
 [capabilities.run.platforms]
-windows = false
+windows = true
 linux = false
 macos = false
+[capabilities.run.platform_reasons]
+linux = "DSLite installation layout and direct executable contract are not yet verified on Linux."
+macos = "DSLite installation layout and direct executable contract are not yet verified on macOS."
 
 [capabilities.stop]
-enabled = false
-reason = "UniFlash flash mode does not provide a managed target stop session."
+enabled = true
+handler = "session:stop"
+session = "monitor"
+input_schema = "session-stop"
+output_schema = "session-stop"
+creates_run = false
+timeout = "45s"
+lock = "none"
+availability_when = { path = "device.monitor_port", operator = "exists" }
+[capabilities.stop.safety]
+mode = "normal"
 [capabilities.stop.platforms]
-windows = false
+windows = true
 linux = false
 macos = false
+[capabilities.stop.platform_reasons]
+linux = "DSLite installation layout and direct executable contract are not yet verified on Linux."
+macos = "DSLite installation layout and direct executable contract are not yet verified on macOS."
 
 [capabilities.logs]
-enabled = false
-reason = "UniFlash flash mode does not provide a managed logging session."
+enabled = true
+handler = "session:logs"
+session = "monitor"
+input_schema = "session-logs"
+output_schema = "session-logs"
+creates_run = false
+timeout = "30s"
+lock = "none"
+availability_when = { path = "device.monitor_port", operator = "exists" }
+[capabilities.logs.safety]
+mode = "normal"
 [capabilities.logs.platforms]
-windows = false
+windows = true
 linux = false
 macos = false
+[capabilities.logs.platform_reasons]
+linux = "DSLite installation layout and direct executable contract are not yet verified on Linux."
+macos = "DSLite installation layout and direct executable contract are not yet verified on macOS."
 
 [capabilities.console]
-enabled = false
-reason = "A generic debug-probe serial console is not declared by this flash-only adapter."
+enabled = true
+handler = "session:console"
+session = "monitor"
+input_schema = "session-console"
+output_schema = "empty"
+creates_run = false
+timeout = "24h"
+lock = "none"
+tty_only = true
+availability_when = { path = "device.monitor_port", operator = "exists" }
+[capabilities.console.safety]
+mode = "caution"
+description = "Attaches terminal input to a managed UART session; target firmware may interpret typed bytes as commands."
 [capabilities.console.platforms]
-windows = false
+windows = true
 linux = false
 macos = false
+[capabilities.console.platform_reasons]
+linux = "DSLite installation layout and direct executable contract are not yet verified on Linux."
+macos = "DSLite installation layout and direct executable contract are not yet verified on macOS."
 
 [capabilities.send]
-enabled = false
-reason = "A generic target messaging protocol is not declared by this flash-only adapter."
+enabled = true
+handler = "session:send"
+session = "monitor"
+input_schema = "session-send"
+output_schema = "session-send"
+creates_run = false
+timeout = "30s"
+lock = "none"
+availability_when = { path = "device.monitor_port", operator = "exists" }
+[capabilities.send.safety]
+mode = "caution"
+description = "Writes raw bytes to a managed UART session; target firmware may interpret the data as a physical control command."
 [capabilities.send.platforms]
-windows = false
+windows = true
 linux = false
 macos = false
+[capabilities.send.platform_reasons]
+linux = "DSLite installation layout and direct executable contract are not yet verified on Linux."
+macos = "DSLite installation layout and direct executable contract are not yet verified on macOS."
 
 [capabilities.request]
 enabled = false

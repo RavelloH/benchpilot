@@ -1,6 +1,18 @@
 schema = "benchpilot.adapter.actions"
 schema_version = 1
 
+[actions.status]
+type = "process"
+tool = "dslite"
+cwd = "${project.root}"
+timeout = "2m"
+parser = "dslite-flash"
+arguments = [
+  { kind = "literal", value = "flash" },
+  { kind = "option", flag = "--config", value = "${device.target_config}" },
+  { kind = "flag", flag = "--list-cores" }
+]
+
 [actions.flash]
 type = "process"
 tool = "dslite"

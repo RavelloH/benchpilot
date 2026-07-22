@@ -11,6 +11,7 @@ root = "E:/firmware"
 [cases.context.device]
 target_config = "E:/firmware/tools/target.ccxml"
 probe_id = "lab-xds110-01"
+target_name = "Example target"
 [cases.context.input]
 image = "E:/firmware/build/application.out"
 verify = true
@@ -30,6 +31,7 @@ root = "E:/firmware"
 [cases.context.device]
 target_config = "E:/firmware/tools/target.ccxml"
 probe_id = "lab-xds110-01"
+target_name = "Example target"
 [cases.context.input]
 image = "E:/firmware/build/application.hex"
 verify = false
@@ -76,3 +78,29 @@ context = {}
 stdout_fixture = "fixtures/dslite-success.txt"
 exit_code = 0
 expect = { success = true, result = {} }
+
+[[cases]]
+id = "render-status"
+type = "render-action"
+platform = "windows"
+target = "status"
+[cases.context.project]
+root = "E:/firmware"
+[cases.context.device]
+target_config = "E:/firmware/tools/target.ccxml"
+probe_id = "lab-xds110-01"
+target_name = "Example target"
+target_revision = "A"
+[cases.context.input]
+[cases.expect]
+tool = "dslite"
+cwd = "E:/firmware"
+args = ["flash", "--config", "E:/firmware/tools/target.ccxml", "--list-cores"]
+
+[[cases]]
+id = "plan-status"
+type = "plan-workflow"
+platform = "windows"
+target = "status"
+context = {}
+expect = { steps = ["query"] }

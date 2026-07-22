@@ -296,6 +296,7 @@ export const validateSemantics = async (
   }
   for (const [key, raw] of [...entries(declared), ...entries(extensions)]) {
     const item = obj(raw);
+    condition(item.availability_when, "capabilities.toml", adapter.id, errors);
     if (!id.test(key))
       errors.push(
         diagnostic(

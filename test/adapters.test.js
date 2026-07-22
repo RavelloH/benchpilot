@@ -39,6 +39,13 @@ const complete = join(
 const demo = join(process.cwd(), "test", "fixtures", "adapters", "demo");
 const invalid = join(process.cwd(), "test", "fixtures", "adapters", "invalid");
 const espIdf = join(process.cwd(), "src", "adapters", "builtin", "esp-idf");
+const tiUniflash = join(
+  process.cwd(),
+  "src",
+  "adapters",
+  "builtin",
+  "ti-uniflash",
+);
 const catalog = join(
   process.cwd(),
   "src",
@@ -176,6 +183,49 @@ test("ESP-IDF managed sessions inherit the configured monitor baud", async () =>
     projectRoot: "C:/work/project",
   });
   assert.equal(plan?.baud, 921600);
+});
+
+test("conditional capabilities expose UniFlash UART sessions only with a monitor port", async () => {
+  const result = await compileAdapter(tiUniflash);
+  assert.deepEqual(result.diagnostics, []);
+  const adapter = createDeclarativeAdapter({
+    bundle: result.bundle,
+    platform: "windows",
+    rules: result.bundle.platforms.windows,
+  });
+  const createDevice = (config) =>
+    adapter.createDevice("target", config, { adapterConfig: {}, paths: {} });
+  const withoutMonitor = await createDevice({
+    target_config: "C:/work/target.ccxml",
+    probe_id: "lab-probe-1",
+  });
+  assert.deepEqual(
+    withoutMonitor
+      .capabilities()
+      .map((capability) => capability.id)
+      .sort(),
+    ["flash", "status"],
+  );
+  const withMonitor = await createDevice({
+    target_config: "C:/work/target.ccxml",
+    probe_id: "lab-probe-1",
+    monitor_port: "COM4",
+    monitor_baud: 921600,
+  });
+  assert.deepEqual(
+    withMonitor
+      .capabilities()
+      .map((capability) => capability.id)
+      .sort(),
+    ["console", "flash", "logs", "run", "send", "status", "stop"],
+  );
+  const plan = withMonitor.resolveManagedSession("run", {
+    projectRoot: "C:/work/project",
+  });
+  assert.deepEqual(
+    { port: plan?.port, baud: plan?.baud, kind: plan?.kind },
+    { port: "COM4", baud: 921600, kind: "start" },
+  );
 });
 
 test("ESP-IDF uses the shared passive serial discovery source", async () => {
