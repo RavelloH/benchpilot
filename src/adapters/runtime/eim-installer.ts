@@ -104,6 +104,22 @@ const installationError = (message: string, details: Json = {}) =>
     details,
   );
 
+const requestFailure = (error: unknown) => {
+  const source = error instanceof Error ? error : undefined;
+  const cause = source?.cause;
+  return {
+    message: source?.message ?? String(error),
+    ...(cause instanceof Error
+      ? {
+          cause: cause.message,
+          ...(typeof (cause as NodeJS.ErrnoException).code === "string"
+            ? { code: (cause as NodeJS.ErrnoException).code }
+            : {}),
+        }
+      : {}),
+  };
+};
+
 export const parseEimTargets = (
   value: unknown,
   allowedTargets: readonly string[],
@@ -264,16 +280,31 @@ export const resolveLatestEimAsset = async (
   } = {},
 ): Promise<EimAsset> => {
   const request = input.request ?? fetch;
-  const response = await request(EIM_RELEASE_API, {
-    headers: {
-      Accept: "application/vnd.github+json",
-      "User-Agent": "benchpilot",
-    },
-  });
   const assetName = eimAssetName(
     input.platform ?? platformFor(),
     input.architecture,
   );
+  let response: Response;
+  try {
+    response = await request(EIM_RELEASE_API, {
+      headers: {
+        Accept: "application/vnd.github+json",
+        "User-Agent": "benchpilot",
+      },
+    });
+  } catch (apiError) {
+    try {
+      return await latestReleaseFromHtml(assetName, request);
+    } catch (fallbackError) {
+      throw installationError(
+        "Unable to connect to GitHub to retrieve the latest EIM release.",
+        {
+          api: requestFailure(apiError),
+          fallback: requestFailure(fallbackError),
+        },
+      );
+    }
+  }
   if (!response.ok) return latestReleaseFromHtml(assetName, request);
   const release = (await response.json()) as GithubRelease;
   if (!release.tag_name || release.draft || release.prerelease)

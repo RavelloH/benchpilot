@@ -72,6 +72,39 @@ test("EIM resolver falls back to GitHub release HTML when the API is unavailable
   assert.equal(calls.length, 3);
 });
 
+test("EIM resolver falls back to GitHub release HTML when the API request fails", async () => {
+  const digest = "c".repeat(64);
+  const calls = [];
+  const request = async (url) => {
+    calls.push(String(url));
+    if (String(url).includes("api.github.com"))
+      throw Object.assign(new TypeError("fetch failed"), {
+        cause: Object.assign(new Error("connect ETIMEDOUT"), {
+          code: "ETIMEDOUT",
+        }),
+      });
+    if (String(url).endsWith("/releases/latest"))
+      return {
+        ok: true,
+        status: 200,
+        url: "https://github.com/espressif/idf-im-ui/releases/tag/v7.7.7",
+      };
+    return {
+      ok: true,
+      status: 200,
+      text: async () =>
+        `<a href="/espressif/idf-im-ui/releases/download/v7.7.7/eim-cli-windows-x64.exe">eim-cli-windows-x64.exe</a> sha256:${digest}`,
+    };
+  };
+  const resolved = await resolveLatestEimAsset({
+    platform: "windows",
+    request,
+  });
+  assert.equal(resolved.tag, "v7.7.7");
+  assert.equal(resolved.digest, digest);
+  assert.equal(calls.length, 3);
+});
+
 test("EIM progress parser exposes only measured tool counts, transfer bytes, and local percentages", () => {
   const parser = new EimInstallProgressParser();
   assert.deepEqual(

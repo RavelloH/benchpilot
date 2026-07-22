@@ -1,6 +1,7 @@
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import {
+  BenchPilotError,
   type BusinessLogFactory,
   fail,
   type AdapterRegistry,
@@ -121,6 +122,8 @@ export class AdapterInstallationUseCases {
         result,
       };
     } catch (error) {
+      const details =
+        error instanceof BenchPilotError ? error.details : undefined;
       reporter.emit("adapter.install.failed", {
         adapter: adapterId,
         root: targetRoot,
@@ -134,6 +137,7 @@ export class AdapterInstallationUseCases {
           root: targetRoot,
           message:
             error instanceof Error ? error.message : "Installation failed.",
+          ...(details ? { details } : {}),
         },
         { level: "error" },
       );
