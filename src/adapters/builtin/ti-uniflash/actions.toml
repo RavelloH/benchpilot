@@ -13,6 +13,18 @@ arguments = [
   { kind = "flag", flag = "--list-cores" }
 ]
 
+[actions.reset]
+type = "process"
+tool = "dslite"
+cwd = "${project.root}"
+timeout = "2m"
+parser = "dslite-flash"
+arguments = [
+  { kind = "literal", value = "flash" },
+  { kind = "option", flag = "--config", value = "${device.target_config}" },
+  { kind = "option", flag = "--reset", value = "${device.reset_index}" }
+]
+
 [actions.flash]
 type = "process"
 tool = "dslite"

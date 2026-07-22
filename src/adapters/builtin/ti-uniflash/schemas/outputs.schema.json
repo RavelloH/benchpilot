@@ -80,6 +80,7 @@
         }
       }
     },
+    "reset": { "type": "object", "additionalProperties": true },
     "capture": {
       "type": "object",
       "additionalProperties": false,

@@ -108,6 +108,23 @@ cwd = "E:/firmware"
 args = ["flash", "--config", "E:/firmware/tools/target.ccxml", "--list-cores"]
 
 [[cases]]
+id = "render-reset"
+type = "render-action"
+platform = "windows"
+target = "reset"
+[cases.context.project]
+root = "E:/firmware"
+[cases.context.device]
+target_config = "E:/firmware/tools/target.ccxml"
+probe_id = "lab-xds110-01"
+reset_index = 1
+[cases.context.input]
+[cases.expect]
+tool = "dslite"
+cwd = "E:/firmware"
+args = ["flash", "--config", "E:/firmware/tools/target.ccxml", "--reset", "1"]
+
+[[cases]]
 id = "plan-status"
 type = "plan-workflow"
 platform = "windows"

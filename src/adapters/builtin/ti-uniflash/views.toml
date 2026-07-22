@@ -85,6 +85,12 @@ kind = "completion"
 key = "view.flash.completed"
 fallback = "Firmware flashing completed."
 
+[capabilities.reset]
+kind = "completion"
+[capabilities.reset.message]
+key = "view.reset.completed"
+fallback = "Target reset completed."
+
 [capabilities.capture]
 kind = "detail"
 [capabilities.capture.title]

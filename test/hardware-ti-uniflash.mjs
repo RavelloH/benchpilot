@@ -46,6 +46,7 @@ const run = (args) =>
           target_config: targetConfig,
           probe_id: probeId,
           target_name: "MSPM0G3507",
+          reset_index: 1,
           inventory: {
             model: "MSPM0G3507",
             revision: "unknown",
@@ -184,6 +185,9 @@ try {
       }
     }
   }
+
+  const reset = await run(["device", "target", "reset", "--json"]);
+  expect(reset.ok === true, "reset capability did not succeed");
 
   const planned = await run([
     "device",

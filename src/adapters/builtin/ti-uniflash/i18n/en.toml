@@ -27,6 +27,9 @@ dslite = "DSLite"
 [view.flash]
 completed = "Firmware flashing completed."
 
+[view.reset]
+completed = "Target reset completed."
+
 [view.capture]
 title = "Capture summary"
 

@@ -31,6 +31,8 @@ probe_id = "lab-xds110-01"
 target_name = "MSPM0G3507"
 # Optional; defaults to "unknown".
 target_revision = "A"
+# Optional. Enables `reset`; obtain the index from a locked `--list-resets` validation.
+reset_index = 1
 # Optional. Its presence enables managed UART session capabilities.
 monitor_port = "COM4"
 monitor_baud = 115200
@@ -54,9 +56,11 @@ connection and returns the project-declared board identity and flash inventory;
 DSLite does not provide a target-family-independent UID or flash-ID query, so
 these fields are never claimed to be automatically detected. `flash` is
 destructive, creates a Run, and takes an exclusive device Lock. It accepts an
-image path plus optional verify and run-after-flash settings. Erase, debug
-unlock, reset, and all build capabilities remain disabled until their
-target-family-specific contracts are separately validated.
+image path plus optional verify and run-after-flash settings. A configured
+`reset_index` enables `reset`; it must be a value verified for this exact CCXML
+with DSLite's `--list-resets` query. Erase, debug unlock, and all build
+capabilities remain disabled until their target-family-specific contracts are
+separately validated.
 
 When `monitor_port` is configured, the adapter additionally provides the
 bounded `capture` operation and managed UART capabilities `run`, `stop`,

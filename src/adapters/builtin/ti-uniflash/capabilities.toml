@@ -93,12 +93,24 @@ linux = "DSLite installation layout and direct executable contract are not yet v
 macos = "DSLite installation layout and direct executable contract are not yet verified on macOS."
 
 [capabilities.reset]
-enabled = false
-reason = "Reset operation names and effects differ by target and require target-family validation."
+enabled = true
+handler = "action:reset"
+input_schema = "empty"
+output_schema = "reset"
+creates_run = false
+timeout = "2m"
+lock = "device"
+availability_when = { path = "device.reset_index", operator = "exists" }
+[capabilities.reset.safety]
+mode = "caution"
+description = "Applies the configured, target-validated DSLite reset operation immediately."
 [capabilities.reset.platforms]
-windows = false
+windows = true
 linux = false
 macos = false
+[capabilities.reset.platform_reasons]
+linux = "DSLite installation layout and direct executable contract are not yet verified on Linux."
+macos = "DSLite installation layout and direct executable contract are not yet verified on macOS."
 
 [capabilities.run]
 enabled = true

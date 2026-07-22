@@ -68,6 +68,12 @@
         }
       }
     },
+    "reset_index": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 255,
+      "description": "Target-specific DSLite reset index validated from `flash --config <ccxml> --list-resets`; its presence enables the immediate reset capability."
+    },
     "monitor_port": {
       "type": "string",
       "minLength": 1,
