@@ -66,12 +66,23 @@ linux = false
 macos = false
 
 [capabilities.size]
-enabled = false
-reason = "Image-size reporting belongs to the selected build toolchain."
+enabled = true
+handler = "workflow:size"
+input_schema = "empty"
+output_schema = "size"
+creates_run = true
+timeout = "30s"
+lock = "none"
+availability_when = { path = "device.image_path", operator = "exists" }
+[capabilities.size.safety]
+mode = "normal"
 [capabilities.size.platforms]
-windows = false
+windows = true
 linux = false
 macos = false
+[capabilities.size.platform_reasons]
+linux = "The packaged Python discovery and prebuilt-image size contract are verified only on Windows."
+macos = "The packaged Python discovery and prebuilt-image size contract are verified only on macOS."
 
 [capabilities.flash]
 enabled = true

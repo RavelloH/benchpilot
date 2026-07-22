@@ -4,6 +4,9 @@ query = "Query target cores"
 [progress.info]
 query = "Verify target connection"
 
+[progress.size]
+measure = "Measure prebuilt image"
+
 [view.status]
 title = "Target readiness"
 [view.status.field]
@@ -29,6 +32,12 @@ completed = "Firmware flashing completed."
 
 [view.reset]
 completed = "Target reset completed."
+
+[view.size]
+title = "Prebuilt image size"
+
+[view.size.field]
+image = "Image"
 
 [view.capture]
 title = "Capture summary"

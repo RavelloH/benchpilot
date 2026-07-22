@@ -38,3 +38,15 @@ device = "${device.inventory.flash.device}"
 size = "${device.inventory.flash.size}"
 [workflows.info.output_template.tooling]
 dslite = "DSLite"
+
+[workflows.size]
+timeout = "30s"
+stop_on_failure = true
+[[workflows.size.steps]]
+id = "measure"
+uses = "action:size"
+label = { key = "progress.size.measure", fallback = "Measure prebuilt image" }
+with = {}
+[workflows.size.output_template]
+available = true
+image_bytes = "${result.measure.image_bytes}"

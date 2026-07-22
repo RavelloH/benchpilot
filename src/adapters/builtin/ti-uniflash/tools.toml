@@ -11,6 +11,16 @@ command = "python"
 prefix_args = []
 environment = "inherit"
 
+[tools.python-stdlib]
+description = "Python runtime used for non-hardware prebuilt-image inspection."
+required = false
+discovery = "python-stdlib"
+[tools.python-stdlib.launch]
+mode = "direct"
+command = "python"
+prefix_args = []
+environment = "inherit"
+
 [tools.dslite]
 description = "TI Debug Server Scripting executable installed with UniFlash or Code Composer Studio."
 required = true

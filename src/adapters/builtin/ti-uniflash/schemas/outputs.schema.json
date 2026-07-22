@@ -81,6 +81,15 @@
       }
     },
     "reset": { "type": "object", "additionalProperties": true },
+    "size": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["available", "image_bytes"],
+      "properties": {
+        "available": { "const": true },
+        "image_bytes": { "type": "integer", "minimum": 0 }
+      }
+    },
     "capture": {
       "type": "object",
       "additionalProperties": false,

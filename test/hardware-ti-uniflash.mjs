@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -47,6 +47,7 @@ const run = (args) =>
           probe_id: probeId,
           target_name: "MSPM0G3507",
           reset_index: 1,
+          image_path: image,
           inventory: {
             model: "MSPM0G3507",
             revision: "unknown",
@@ -126,6 +127,13 @@ try {
     info.data?.output?.identity?.model === "MSPM0G3507" &&
       info.data?.output?.hardware?.flash?.size === "128 KiB",
     "info did not project the configured target inventory",
+  );
+
+  const size = await run(["device", "target", "size", "--json"]);
+  expect(size.ok === true, "size capability did not succeed");
+  expect(
+    size.data?.output?.image_bytes === Number((await stat(image)).size),
+    "size did not report the configured image byte count",
   );
 
   if (monitorPort) {

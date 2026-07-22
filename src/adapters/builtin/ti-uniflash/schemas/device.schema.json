@@ -74,6 +74,12 @@
       "maximum": 255,
       "description": "Target-specific DSLite reset index validated from `flash --config <ccxml> --list-resets`; its presence enables the immediate reset capability."
     },
+    "image_path": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1024,
+      "description": "Project-selected prebuilt image used by the conditional size capability; it is never flashed unless separately supplied to flash."
+    },
     "monitor_port": {
       "type": "string",
       "minLength": 1,

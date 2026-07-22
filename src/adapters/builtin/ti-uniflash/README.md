@@ -33,6 +33,8 @@ target_name = "MSPM0G3507"
 target_revision = "A"
 # Optional. Enables `reset`; obtain the index from a locked `--list-resets` validation.
 reset_index = 1
+# Optional. Enables `size` for this prebuilt image; it does not change flash input defaults.
+image_path = "build/application.out"
 # Optional. Its presence enables managed UART session capabilities.
 monitor_port = "COM4"
 monitor_baud = 115200
@@ -61,6 +63,10 @@ image path plus optional verify and run-after-flash settings. A configured
 with DSLite's `--list-resets` query. Erase, debug unlock, and all build
 capabilities remain disabled until their target-family-specific contracts are
 separately validated.
+
+When `image_path` is configured, `size` reports that regular file's byte size.
+It does not execute a build, inspect target memory, or imply that `flash` will
+use the path; flash continues to require an explicit image input.
 
 When `monitor_port` is configured, the adapter additionally provides the
 bounded `capture` operation and managed UART capabilities `run`, `stop`,

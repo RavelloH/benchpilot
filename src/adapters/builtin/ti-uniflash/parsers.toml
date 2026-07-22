@@ -16,6 +16,44 @@ group = "module"
 cast = "string"
 required = true
 
+[parsers.python-version]
+mode = "line"
+encoding = "utf8"
+strip_ansi = true
+success_exit_codes = [0]
+[[parsers.python-version.extract]]
+id = "version"
+source = "both"
+type = "regex"
+pattern = "Python (?<version>\\d+\\.\\d+\\.\\d+)"
+target = "version"
+group = "version"
+cast = "string"
+required = true
+
+[parsers.image-size]
+mode = "line"
+encoding = "utf8"
+strip_ansi = true
+success_exit_codes = [0]
+[[parsers.image-size.errors]]
+id = "image-not-found"
+priority = 100
+source = "both"
+pattern = "(?:No such file|FileNotFoundError|cannot find the file|The system cannot find)"
+kind = "TI_IMAGE_NOT_FOUND"
+retryable = false
+recovery = ["Set device.image_path to an existing prebuilt firmware image."]
+[[parsers.image-size.extract]]
+id = "image-bytes"
+source = "stdout"
+type = "regex"
+pattern = "image\\.bytes=(?<image_bytes>\\d+)"
+target = "image_bytes"
+group = "image_bytes"
+cast = "integer"
+required = true
+
 [parsers.dslite-flash-help]
 mode = "line"
 encoding = "utf8"

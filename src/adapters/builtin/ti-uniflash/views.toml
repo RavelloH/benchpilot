@@ -91,6 +91,18 @@ kind = "completion"
 key = "view.reset.completed"
 fallback = "Target reset completed."
 
+[capabilities.size]
+kind = "detail"
+[capabilities.size.title]
+key = "view.size.title"
+fallback = "Prebuilt image size"
+[[capabilities.size.fields]]
+selector = "image_bytes"
+formatter = "byte-size"
+[capabilities.size.fields.label]
+key = "view.size.field.image"
+fallback = "Image"
+
 [capabilities.capture]
 kind = "detail"
 [capabilities.capture.title]

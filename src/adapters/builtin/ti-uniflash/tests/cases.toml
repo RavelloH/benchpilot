@@ -125,6 +125,44 @@ cwd = "E:/firmware"
 args = ["flash", "--config", "E:/firmware/tools/target.ccxml", "--reset", "1"]
 
 [[cases]]
+id = "render-size"
+type = "render-action"
+platform = "windows"
+target = "size"
+[cases.context.project]
+root = "E:/firmware"
+[cases.context.device]
+target_config = "E:/firmware/tools/target.ccxml"
+probe_id = "lab-xds110-01"
+image_path = "E:/firmware/build/application.out"
+[cases.context.input]
+[cases.expect]
+tool = "python-stdlib"
+cwd = "E:/firmware"
+args = ["-c", '''import os, sys
+
+image = sys.argv[1]
+try:
+  stat = os.stat(image)
+except OSError as error:
+  print(str(error), file=sys.stderr, flush=True)
+  raise SystemExit(2)
+if not os.path.isfile(image):
+  print(f"Not a regular file: {image}", file=sys.stderr, flush=True)
+  raise SystemExit(2)
+print(f"image.bytes={stat.st_size}")''', "E:/firmware/build/application.out"]
+
+[[cases]]
+id = "parse-image-size"
+type = "parse-output"
+platform = "windows"
+target = "image-size"
+context = {}
+stdout_fixture = "fixtures/image-size.txt"
+exit_code = 0
+expect = { success = true, result = { image_bytes = 123456 } }
+
+[[cases]]
 id = "plan-status"
 type = "plan-workflow"
 platform = "windows"
@@ -139,3 +177,11 @@ platform = "windows"
 target = "info"
 context = {}
 expect = { steps = ["query"] }
+
+[[cases]]
+id = "plan-size"
+type = "plan-workflow"
+platform = "windows"
+target = "size"
+context = {}
+expect = { steps = ["measure"] }
