@@ -189,6 +189,42 @@ cwd = "E:/firmware/build"
 args = ["--build", ".", "--target", "clean"]
 
 [[cases]]
+id = "render-make-fullclean"
+type = "render-action"
+platform = "windows"
+target = "make-fullclean"
+[cases.context.project]
+root = "E:/firmware"
+[cases.context.device]
+target_config = "E:/firmware/tools/target.ccxml"
+probe_id = "lab-xds110-01"
+image_path = "E:/firmware/gcc/application.out"
+build = { system = "make", directory = "E:/firmware/gcc", fullclean_target = "distclean" }
+[cases.context.input]
+[cases.expect]
+tool = "make"
+cwd = "E:/firmware/gcc"
+args = ["distclean"]
+
+[[cases]]
+id = "render-cmake-fullclean"
+type = "render-action"
+platform = "windows"
+target = "cmake-fullclean"
+[cases.context.project]
+root = "E:/firmware"
+[cases.context.device]
+target_config = "E:/firmware/tools/target.ccxml"
+probe_id = "lab-xds110-01"
+image_path = "E:/firmware/build/application.out"
+build = { system = "cmake", directory = "E:/firmware/build", fullclean_target = "distclean" }
+[cases.context.input]
+[cases.expect]
+tool = "cmake"
+cwd = "E:/firmware/build"
+args = ["--build", ".", "--target", "distclean"]
+
+[[cases]]
 id = "render-flash-built-image"
 type = "render-action"
 platform = "windows"
@@ -215,6 +251,26 @@ context = {}
 stdout_fixture = "fixtures/image-size.txt"
 exit_code = 0
 expect = { success = true, result = { image_bytes = 123456 } }
+
+[[cases]]
+id = "parse-make-version"
+type = "parse-output"
+platform = "windows"
+target = "make-version"
+context = {}
+stdout_fixture = "fixtures/make-version.txt"
+exit_code = 0
+expect = { success = true, result = { version = "4.4.1" } }
+
+[[cases]]
+id = "parse-cmake-version"
+type = "parse-output"
+platform = "windows"
+target = "cmake-version"
+context = {}
+stdout_fixture = "fixtures/cmake-version.txt"
+exit_code = 0
+expect = { success = true, result = { version = "3.30.2" } }
 
 [[cases]]
 id = "plan-status"
@@ -255,3 +311,19 @@ platform = "windows"
 target = "deploy"
 context = { device = { image_path = "E:/firmware/build/application.out", build = { system = "cmake", directory = "E:/firmware/build" } } }
 expect = { steps = ["cmake", "image", "flash"] }
+
+[[cases]]
+id = "plan-make-clean"
+type = "plan-workflow"
+platform = "windows"
+target = "clean"
+context = { device = { build = { system = "make", directory = "E:/firmware/gcc" } } }
+expect = { steps = ["make"] }
+
+[[cases]]
+id = "plan-cmake-fullclean"
+type = "plan-workflow"
+platform = "windows"
+target = "fullclean"
+context = { device = { build = { system = "cmake", directory = "E:/firmware/build", fullclean_target = "distclean" } } }
+expect = { steps = ["cmake"] }
