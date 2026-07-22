@@ -63,6 +63,75 @@ arguments = [
   { kind = "value", value = "${input.image}" }
 ]
 
+[actions.flash-built-image]
+type = "process"
+tool = "dslite"
+cwd = "${project.root}"
+timeout = "15m"
+parser = "dslite-flash"
+arguments = [
+  { kind = "literal", value = "flash" },
+  { kind = "option", flag = "--config", value = "${device.target_config}" },
+  { kind = "flag", flag = "--flash" },
+  { kind = "flag", flag = "--verify" },
+  { kind = "value", value = "${device.image_path}" }
+]
+
+[actions.make-build]
+type = "process"
+tool = "make"
+cwd = "${device.build.directory}"
+timeout = "30m"
+arguments = []
+
+[actions.cmake-build]
+type = "process"
+tool = "cmake"
+cwd = "${device.build.directory}"
+timeout = "30m"
+arguments = [
+  { kind = "literal", value = "--build" },
+  { kind = "literal", value = "." }
+]
+
+[actions.make-clean]
+type = "process"
+tool = "make"
+cwd = "${device.build.directory}"
+timeout = "10m"
+arguments = [{ kind = "literal", value = "clean" }]
+
+[actions.cmake-clean]
+type = "process"
+tool = "cmake"
+cwd = "${device.build.directory}"
+timeout = "10m"
+arguments = [
+  { kind = "literal", value = "--build" },
+  { kind = "literal", value = "." },
+  { kind = "literal", value = "--target" },
+  { kind = "literal", value = "clean" }
+]
+
+[actions.make-fullclean]
+type = "process"
+tool = "make"
+cwd = "${device.build.directory}"
+timeout = "10m"
+arguments = [{ kind = "value", value = "${device.build.fullclean_target}" }]
+
+[actions.cmake-fullclean]
+type = "process"
+tool = "cmake"
+cwd = "${device.build.directory}"
+timeout = "10m"
+arguments = [
+  { kind = "literal", value = "--build" },
+  { kind = "literal", value = "." },
+  { kind = "literal", value = "--target" },
+  { kind = "value", value = "${device.build.fullclean_target}" }
+]
+
 [actions.capture]
 type = "process"
 tool = "python"

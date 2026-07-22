@@ -2,8 +2,10 @@
 
 This experimental adapter programs a prebuilt firmware image through the TI
 UniFlash Debug Server Scripting executable (`DSLite.exe`) and a project-owned
-CCXML target configuration. It does not build firmware and does not invoke the
-`dslite.bat` wrapper, because BenchPilot launches tools without a shell.
+CCXML target configuration. It can also run one explicitly declared Make or
+CMake backend before deploying that backend's declared image. It does not
+invoke the `dslite.bat` wrapper, because BenchPilot launches tools without a
+shell.
 
 ## Configuration
 
@@ -16,6 +18,9 @@ not `dslite.bat`.
 dslite_path = "D:/ti/uniflash_9.6.0/deskdb/content/TICloudAgent/win/ccs_base/DebugServer/bin/DSLite.exe"
 # Required only when using `capture`; it must be able to import `pyserial`.
 python_path = "C:/Python310/python.exe"
+# Optional overrides when a declared Make or CMake backend is used.
+make_path = "C:/TDM-GCC-64/bin/mingw32-make.exe"
+cmake_path = "C:/Program Files/CMake/bin/cmake.exe"
 ```
 
 Each target supplies its own CCXML and a stable lab identity for the physical
@@ -35,6 +40,12 @@ target_revision = "A"
 reset_index = 1
 # Optional. Enables `size` for this prebuilt image; it does not change flash input defaults.
 image_path = "build/application.out"
+# Optional. Enables build, clean, and deploy through a fixed Make or CMake command.
+[devices.target_a.build]
+system = "make"
+directory = "firmware/gcc"
+# Optional. Enables destructive fullclean through this project-defined target.
+fullclean_target = "distclean"
 # Optional. Its presence enables managed UART session capabilities.
 monitor_port = "COM4"
 monitor_baud = 115200
@@ -60,13 +71,24 @@ these fields are never claimed to be automatically detected. `flash` is
 destructive, creates a Run, and takes an exclusive device Lock. It accepts an
 image path plus optional verify and run-after-flash settings. A configured
 `reset_index` enables `reset`; it must be a value verified for this exact CCXML
-with DSLite's `--list-resets` query. Erase, debug unlock, and all build
-capabilities remain disabled until their target-family-specific contracts are
-separately validated.
+with DSLite's `--list-resets` query. Erase and debug unlock remain disabled
+until their target-family-specific contracts are separately validated.
 
 When `image_path` is configured, `size` reports that regular file's byte size.
 It does not execute a build, inspect target memory, or imply that `flash` will
 use the path; flash continues to require an explicit image input.
+
+When `build` is declared, the adapter exposes `build`, `clean`, and `deploy`.
+`system = "make"` runs the Make default target in `directory`; `system =
+"cmake"` runs `cmake --build .` in an already configured build directory.
+Both then check the configured `image_path` with the standard file API. Deploy
+performs that build and image check before flashing the image with verify
+enabled. These are structured argv contracts, not configurable shell commands.
+`clean` uses the fixed `clean` target. `fullclean` is deliberately absent until
+`fullclean_target` is explicitly declared; it is destructive and executes only
+that identifier as a Make or CMake build target. The project remains
+responsible for ensuring those build targets do not touch source or unrelated
+paths.
 
 When `monitor_port` is configured, the adapter additionally provides the
 bounded `capture` operation and managed UART capabilities `run`, `stop`,

@@ -7,6 +7,25 @@ query = "Verify target connection"
 [progress.size]
 measure = "Measure prebuilt image"
 
+[progress.build]
+make = "Build project with Make"
+cmake = "Build project with CMake"
+image = "Verify built firmware image"
+
+[progress.clean]
+make = "Clean project with Make"
+cmake = "Clean project with CMake"
+
+[progress.fullclean]
+make = "Remove generated build state with Make"
+cmake = "Remove generated build state with CMake"
+
+[progress.deploy]
+make = "Build project with Make"
+cmake = "Build project with CMake"
+image = "Verify built firmware image"
+flash = "Flash built firmware image"
+
 [view.status]
 title = "Target readiness"
 [view.status.field]
@@ -30,8 +49,28 @@ dslite = "DSLite"
 [view.flash]
 completed = "Firmware flashing completed."
 
+[view.build]
+title = "Build summary"
+[view.build.field]
+backend = "Backend"
+image = "Image"
+image_bytes = "Image size"
+
+[view.clean]
+completed = "Build artifacts cleaned."
+
+[view.fullclean]
+completed = "Generated build state cleaned."
+
 [view.reset]
 completed = "Target reset completed."
+
+[view.deploy]
+title = "Deploy summary"
+[view.deploy.field]
+backend = "Backend"
+image = "Image"
+image_bytes = "Image size"
 
 [view.size]
 title = "Prebuilt image size"

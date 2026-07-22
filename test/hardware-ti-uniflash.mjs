@@ -15,7 +15,22 @@ const targetConfig = process.env.BENCHPILOT_TI_UNIFLASH_TARGET_CONFIG;
 const image = process.env.BENCHPILOT_TI_UNIFLASH_IMAGE;
 const probeId = process.env.BENCHPILOT_TI_UNIFLASH_PROBE_ID;
 const monitorPort = process.env.BENCHPILOT_TI_UNIFLASH_MONITOR_PORT;
+const buildSystem = process.env.BENCHPILOT_TI_UNIFLASH_BUILD_SYSTEM;
+const buildDirectory = process.env.BENCHPILOT_TI_UNIFLASH_BUILD_DIRECTORY;
+const makePath = process.env.BENCHPILOT_TI_UNIFLASH_MAKE;
+const cmakePath = process.env.BENCHPILOT_TI_UNIFLASH_CMAKE;
 const allowFlash = process.env.BENCHPILOT_TI_UNIFLASH_ALLOW_FLASH === "1";
+
+if ((buildSystem && !buildDirectory) || (!buildSystem && buildDirectory)) {
+  throw new Error(
+    "Set BENCHPILOT_TI_UNIFLASH_BUILD_SYSTEM and BENCHPILOT_TI_UNIFLASH_BUILD_DIRECTORY together.",
+  );
+}
+if (buildSystem && !["make", "cmake"].includes(buildSystem)) {
+  throw new Error(
+    "BENCHPILOT_TI_UNIFLASH_BUILD_SYSTEM must be `make` or `cmake`.",
+  );
+}
 
 if (!dslitePath || !targetConfig || !image || !probeId) {
   console.log(
@@ -39,7 +54,11 @@ const run = (args) =>
         TEMP: stateRoot,
         TMP: stateRoot,
         BENCHPILOT_ADAPTERS: JSON.stringify({
-          "ti-uniflash": { dslite_path: dslitePath },
+          "ti-uniflash": {
+            dslite_path: dslitePath,
+            ...(makePath ? { make_path: makePath } : {}),
+            ...(cmakePath ? { cmake_path: cmakePath } : {}),
+          },
         }),
         BENCHPILOT_DEVICES__TARGET: JSON.stringify({
           adapter: "ti-uniflash",
@@ -59,6 +78,14 @@ const run = (args) =>
             },
           },
           ...(monitorPort ? { monitor_port: monitorPort } : {}),
+          ...(buildSystem
+            ? {
+                build: {
+                  system: buildSystem,
+                  directory: buildDirectory,
+                },
+              }
+            : {}),
         }),
       },
       stdio: ["ignore", "pipe", "inherit"],
@@ -113,6 +140,30 @@ try {
     ),
     "doctor did not validate DSLite.exe",
   );
+  if (buildSystem) {
+    const expectedToolId = `ti-uniflash-tool-${buildSystem}`;
+    expect(
+      doctor.data?.checks?.some(
+        (check) => check.id === expectedToolId && check.status === "pass",
+      ),
+      `doctor did not validate the ${buildSystem} build tool`,
+    );
+    const built = await run(["device", "target", "build", "--json"]);
+    expect(built.ok === true, "build capability did not succeed");
+    expect(
+      built.data?.output?.backend === buildSystem &&
+        built.data?.output?.image_bytes === Number((await stat(image)).size),
+      "build did not report the configured image and backend",
+    );
+    const plannedDeploy = await run([
+      "device",
+      "target",
+      "deploy",
+      "--dry-run",
+      "--json",
+    ]);
+    expect(plannedDeploy.ok === true, "deploy dry-run did not succeed");
+  }
 
   const status = await run(["device", "target", "status", "--json"]);
   expect(status.ok === true, "status capability did not succeed");

@@ -264,6 +264,34 @@ test("conditional capabilities expose UniFlash UART sessions only with a monitor
       .sort(),
     ["flash", "size", "status"],
   );
+  const withBuild = await createDevice({
+    target_config: "C:/work/target.ccxml",
+    probe_id: "lab-probe-1",
+    image_path: "C:/work/build/application.out",
+    build: { system: "make", directory: "C:/work/firmware" },
+  });
+  assert.deepEqual(
+    withBuild
+      .capabilities()
+      .map((capability) => capability.id)
+      .sort(),
+    ["build", "clean", "deploy", "flash", "size", "status"],
+  );
+  const withFullclean = await createDevice({
+    target_config: "C:/work/target.ccxml",
+    probe_id: "lab-probe-1",
+    image_path: "C:/work/build/application.out",
+    build: {
+      system: "cmake",
+      directory: "C:/work/build",
+      fullclean_target: "distclean",
+    },
+  });
+  assert.ok(
+    withFullclean
+      .capabilities()
+      .some((capability) => capability.id === "fullclean"),
+  );
   const plan = withMonitor.resolveManagedSession("run", {
     projectRoot: "C:/work/project",
   });
@@ -486,9 +514,13 @@ test("UniFlash supplies a declarative View for every enabled capability", async 
   const result = await compileAdapter(tiUniflash);
   assert.deepEqual(result.diagnostics, []);
   assert.deepEqual(Object.keys(result.bundle.views).sort(), [
+    "build",
     "capture",
+    "clean",
     "console",
+    "deploy",
     "flash",
+    "fullclean",
     "info",
     "logs",
     "reset",

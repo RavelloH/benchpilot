@@ -81,6 +81,16 @@
       }
     },
     "reset": { "type": "object", "additionalProperties": true },
+    "build": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["backend", "image", "image_bytes"],
+      "properties": {
+        "backend": { "enum": ["make", "cmake"] },
+        "image": { "type": "string", "minLength": 1 },
+        "image_bytes": { "type": "integer", "minimum": 0 }
+      }
+    },
     "size": {
       "type": "object",
       "additionalProperties": false,
@@ -102,6 +112,16 @@
         "stop_reason": {
           "enum": ["timeout", "marker", "max_lines", "max_bytes"]
         }
+      }
+    },
+    "deploy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["backend", "image", "image_bytes"],
+      "properties": {
+        "backend": { "enum": ["make", "cmake"] },
+        "image": { "type": "string", "minLength": 1 },
+        "image_bytes": { "type": "integer", "minimum": 0 }
       }
     },
     "session-run": {

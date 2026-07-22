@@ -31,6 +31,36 @@ group = "version"
 cast = "string"
 required = true
 
+[parsers.make-version]
+mode = "line"
+encoding = "utf8"
+strip_ansi = true
+success_exit_codes = [0]
+[[parsers.make-version.extract]]
+id = "version"
+source = "both"
+type = "regex"
+pattern = "(?:GNU Make|mingw32-make).*?(?<version>\\d+(?:\\.\\d+)+)"
+target = "version"
+group = "version"
+cast = "string"
+required = true
+
+[parsers.cmake-version]
+mode = "line"
+encoding = "utf8"
+strip_ansi = true
+success_exit_codes = [0]
+[[parsers.cmake-version.extract]]
+id = "version"
+source = "both"
+type = "regex"
+pattern = "cmake version (?<version>\\d+(?:\\.\\d+)+)"
+target = "version"
+group = "version"
+cast = "string"
+required = true
+
 [parsers.image-size]
 mode = "line"
 encoding = "utf8"

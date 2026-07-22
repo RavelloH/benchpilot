@@ -30,3 +30,23 @@ mode = "direct"
 command = "DSLite"
 prefix_args = []
 environment = "inherit"
+
+[tools.make]
+description = "Make executable used by the explicitly declared Make build backend."
+required = false
+discovery = "make"
+[tools.make.launch]
+mode = "direct"
+command = "make"
+prefix_args = []
+environment = "inherit"
+
+[tools.cmake]
+description = "CMake executable used by the explicitly declared CMake build backend."
+required = false
+discovery = "cmake"
+[tools.cmake.launch]
+mode = "direct"
+command = "cmake"
+prefix_args = []
+environment = "inherit"

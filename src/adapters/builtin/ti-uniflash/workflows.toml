@@ -50,3 +50,90 @@ with = {}
 [workflows.size.output_template]
 available = true
 image_bytes = "${result.measure.image_bytes}"
+
+[workflows.build]
+timeout = "30m"
+stop_on_failure = true
+[[workflows.build.steps]]
+id = "make"
+uses = "action:make-build"
+label = { key = "progress.build.make", fallback = "Build project with Make" }
+with = {}
+when = { path = "device.build.system", operator = "equals", value = "make" }
+[[workflows.build.steps]]
+id = "cmake"
+uses = "action:cmake-build"
+label = { key = "progress.build.cmake", fallback = "Build project with CMake" }
+with = {}
+when = { path = "device.build.system", operator = "equals", value = "cmake" }
+[[workflows.build.steps]]
+id = "image"
+uses = "action:size"
+label = { key = "progress.build.image", fallback = "Verify built firmware image" }
+with = {}
+[workflows.build.output_template]
+backend = "${device.build.system}"
+image = "${device.image_path}"
+image_bytes = "${result.image.image_bytes}"
+
+[workflows.clean]
+timeout = "10m"
+stop_on_failure = true
+[[workflows.clean.steps]]
+id = "make"
+uses = "action:make-clean"
+label = { key = "progress.clean.make", fallback = "Clean project with Make" }
+with = {}
+when = { path = "device.build.system", operator = "equals", value = "make" }
+[[workflows.clean.steps]]
+id = "cmake"
+uses = "action:cmake-clean"
+label = { key = "progress.clean.cmake", fallback = "Clean project with CMake" }
+with = {}
+when = { path = "device.build.system", operator = "equals", value = "cmake" }
+
+[workflows.fullclean]
+timeout = "10m"
+stop_on_failure = true
+[[workflows.fullclean.steps]]
+id = "make"
+uses = "action:make-fullclean"
+label = { key = "progress.fullclean.make", fallback = "Remove generated build state with Make" }
+with = {}
+when = { path = "device.build.system", operator = "equals", value = "make" }
+[[workflows.fullclean.steps]]
+id = "cmake"
+uses = "action:cmake-fullclean"
+label = { key = "progress.fullclean.cmake", fallback = "Remove generated build state with CMake" }
+with = {}
+when = { path = "device.build.system", operator = "equals", value = "cmake" }
+
+[workflows.deploy]
+timeout = "45m"
+stop_on_failure = true
+[[workflows.deploy.steps]]
+id = "make"
+uses = "action:make-build"
+label = { key = "progress.deploy.make", fallback = "Build project with Make" }
+with = {}
+when = { path = "device.build.system", operator = "equals", value = "make" }
+[[workflows.deploy.steps]]
+id = "cmake"
+uses = "action:cmake-build"
+label = { key = "progress.deploy.cmake", fallback = "Build project with CMake" }
+with = {}
+when = { path = "device.build.system", operator = "equals", value = "cmake" }
+[[workflows.deploy.steps]]
+id = "image"
+uses = "action:size"
+label = { key = "progress.deploy.image", fallback = "Verify built firmware image" }
+with = {}
+[[workflows.deploy.steps]]
+id = "flash"
+uses = "action:flash-built-image"
+label = { key = "progress.deploy.flash", fallback = "Flash built firmware image" }
+with = {}
+[workflows.deploy.output_template]
+backend = "${device.build.system}"
+image = "${device.image_path}"
+image_bytes = "${result.image.image_bytes}"

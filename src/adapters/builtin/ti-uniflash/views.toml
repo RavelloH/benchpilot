@@ -85,11 +85,71 @@ kind = "completion"
 key = "view.flash.completed"
 fallback = "Firmware flashing completed."
 
+[capabilities.build]
+kind = "detail"
+[capabilities.build.title]
+key = "view.build.title"
+fallback = "Build summary"
+[[capabilities.build.fields]]
+selector = "backend"
+formatter = "string"
+[capabilities.build.fields.label]
+key = "view.build.field.backend"
+fallback = "Backend"
+[[capabilities.build.fields]]
+selector = "image"
+formatter = "string"
+[capabilities.build.fields.label]
+key = "view.build.field.image"
+fallback = "Image"
+[[capabilities.build.fields]]
+selector = "image_bytes"
+formatter = "byte-size"
+[capabilities.build.fields.label]
+key = "view.build.field.image_bytes"
+fallback = "Image size"
+
+[capabilities.clean]
+kind = "completion"
+[capabilities.clean.message]
+key = "view.clean.completed"
+fallback = "Build artifacts cleaned."
+
+[capabilities.fullclean]
+kind = "completion"
+[capabilities.fullclean.message]
+key = "view.fullclean.completed"
+fallback = "Generated build state cleaned."
+
 [capabilities.reset]
 kind = "completion"
 [capabilities.reset.message]
 key = "view.reset.completed"
 fallback = "Target reset completed."
+
+[capabilities.deploy]
+kind = "detail"
+[capabilities.deploy.title]
+key = "view.deploy.title"
+fallback = "Deploy summary"
+[[capabilities.deploy.fields]]
+selector = "backend"
+formatter = "string"
+[capabilities.deploy.fields.label]
+key = "view.deploy.field.backend"
+fallback = "Backend"
+[[capabilities.deploy.fields]]
+selector = "image"
+formatter = "string"
+[capabilities.deploy.fields.label]
+key = "view.deploy.field.image"
+fallback = "Image"
+[[capabilities.deploy.fields]]
+selector = "image_bytes"
+formatter = "byte-size"
+[capabilities.deploy.fields.label]
+key = "view.deploy.field.image_bytes"
+fallback = "Image size"
 
 [capabilities.size]
 kind = "detail"

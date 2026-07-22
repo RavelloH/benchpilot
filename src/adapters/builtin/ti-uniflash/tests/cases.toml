@@ -153,6 +153,60 @@ if not os.path.isfile(image):
 print(f"image.bytes={stat.st_size}")''', "E:/firmware/build/application.out"]
 
 [[cases]]
+id = "render-make-build"
+type = "render-action"
+platform = "windows"
+target = "make-build"
+[cases.context.project]
+root = "E:/firmware"
+[cases.context.device]
+target_config = "E:/firmware/tools/target.ccxml"
+probe_id = "lab-xds110-01"
+image_path = "E:/firmware/gcc/application.out"
+build = { system = "make", directory = "E:/firmware/gcc" }
+[cases.context.input]
+[cases.expect]
+tool = "make"
+cwd = "E:/firmware/gcc"
+args = []
+
+[[cases]]
+id = "render-cmake-clean"
+type = "render-action"
+platform = "windows"
+target = "cmake-clean"
+[cases.context.project]
+root = "E:/firmware"
+[cases.context.device]
+target_config = "E:/firmware/tools/target.ccxml"
+probe_id = "lab-xds110-01"
+image_path = "E:/firmware/build/application.out"
+build = { system = "cmake", directory = "E:/firmware/build" }
+[cases.context.input]
+[cases.expect]
+tool = "cmake"
+cwd = "E:/firmware/build"
+args = ["--build", ".", "--target", "clean"]
+
+[[cases]]
+id = "render-flash-built-image"
+type = "render-action"
+platform = "windows"
+target = "flash-built-image"
+[cases.context.project]
+root = "E:/firmware"
+[cases.context.device]
+target_config = "E:/firmware/tools/target.ccxml"
+probe_id = "lab-xds110-01"
+image_path = "E:/firmware/build/application.out"
+build = { system = "make", directory = "E:/firmware/gcc" }
+[cases.context.input]
+[cases.expect]
+tool = "dslite"
+cwd = "E:/firmware"
+args = ["flash", "--config", "E:/firmware/tools/target.ccxml", "--flash", "--verify", "E:/firmware/build/application.out"]
+
+[[cases]]
 id = "parse-image-size"
 type = "parse-output"
 platform = "windows"
@@ -185,3 +239,19 @@ platform = "windows"
 target = "size"
 context = {}
 expect = { steps = ["measure"] }
+
+[[cases]]
+id = "plan-make-build"
+type = "plan-workflow"
+platform = "windows"
+target = "build"
+context = { device = { image_path = "E:/firmware/gcc/application.out", build = { system = "make", directory = "E:/firmware/gcc" } } }
+expect = { steps = ["make", "image"] }
+
+[[cases]]
+id = "plan-cmake-deploy"
+type = "plan-workflow"
+platform = "windows"
+target = "deploy"
+context = { device = { image_path = "E:/firmware/build/application.out", build = { system = "cmake", directory = "E:/firmware/build" } } }
+expect = { steps = ["cmake", "image", "flash"] }

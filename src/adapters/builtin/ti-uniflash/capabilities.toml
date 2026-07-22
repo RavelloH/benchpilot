@@ -42,28 +42,62 @@ linux = "DSLite installation layout and direct executable contract are not yet v
 macos = "DSLite installation layout and direct executable contract are not yet verified on macOS."
 
 [capabilities.build]
-enabled = false
-reason = "UniFlash programs prebuilt images and is not a firmware build system."
+enabled = true
+handler = "workflow:build"
+input_schema = "empty"
+output_schema = "build"
+creates_run = true
+timeout = "30m"
+lock = "none"
+availability_when = { path = "device.build", operator = "exists" }
+[capabilities.build.safety]
+mode = "normal"
 [capabilities.build.platforms]
-windows = false
+windows = true
 linux = false
 macos = false
+[capabilities.build.platform_reasons]
+linux = "The declared Make and CMake backend contract is currently verified only on Windows."
+macos = "The declared Make and CMake backend contract is currently verified only on Windows."
 
 [capabilities.clean]
-enabled = false
-reason = "UniFlash does not own project build output."
+enabled = true
+handler = "workflow:clean"
+input_schema = "empty"
+output_schema = "empty"
+creates_run = false
+timeout = "10m"
+lock = "none"
+availability_when = { path = "device.build", operator = "exists" }
+[capabilities.clean.safety]
+mode = "normal"
 [capabilities.clean.platforms]
-windows = false
+windows = true
 linux = false
 macos = false
+[capabilities.clean.platform_reasons]
+linux = "The declared Make and CMake backend contract is currently verified only on Windows."
+macos = "The declared Make and CMake backend contract is currently verified only on Windows."
 
 [capabilities.fullclean]
-enabled = false
-reason = "UniFlash does not own project build state."
+enabled = true
+handler = "workflow:fullclean"
+input_schema = "empty"
+output_schema = "empty"
+creates_run = false
+timeout = "10m"
+lock = "none"
+availability_when = { path = "device.build.fullclean_target", operator = "exists" }
+[capabilities.fullclean.safety]
+mode = "destructive"
+description = "Runs the explicitly declared project full-clean target; its behavior is defined by the project build files."
 [capabilities.fullclean.platforms]
-windows = false
+windows = true
 linux = false
 macos = false
+[capabilities.fullclean.platform_reasons]
+linux = "The declared Make and CMake backend contract is currently verified only on Windows."
+macos = "The declared Make and CMake backend contract is currently verified only on Windows."
 
 [capabilities.size]
 enabled = true
@@ -280,12 +314,24 @@ linux = false
 macos = false
 
 [capabilities.deploy]
-enabled = false
-reason = "This adapter programs prebuilt images; build-and-deploy requires a dedicated toolchain adapter."
+enabled = true
+handler = "workflow:deploy"
+input_schema = "empty"
+output_schema = "deploy"
+creates_run = true
+timeout = "45m"
+lock = "device"
+availability_when = { path = "device.build", operator = "exists" }
+[capabilities.deploy.safety]
+mode = "destructive"
+description = "Builds the declared project image, checks it exists, then programs it through the configured TI debug probe."
 [capabilities.deploy.platforms]
-windows = false
+windows = true
 linux = false
 macos = false
+[capabilities.deploy.platform_reasons]
+linux = "The declared Make and CMake backend contract is currently verified only on Windows."
+macos = "The declared Make and CMake backend contract is currently verified only on Windows."
 
 [capabilities.erase]
 enabled = false

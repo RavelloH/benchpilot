@@ -88,3 +88,49 @@ source = "path"
 args = ["flash", "-h"]
 parser = "dslite-flash-help"
 timeout = "10s"
+
+[discoveries.make]
+strategy = "first-valid"
+[[discoveries.make.candidates]]
+id = "config"
+type = "config"
+priority = 100
+key = "make_path"
+[[discoveries.make.candidates]]
+id = "path"
+type = "path"
+priority = 50
+names = ["mingw32-make.exe", "make.exe", "mingw32-make", "make"]
+[discoveries.make.validation]
+path_type = "file"
+executable = true
+[discoveries.make.persistence]
+key = "make_path"
+source = "path"
+[discoveries.make.probe]
+args = ["--version"]
+parser = "make-version"
+timeout = "10s"
+
+[discoveries.cmake]
+strategy = "first-valid"
+[[discoveries.cmake.candidates]]
+id = "config"
+type = "config"
+priority = 100
+key = "cmake_path"
+[[discoveries.cmake.candidates]]
+id = "path"
+type = "path"
+priority = 50
+names = ["cmake.exe", "cmake"]
+[discoveries.cmake.validation]
+path_type = "file"
+executable = true
+[discoveries.cmake.persistence]
+key = "cmake_path"
+source = "path"
+[discoveries.cmake.probe]
+args = ["--version"]
+parser = "cmake-version"
+timeout = "10s"

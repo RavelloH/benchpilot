@@ -80,6 +80,29 @@
       "maxLength": 1024,
       "description": "Project-selected prebuilt image used by the conditional size capability; it is never flashed unless separately supplied to flash."
     },
+    "build": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["system", "directory"],
+      "description": "Optional, explicitly declared project build backend. Its presence enables build and clean; image_path must identify the produced firmware image.",
+      "properties": {
+        "system": {
+          "enum": ["make", "cmake"],
+          "description": "Build backend. Make invokes the default target; CMake invokes `cmake --build .` in the configured directory."
+        },
+        "directory": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1024,
+          "description": "Existing project-owned directory containing the Makefile or configured CMake build tree."
+        },
+        "fullclean_target": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+          "description": "Optional project-defined target that removes all generated build state. Its presence enables the destructive fullclean capability."
+        }
+      }
+    },
     "monitor_port": {
       "type": "string",
       "minLength": 1,
@@ -93,5 +116,11 @@
       "default": 115200,
       "description": "UART baud rate used by managed serial-session capabilities."
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": { "required": ["build"] },
+      "then": { "required": ["image_path"] }
+    }
+  ]
 }

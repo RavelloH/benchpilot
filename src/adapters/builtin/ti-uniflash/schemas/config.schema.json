@@ -13,6 +13,16 @@
       "type": "string",
       "minLength": 1,
       "description": "Full path to the DSLite executable, not the dslite.bat wrapper."
+    },
+    "make_path": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Optional Make executable used by the declared Make build backend."
+    },
+    "cmake_path": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Optional CMake executable used by the declared CMake build backend."
     }
   }
 }
