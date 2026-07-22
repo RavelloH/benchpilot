@@ -23,6 +23,10 @@ import { runCases } from "../dist/adapters/compiler/case-runner.js";
 import { loadAdapter } from "../dist/adapters/compiler/loader.js";
 import { validateSemantics } from "../dist/adapters/compiler/semantic-validator.js";
 import { createDeclarativeAdapter } from "../dist/adapters/runtime/declarative-adapter.js";
+import {
+  InstallationProviderRegistry,
+  installationFor,
+} from "../dist/adapters/runtime/installation.js";
 
 const template = join(process.cwd(), "src", "adapters", "_template");
 const complete = join(
@@ -119,6 +123,40 @@ test("adapter installation metadata is compiled from the bundle declaration", as
     target: "target",
     installed_targets: "installed_targets",
   });
+  assert.equal(
+    installationFor(result.bundle.installation)?.fields[0]?.key,
+    "target",
+  );
+});
+
+test("installation providers are explicitly registered and independent of adapter IDs", () => {
+  const installation = {
+    platforms: ["windows"],
+    stability: "stable",
+    estimate: { minimumBytes: 1, maximumBytes: 2 },
+    fields: [],
+    async install() {
+      return {};
+    },
+  };
+  let received;
+  const providers = new InstallationProviderRegistry([
+    {
+      id: "fixture",
+      create(definition) {
+        received = definition;
+        return installation;
+      },
+    },
+  ]);
+  const declaration = { provider: "fixture", adapter: "not-a-provider" };
+  assert.equal(installationFor(declaration, providers), installation);
+  assert.deepEqual(received, declaration);
+  assert.equal(installationFor({ provider: "none" }, providers), undefined);
+  assert.throws(
+    () => providers.register({ id: "fixture", create() {} }),
+    /already registered/,
+  );
 });
 
 test("ESP-IDF managed sessions inherit the configured monitor baud", async () => {
@@ -138,6 +176,17 @@ test("ESP-IDF managed sessions inherit the configured monitor baud", async () =>
     projectRoot: "C:/work/project",
   });
   assert.equal(plan?.baud, 921600);
+});
+
+test("ESP-IDF uses the shared passive serial discovery source", async () => {
+  const result = await compileAdapter(espIdf);
+  assert.deepEqual(result.diagnostics, []);
+  const rules = result.bundle.platforms.windows;
+  assert.deepEqual(rules.devices.discovery.sources, [
+    { id: "serial", type: "serial" },
+  ]);
+  assert.equal(rules.actions["discover-ports"], undefined);
+  assert.equal(rules.parsers["discovery-json"], undefined);
 });
 
 test("adapter sessions declare all managed session capability contracts", async () => {

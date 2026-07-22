@@ -19,7 +19,10 @@ import { pathToFileURL } from "node:url";
 import test from "node:test";
 import { AdapterBundleLoader } from "../dist/adapters/runtime/bundle-loader.js";
 import { createDeclarativeAdapter } from "../dist/adapters/runtime/declarative-adapter.js";
-import { discoverDevicesDetailed } from "../dist/adapters/runtime/devices/discovery.js";
+import {
+  discoverDevicesDetailed,
+  serialCandidates,
+} from "../dist/adapters/runtime/devices/discovery.js";
 import { AdapterRuntimeError } from "../dist/adapters/runtime/errors.js";
 import { EnvironmentResolver } from "../dist/adapters/runtime/environments/resolver.js";
 import { executeProcess } from "../dist/adapters/runtime/executors/process-executor.js";
@@ -350,6 +353,45 @@ test("passive device discovery scores, deduplicates, and orders stable identitie
       { identity: "second", score: 21, matchedRules: ["has-serial", "usb"] },
     ],
   );
+});
+
+test("generic serial discovery normalizes passive port metadata", async () => {
+  const records = await serialCandidates(async () => [
+    {
+      path: "/dev/ttyUSB1",
+      manufacturer: "Espressif",
+      serialNumber: "second",
+      pnpId: "usb-303a",
+      locationId: "2-1",
+      productId: "1001",
+      vendorId: "303A",
+    },
+    { path: "/dev/ttyUSB0" },
+  ]);
+  assert.deepEqual(records, [
+    {
+      port: "/dev/ttyUSB0",
+      description: "/dev/ttyUSB0",
+      hwid: "",
+      vid: "",
+      pid: "",
+      serial_number: "",
+      manufacturer: "",
+      product: "",
+      location: "",
+    },
+    {
+      port: "/dev/ttyUSB1",
+      description: "Espressif usb-303a",
+      hwid: "usb-303a",
+      vid: "303A",
+      pid: "1001",
+      serial_number: "second",
+      manufacturer: "Espressif",
+      product: "usb-303a",
+      location: "2-1",
+    },
+  ]);
 });
 
 test("device discovery accepts injected passive providers without scanning hardware", async () => {

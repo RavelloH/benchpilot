@@ -35,6 +35,13 @@
         "timestamp": {
           "type": "boolean",
           "default": false
+        },
+        "marker": {
+          "type": "string",
+          "maxLength": 256,
+          "default": "",
+          "description": "Optional serial text that ends the capture when observed.",
+          "x-benchpilot-cli": { "flag": "marker" }
         }
       }
     },

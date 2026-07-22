@@ -4,33 +4,31 @@ schema_version = 1
 [discovery]
 enabled = true
 [[discovery.sources]]
-id = "pyserial"
-type = "command"
-action = "discover-ports"
-result = "devices"
+id = "serial"
+type = "serial"
 [[discovery.matchers]]
 id = "espressif-vid"
-source = "pyserial"
+source = "serial"
 field = "vid"
 operator = "equals-ignore-case"
 value = "303A"
 score = 100
 [[discovery.matchers]]
 id = "espressif-description"
-source = "pyserial"
+source = "serial"
 field = "description"
 operator = "regex"
 value = "(?i)espressif|usb jtag/serial debug unit"
 score = 80
 [[discovery.matchers]]
 id = "stable-serial"
-source = "pyserial"
+source = "serial"
 field = "serial_number"
 operator = "exists"
 score = 20
 [[discovery.matchers]]
 id = "usb-bridge"
-source = "pyserial"
+source = "serial"
 field = "description"
 operator = "regex"
 value = "(?i)cp210|ch340|ftdi"

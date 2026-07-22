@@ -1,6 +1,4 @@
-import { readdir } from "node:fs/promises";
-import path from "node:path";
-import { runProcess } from "../../../core/process/process-runner.js";
+import { SerialPort } from "serialport";
 import { lookup, object, type RuleObject } from "../rules/template.js";
 import { normalizePortIdentity } from "./identity.js";
 
@@ -40,6 +38,17 @@ export interface DeviceDiscoveryProviders {
   command?: DeviceSourceProvider;
 }
 
+/** The passive metadata returned by the shared serial-port binding. */
+export interface PassiveSerialPort {
+  readonly path: string;
+  readonly manufacturer?: string | undefined;
+  readonly serialNumber?: string | undefined;
+  readonly pnpId?: string | undefined;
+  readonly locationId?: string | undefined;
+  readonly productId?: string | undefined;
+  readonly vendorId?: string | undefined;
+}
+
 const match = (actual: unknown, rule: RuleObject) => {
   const value = rule.value;
   switch (rule.operator) {
@@ -64,35 +73,32 @@ const match = (actual: unknown, rule: RuleObject) => {
   }
 };
 
-const serialCandidates = async (): Promise<RuleObject[]> => {
-  if (process.platform === "win32") {
-    // This is a fixed, shell-free system query. It only lists port names and
-    // never opens a serial device or changes DTR/RTS state.
-    const result = await runProcess({
-      command: "powershell.exe",
-      args: [
-        "-NoProfile",
-        "-NonInteractive",
-        "-Command",
-        "[System.IO.Ports.SerialPort]::GetPortNames()",
-      ],
-      signal: new AbortController().signal,
-      captureOutput: true,
-      maxCaptureBytes: 64 * 1024,
-    }).catch(() => undefined);
-    return (result?.stdout ?? "")
-      .split(/\r?\n/)
-      .map((item) => item.trim())
-      .filter(Boolean)
-      .sort((left, right) => left.localeCompare(right))
-      .map((port) => ({ port }));
-  }
-  const entries = await readdir("/dev").catch(() => []);
-  return entries
-    .filter((name) => /^(tty(USB|ACM|S|AMA|\.)|cu\.)/.test(name))
-    .sort((left, right) => left.localeCompare(right))
-    .map((name) => ({ port: path.join("/dev", name) }));
-};
+/**
+ * Lists ports without opening them. Field names intentionally mirror the
+ * cross-platform metadata exposed to Adapter rules, while `port` is always
+ * present and usable as a connection address.
+ */
+export const serialCandidates = async (
+  list: () => Promise<readonly PassiveSerialPort[]> = () => SerialPort.list(),
+): Promise<RuleObject[]> =>
+  (await list())
+    .map((entry) => {
+      const description =
+        [entry.manufacturer, entry.pnpId].filter(Boolean).join(" ") ||
+        entry.path;
+      return {
+        port: entry.path,
+        description,
+        hwid: entry.pnpId ?? "",
+        vid: entry.vendorId ?? "",
+        pid: entry.productId ?? "",
+        serial_number: entry.serialNumber ?? "",
+        manufacturer: entry.manufacturer ?? "",
+        product: entry.pnpId ?? "",
+        location: entry.locationId ?? "",
+      };
+    })
+    .sort((left, right) => String(left.port).localeCompare(String(right.port)));
 
 const sourceRecords = async (
   source: RuleObject,

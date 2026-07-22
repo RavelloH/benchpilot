@@ -173,6 +173,8 @@ try {
       "device",
       "esp32s3",
       "capture",
+      "--marker",
+      "BENCHPILOT_ESP32S3_OK",
       "--duration_seconds",
       "10",
       "--json",

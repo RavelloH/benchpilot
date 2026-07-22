@@ -112,6 +112,67 @@ exit_code = 0
 expect = { success = true, result = { lines = 3, marker = true, bytes = 65, truncated = false, stop_reason = "marker" } }
 
 [[cases]]
+id = "render-capture-with-marker"
+type = "render-action"
+platform = "linux"
+target = "capture"
+context = { project = { root = "/work/benchpilot-smoke" }, run = { dir = "/work/run" }, device = { port = "/dev/ttyACM0" }, input = { baud = 115200, duration_seconds = 10, max_lines = 2000, max_bytes = 262144, timestamp = false, marker = "BENCHPILOT_SMOKE_OK" } }
+expect = { tool = "python", cwd = "/work/run/captures", args = ["-c", '''import sys, time
+import serial
+
+port, baud, duration, max_lines, max_bytes, timestamp, marker_text = sys.argv[1], int(sys.argv[2]), float(sys.argv[3]), int(sys.argv[4]), int(sys.argv[5]), sys.argv[6] == "true", sys.argv[7]
+lines = []
+bytes_written = 0
+marker = False
+truncated = False
+stop_reason = "timeout"
+try:
+  connection = serial.Serial(port=port, baudrate=baud, timeout=0.2, rtscts=False, dsrdtr=False)
+  try:
+    connection.dtr = False
+    connection.rts = False
+  except (AttributeError, serial.SerialException):
+    pass
+  try:
+    deadline = time.monotonic() + duration
+    with open("serial-capture.txt", "w", encoding="utf-8", newline="\n") as capture:
+      while time.monotonic() < deadline:
+        if len(lines) >= max_lines:
+          truncated = True
+          stop_reason = "max_lines"
+          break
+        raw = connection.readline()
+        if not raw:
+          continue
+        line = raw.decode("utf-8", errors="replace").rstrip("\r\n")
+        if timestamp:
+          line = f"{time.strftime('%Y-%m-%dT%H:%M:%S', time.gmtime())}.{int((time.time() % 1) * 1000):03d}Z {line}"
+        encoded = f"{line}\n".encode("utf-8")
+        if bytes_written + len(encoded) > max_bytes:
+          truncated = True
+          stop_reason = "max_bytes"
+          break
+        capture.write(f"{line}\n")
+        capture.flush()
+        bytes_written += len(encoded)
+        lines.append(line)
+        if marker_text and marker_text in line:
+          marker = True
+          stop_reason = "marker"
+          break
+  finally:
+    connection.close()
+except (OSError, serial.SerialException) as error:
+  print(str(error), file=sys.stderr, flush=True)
+  raise SystemExit(2)
+
+print(f"capture.lines={len(lines)}")
+print(f"capture.bytes={bytes_written}")
+print(f"capture.marker={'true' if marker else 'false'}")
+print(f"capture.truncated={'true' if truncated else 'false'}")
+print(f"capture.stop_reason={stop_reason}")''', "/dev/ttyACM0", "115200", "10", "2000", "262144", "false", "BENCHPILOT_SMOKE_OK"] }
+
+[[cases]]
 id = "parse-esptool-v5-info"
 type = "parse-output"
 platform = "windows"

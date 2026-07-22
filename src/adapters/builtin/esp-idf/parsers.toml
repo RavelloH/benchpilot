@@ -82,20 +82,6 @@ group = "major"
 cast = "integer"
 required = true
 
-[parsers.discovery-json]
-mode = "json"
-encoding = "utf8"
-strip_ansi = true
-success_exit_codes = [0]
-[[parsers.discovery-json.extract]]
-id = "devices"
-source = "stdout"
-type = "json-pointer"
-pointer = "/devices"
-target = "devices"
-cast = "json"
-required = true
-
 [parsers.metadata-json]
 mode = "json"
 encoding = "utf8"

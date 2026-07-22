@@ -1,22 +1,6 @@
 schema = "benchpilot.adapter.actions"
 schema_version = 1
 
-[actions.discover-ports]
-type = "process"
-tool = "python"
-cwd = "${project.root}"
-timeout = "10s"
-parser = "discovery-json"
-arguments = [
-  { kind = "literal", value = "-c" },
-  { kind = "literal", value = '''import json
-from serial.tools import list_ports
-def text(value): return value if value is not None else ""
-def hex4(value): return f"{value:04X}" if value is not None else ""
-ports = [{"port": item.device, "description": text(item.description), "hwid": text(item.hwid), "vid": hex4(item.vid), "pid": hex4(item.pid), "serial_number": text(item.serial_number), "manufacturer": text(item.manufacturer), "product": text(item.product), "location": text(item.location)} for item in list_ports.comports()]
-print(json.dumps({"devices": ports}, sort_keys=True))''' }
-]
-
 [actions.python-version]
 type = "process"
 tool = "python"
@@ -273,7 +257,7 @@ arguments = [
   { kind = "literal", value = '''import sys, time
 import serial
 
-port, baud, duration, max_lines, max_bytes, timestamp = sys.argv[1], int(sys.argv[2]), float(sys.argv[3]), int(sys.argv[4]), int(sys.argv[5]), sys.argv[6] == "true"
+port, baud, duration, max_lines, max_bytes, timestamp, marker_text = sys.argv[1], int(sys.argv[2]), float(sys.argv[3]), int(sys.argv[4]), int(sys.argv[5]), sys.argv[6] == "true", sys.argv[7]
 lines = []
 bytes_written = 0
 marker = False
@@ -309,7 +293,7 @@ try:
         capture.flush()
         bytes_written += len(encoded)
         lines.append(line)
-        if "BENCHPILOT_ESP32S3_OK" in line:
+        if marker_text and marker_text in line:
           marker = True
           stop_reason = "marker"
           break
@@ -329,5 +313,6 @@ print(f"capture.stop_reason={stop_reason}")''' },
   { kind = "value", value = "${input.duration_seconds}" },
   { kind = "value", value = "${input.max_lines}" },
   { kind = "value", value = "${input.max_bytes}" },
-  { kind = "value", value = "${input.timestamp}" }
+  { kind = "value", value = "${input.timestamp}" },
+  { kind = "value", value = "${input.marker}" }
 ]
