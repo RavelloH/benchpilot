@@ -2291,7 +2291,7 @@ test("lock ownership loss aborts the capability and preserves the replacement", 
     assert.equal(cleaned, true);
     assert.equal((await locks.list())[0].ownerToken, "replacement-owner");
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await rm(root, { recursive: true, force: true, maxRetries: 5 });
   }
 });
 

@@ -1101,16 +1101,17 @@ test("adapter enable and disable persist the current project selection", async (
     const disabled = JSON.parse(
       (await run(dir, "adapter", "demo", "disable", "--json")).stdout,
     );
-    assert.deepEqual(disabled.data, {
+    const { path: disabledConfigPath, ...disabledState } = disabled.data;
+    assert.deepEqual(disabledState, {
       schema: "benchpilot.adapter-state",
       version: 1,
       adapter: "demo",
       enabled: false,
       changed: true,
       scope: "project",
-      path: configPath,
       adapters: [],
     });
+    assert.equal(await realpath(disabledConfigPath), configPath);
     assert.match(
       await readFile(path.join(dir, "benchpilot.toml"), "utf8"),
       /enabled = \[\s*\]/,
