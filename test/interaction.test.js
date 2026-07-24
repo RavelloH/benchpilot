@@ -704,7 +704,7 @@ test("only the presenter owns CLI terminal writes", async () => {
     file.endsWith(".ts"),
   );
   for (const file of files) {
-    if (file === "output\\failure.ts") continue;
+    if (file.replaceAll("\\", "/") === "output/failure.ts") continue;
     const source = await readFile(join(root, file), "utf8");
     assert.doesNotMatch(source, /(?:process\.)?(?:stdout|stderr)\.write/);
     assert.doesNotMatch(source, /createInterface|node:readline/);
