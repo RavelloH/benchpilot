@@ -14,6 +14,15 @@ const maximumFrameBytes = 16 * 1024;
 const socketName = (sessionId: string) =>
   createHash("sha256").update(sessionId).digest("hex").slice(0, 24);
 
+const unixSocketRoot = (paths: PathService) =>
+  path.join(
+    "/tmp",
+    `benchpilot-control-${createHash("sha256")
+      .update(paths.home)
+      .digest("hex")
+      .slice(0, 16)}`,
+  );
+
 /**
  * A deterministic but unguessable-in-practice endpoint. Access is authenticated
  * separately with a 256-bit control token, so an endpoint path is not a secret.
@@ -25,7 +34,7 @@ export const managedSessionControlEndpoint = (
   const name = socketName(sessionId);
   return process.platform === "win32"
     ? `\\\\.\\pipe\\benchpilot-session-${name}`
-    : path.join(paths.managedSessionsRoot(), sessionId, `${name}.sock`);
+    : path.join(unixSocketRoot(paths), `${name}.sock`);
 };
 
 const response = (
@@ -76,12 +85,18 @@ export class ManagedSessionControlServer {
 
   async listen() {
     if (this.server) return;
-    if (process.platform !== "win32")
+    if (process.platform !== "win32") {
+      // macOS limits Unix socket paths to 104 bytes.
+      await fs.mkdir(path.dirname(this.options.endpoint), {
+        recursive: true,
+        mode: 0o700,
+      });
       await fs
         .unlink(this.options.endpoint)
         .catch((error: NodeJS.ErrnoException) => {
           if (error.code !== "ENOENT") throw error;
         });
+    }
     const server = net.createServer((socket) => {
       this.sockets.add(socket);
       socket.once("close", () => this.sockets.delete(socket));

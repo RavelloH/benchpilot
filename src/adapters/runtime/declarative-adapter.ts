@@ -377,7 +377,7 @@ class DeclarativeDevice implements DeviceRuntime {
   }
 
   capabilities(): Capability[] {
-    const current = adapterPlatform();
+    const current = this.adapter.platform;
     const standard = object(this.adapter.rules.capabilities);
     const extensions = object(this.adapter.rules.extensions);
     for (const id of Object.keys(extensions))
@@ -511,13 +511,6 @@ class DeclarativeDevice implements DeviceRuntime {
     };
   }
 }
-
-const adapterPlatform = () =>
-  process.platform === "win32"
-    ? "windows"
-    : process.platform === "darwin"
-      ? "macos"
-      : "linux";
 
 const doctorContext = (
   runtime: RuntimeAdapter,

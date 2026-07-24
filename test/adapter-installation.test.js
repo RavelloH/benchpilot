@@ -22,6 +22,7 @@ test("EIM resolver uses the latest GitHub release metadata and its published dig
   const digest = "a".repeat(64);
   const resolved = await resolveLatestEimAsset({
     platform: "windows",
+    architecture: "x64",
     request: async () =>
       new Response(
         JSON.stringify({
@@ -65,6 +66,7 @@ test("EIM resolver falls back to GitHub release HTML when the API is unavailable
   };
   const resolved = await resolveLatestEimAsset({
     platform: "linux",
+    architecture: "x64",
     request,
   });
   assert.equal(resolved.tag, "v8.8.8");
@@ -98,6 +100,7 @@ test("EIM resolver falls back to GitHub release HTML when the API request fails"
   };
   const resolved = await resolveLatestEimAsset({
     platform: "windows",
+    architecture: "x64",
     request,
   });
   assert.equal(resolved.tag, "v7.7.7");

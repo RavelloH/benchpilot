@@ -480,6 +480,7 @@ test("detached serial session launcher waits for a host-owned ready record", asy
       ...process.env,
       TEMP: path.join(root, "runtime"),
       TMP: path.join(root, "runtime"),
+      XDG_RUNTIME_DIR: path.join(root, "temp"),
     };
     const paths = new PathService(
       environment,
@@ -551,6 +552,7 @@ test("detached serial session launcher reports a failed host without retaining a
       ...process.env,
       TEMP: path.join(root, "runtime"),
       TMP: path.join(root, "runtime"),
+      XDG_RUNTIME_DIR: path.join(root, "temp"),
       BENCHPILOT_TEST_SESSION_HOST_FAIL: "1",
     };
     const paths = new PathService(
@@ -685,6 +687,7 @@ test("detached serial session launcher marks a ready timeout failed before the h
       ...process.env,
       TEMP: path.join(root, "runtime"),
       TMP: path.join(root, "runtime"),
+      XDG_RUNTIME_DIR: path.join(root, "temp"),
       BENCHPILOT_TEST_SESSION_HOST_DELAY_MS: "200",
     };
     const paths = new PathService(

@@ -991,7 +991,8 @@ const pathInside = (candidate: string, root: string) => {
 
 /** EIM itself adds this executable directory to the Windows user PATH. */
 export const isEimManagedUserPath = (entry: string, root: string) =>
-  path.resolve(entry).toLowerCase() === path.resolve(root, "eim").toLowerCase();
+  path.win32.resolve(entry).toLowerCase() ===
+  path.win32.resolve(root, "eim").toLowerCase();
 
 const shortcutTarget = async (shortcut: string) => {
   const result = await runProcess({

@@ -6,6 +6,7 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  realpath,
   rm,
   writeFile,
 } from "node:fs/promises";
@@ -24,6 +25,7 @@ function cliEnv(dir) {
     HOME: dir,
     USERPROFILE: dir,
     TEMP: path.join(dir, "runtime"),
+    XDG_RUNTIME_DIR: path.join(dir, "runtime"),
     BENCHPILOT_TEST_ADAPTER_BUNDLES: path.resolve("test", ".adapter-bundles"),
   };
   for (const key of [
@@ -1094,6 +1096,7 @@ test("adapter enable and disable persist the current project selection", async (
   );
   try {
     await initDemo(dir);
+    const configPath = await realpath(path.join(dir, "benchpilot.toml"));
 
     const disabled = JSON.parse(
       (await run(dir, "adapter", "demo", "disable", "--json")).stdout,
@@ -1105,7 +1108,7 @@ test("adapter enable and disable persist the current project selection", async (
       enabled: false,
       changed: true,
       scope: "project",
-      path: path.join(dir, "benchpilot.toml"),
+      path: configPath,
       adapters: [],
     });
     assert.match(
